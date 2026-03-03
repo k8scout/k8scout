@@ -1,0 +1,226 @@
+{
+  "meta": {
+    "tool": "k8s-enum",
+    "version": "0.1.0",
+    "timestamp": "2026-02-28T10:00:00Z",
+    "cluster": "https://k8s.corp.example.com:6443",
+    "timeout_s": 30
+  },
+  "identity": {
+    "username": "system:serviceaccount:dev:ci-runner",
+    "groups": ["system:serviceaccounts", "system:serviceaccounts:dev", "system:authenticated"],
+    "namespace": "dev",
+    "sa_name": "ci-runner"
+  },
+  "graph": {
+    "nodes": [
+      { "id": "identity:system:serviceaccount:dev:ci-runner", "kind": "Identity",           "name": "system:serviceaccount:dev:ci-runner",  "risk_score": 9.5 },
+      { "id": "sa:dev:ci-runner",         "kind": "ServiceAccount",  "name": "ci-runner",          "namespace": "dev",        "risk_score": 9.0 },
+      { "id": "sa:kube-system:default",   "kind": "ServiceAccount",  "name": "default",            "namespace": "kube-system","risk_score": 2.0 },
+      { "id": "sa:prod:app-server",       "kind": "ServiceAccount",  "name": "app-server",         "namespace": "prod",       "risk_score": 4.5 },
+      { "id": "sa:prod:db-migrator",      "kind": "ServiceAccount",  "name": "db-migrator",        "namespace": "prod",       "risk_score": 3.0 },
+
+      { "id": "cr:cluster-admin",         "kind": "ClusterRole",     "name": "cluster-admin",                                 "risk_score": 10.0 },
+      { "id": "cr:ci-deployer",           "kind": "ClusterRole",     "name": "ci-deployer",                                   "risk_score": 8.5 },
+      { "id": "cr:secret-reader",         "kind": "ClusterRole",     "name": "secret-reader",                                 "risk_score": 6.0 },
+      { "id": "r:prod:app-role",          "kind": "Role",            "name": "app-role",           "namespace": "prod",       "risk_score": 3.5 },
+
+      { "id": "crb:ci-runner-binding",    "kind": "ClusterRoleBinding","name": "ci-runner-binding",                           "risk_score": 8.5 },
+      { "id": "crb:secret-reader-bind",   "kind": "ClusterRoleBinding","name": "secret-reader-bind",                          "risk_score": 6.0 },
+      { "id": "rb:prod:app-role-bind",    "kind": "RoleBinding",     "name": "app-role-bind",      "namespace": "prod",       "risk_score": 3.5 },
+
+      { "id": "workload:dev:ci-pod",      "kind": "Workload",        "name": "ci-pod",             "namespace": "dev",        "risk_score": 7.0,
+        "metadata": { "privileged": "true", "host_pid": "true" } },
+      { "id": "workload:prod:app-deploy", "kind": "Workload",        "name": "app-deploy",         "namespace": "prod",       "risk_score": 4.0 },
+      { "id": "workload:prod:db-job",     "kind": "Workload",        "name": "db-job",             "namespace": "prod",       "risk_score": 2.5 },
+      { "id": "pod:dev:ci-pod-x7k2q",    "kind": "Pod",             "name": "ci-pod-x7k2q",       "namespace": "dev",        "risk_score": 7.0,
+        "metadata": { "node": "node-01", "phase": "Running" } },
+
+      { "id": "secret:dev:registry-creds","kind": "Secret",          "name": "registry-creds",     "namespace": "dev",        "risk_score": 5.0 },
+      { "id": "secret:dev:ci-token",      "kind": "Secret",          "name": "ci-token",           "namespace": "dev",        "risk_score": 5.5 },
+      { "id": "secret:prod:db-password",  "kind": "Secret",          "name": "db-password",        "namespace": "prod",       "risk_score": 7.0 },
+      { "id": "secret:kube-system:admin-kubeconfig","kind": "Secret","name": "admin-kubeconfig",   "namespace": "kube-system","risk_score": 9.0 },
+
+      { "id": "ns:dev",                   "kind": "Namespace",       "name": "dev",                                           "risk_score": 2.0 },
+      { "id": "ns:prod",                  "kind": "Namespace",       "name": "prod",                                          "risk_score": 3.0 },
+      { "id": "ns:kube-system",           "kind": "Namespace",       "name": "kube-system",                                   "risk_score": 4.0 },
+
+      { "id": "node:node-01",             "kind": "Node",            "name": "node-01",                                       "risk_score": 2.0 },
+      { "id": "node:node-02",             "kind": "Node",            "name": "node-02",                                       "risk_score": 1.5 }
+    ],
+    "edges": [
+      { "from": "identity:system:serviceaccount:dev:ci-runner", "to": "sa:dev:ci-runner",        "kind": "member_of" },
+      { "from": "sa:dev:ci-runner",     "to": "crb:ci-runner-binding",  "kind": "bound_to" },
+      { "from": "crb:ci-runner-binding","to": "cr:ci-deployer",          "kind": "grants" },
+      { "from": "cr:ci-deployer",       "to": "workload:dev:ci-pod",     "kind": "can_patch" },
+      { "from": "cr:ci-deployer",       "to": "workload:prod:app-deploy","kind": "can_patch" },
+      { "from": "cr:ci-deployer",       "to": "workload:prod:db-job",    "kind": "can_patch" },
+      { "from": "cr:ci-deployer",       "to": "pod:dev:ci-pod-x7k2q",   "kind": "can_exec" },
+      { "from": "cr:ci-deployer",       "to": "secret:dev:ci-token",     "kind": "can_get" },
+      { "from": "cr:ci-deployer",       "to": "secret:dev:registry-creds","kind": "can_get" },
+
+      { "from": "crb:secret-reader-bind","to": "cr:secret-reader",       "kind": "grants" },
+      { "from": "cr:secret-reader",     "to": "secret:prod:db-password", "kind": "can_list" },
+      { "from": "cr:secret-reader",     "to": "secret:kube-system:admin-kubeconfig","kind": "can_get" },
+
+      { "from": "sa:dev:ci-runner",     "to": "crb:secret-reader-bind",  "kind": "bound_to" },
+
+      { "from": "workload:dev:ci-pod",  "to": "sa:dev:ci-runner",        "kind": "runs_as" },
+      { "from": "workload:prod:app-deploy","to": "sa:prod:app-server",   "kind": "runs_as" },
+      { "from": "workload:prod:db-job", "to": "sa:prod:db-migrator",     "kind": "runs_as" },
+
+      { "from": "workload:dev:ci-pod",  "to": "secret:dev:registry-creds","kind": "mounts" },
+      { "from": "workload:dev:ci-pod",  "to": "secret:dev:ci-token",     "kind": "mounts" },
+
+      { "from": "sa:prod:app-server",   "to": "rb:prod:app-role-bind",   "kind": "bound_to" },
+      { "from": "rb:prod:app-role-bind","to": "r:prod:app-role",          "kind": "grants" },
+
+      { "from": "pod:dev:ci-pod-x7k2q","to": "node:node-01",             "kind": "runs_as" },
+
+      { "from": "sa:dev:ci-runner",     "to": "cr:cluster-admin",        "kind": "can_impersonate", "inferred": true },
+      { "from": "cr:ci-deployer",       "to": "sa:prod:app-server",      "kind": "can_impersonate", "inferred": true },
+      { "from": "workload:dev:ci-pod",  "to": "node:node-01",            "kind": "can_exec",        "inferred": true },
+
+      { "from": "ns:dev",               "to": "sa:dev:ci-runner",        "kind": "member_of" },
+      { "from": "ns:prod",              "to": "sa:prod:app-server",      "kind": "member_of" },
+      { "from": "ns:prod",              "to": "sa:prod:db-migrator",     "kind": "member_of" },
+      { "from": "ns:kube-system",       "to": "sa:kube-system:default",  "kind": "member_of" }
+    ]
+  },
+  "risk_findings": [
+    {
+      "id": "f-001",
+      "rule_id": "PRIVESC-CLUSTER-ADMIN-BINDING",
+      "severity": "CRITICAL",
+      "score": 10.0,
+      "title": "ServiceAccount can escalate to cluster-admin via impersonation",
+      "description": "The ci-runner ServiceAccount holds the ci-deployer ClusterRole which grants impersonate rights on serviceaccounts. Combined with patch access to workloads, this allows privilege escalation to cluster-admin by injecting a new pod spec.",
+      "evidence": [
+        "ClusterRoleBinding ci-runner-binding → ClusterRole ci-deployer",
+        "ClusterRole ci-deployer: verbs=[impersonate] resources=[serviceaccounts]",
+        "ClusterRole ci-deployer: verbs=[patch] resources=[deployments,daemonsets]"
+      ],
+      "mitigation": "Remove impersonate verb from ci-deployer. Restrict patch access to specific deployment names using resourceNames.",
+      "affected_nodes": [
+        "identity:system:serviceaccount:dev:ci-runner",
+        "sa:dev:ci-runner",
+        "crb:ci-runner-binding",
+        "cr:ci-deployer",
+        "cr:cluster-admin"
+      ]
+    },
+    {
+      "id": "f-002",
+      "rule_id": "PRIV-GET-SECRETS",
+      "severity": "CRITICAL",
+      "score": 9.0,
+      "title": "Identity can read kube-system admin kubeconfig secret",
+      "description": "The current identity has get/list access to Secrets in kube-system via the secret-reader ClusterRole. This includes admin-kubeconfig which contains full cluster-admin credentials.",
+      "evidence": [
+        "ClusterRoleBinding secret-reader-bind → ClusterRole secret-reader",
+        "ClusterRole secret-reader: verbs=[get,list] resources=[secrets] namespace=kube-system",
+        "Secret kube-system/admin-kubeconfig exists"
+      ],
+      "mitigation": "Replace ClusterRole with a namespaced Role limited to specific secret names. Never store admin kubeconfig as a cluster secret.",
+      "affected_nodes": [
+        "sa:dev:ci-runner",
+        "crb:secret-reader-bind",
+        "cr:secret-reader",
+        "secret:kube-system:admin-kubeconfig"
+      ]
+    },
+    {
+      "id": "f-003",
+      "rule_id": "CONFIG-PRIVILEGED-CONTAINER",
+      "severity": "HIGH",
+      "score": 8.0,
+      "title": "Privileged container with hostPID in dev namespace",
+      "description": "Workload ci-pod runs as privileged with hostPID=true. This allows the container to see and interact with all host processes, effectively providing host-level access.",
+      "evidence": [
+        "Workload dev/ci-pod: securityContext.privileged=true",
+        "Workload dev/ci-pod: hostPID=true",
+        "Pod ci-pod-x7k2q running on node-01"
+      ],
+      "mitigation": "Remove privileged flag and hostPID from pod spec. Use PodSecurityAdmission with restricted policy on the dev namespace.",
+      "affected_nodes": [
+        "workload:dev:ci-pod",
+        "pod:dev:ci-pod-x7k2q",
+        "node:node-01"
+      ]
+    },
+    {
+      "id": "f-004",
+      "rule_id": "RUNTIME-EXEC-PODS",
+      "severity": "HIGH",
+      "score": 7.5,
+      "title": "Identity can exec into running pods",
+      "description": "The ci-deployer ClusterRole grants pods/exec access cluster-wide. An attacker can exec into any running pod to access mounted secrets, environment variables, and internal network endpoints.",
+      "evidence": [
+        "ClusterRole ci-deployer: verbs=[create] resources=[pods/exec]",
+        "Running pod: dev/ci-pod-x7k2q"
+      ],
+      "mitigation": "Remove pods/exec from ClusterRole. If exec is needed for CI, scope it to specific namespaces via a namespaced Role.",
+      "affected_nodes": [
+        "sa:dev:ci-runner",
+        "cr:ci-deployer",
+        "pod:dev:ci-pod-x7k2q"
+      ]
+    },
+    {
+      "id": "f-005",
+      "rule_id": "TAKEOVER-PATCH-DEPLOYMENT",
+      "severity": "HIGH",
+      "score": 7.0,
+      "title": "Patch access to production deployments",
+      "description": "The ci-runner identity can patch Deployments in prod namespace, enabling arbitrary container image injection or environment variable manipulation in production workloads.",
+      "evidence": [
+        "ClusterRole ci-deployer: verbs=[patch] resources=[deployments] namespace=prod",
+        "Deployment prod/app-deploy exists with serviceAccount app-server"
+      ],
+      "mitigation": "Scope deployment patch access to the dev namespace only. Use a dedicated CD system with narrower permissions for production deployments.",
+      "affected_nodes": [
+        "sa:dev:ci-runner",
+        "cr:ci-deployer",
+        "workload:prod:app-deploy",
+        "sa:prod:app-server"
+      ]
+    },
+    {
+      "id": "f-006",
+      "rule_id": "PRIV-LIST-SECRETS",
+      "severity": "MEDIUM",
+      "score": 5.5,
+      "title": "Secrets enumerable in prod namespace",
+      "description": "The secret-reader ClusterRole allows listing all Secrets across namespaces. Even without reading .data, secret names and types reveal infrastructure topology.",
+      "evidence": [
+        "ClusterRole secret-reader: verbs=[list] resources=[secrets]",
+        "Secrets found: prod/db-password, dev/registry-creds, dev/ci-token"
+      ],
+      "mitigation": "Replace list with get scoped to specific secret names. Audit all ClusterRoles with wildcard secret access.",
+      "affected_nodes": [
+        "sa:dev:ci-runner",
+        "cr:secret-reader",
+        "secret:prod:db-password",
+        "secret:dev:registry-creds",
+        "secret:dev:ci-token"
+      ]
+    },
+    {
+      "id": "f-007",
+      "rule_id": "CONFIG-AUTOMOUNT-SA-TOKEN",
+      "severity": "LOW",
+      "score": 2.5,
+      "title": "ServiceAccount token auto-mounted in prod workloads",
+      "description": "prod/app-deploy mounts its ServiceAccount token automatically. If the app container is compromised, the attacker gains the app-server SA token which has prod RBAC access.",
+      "evidence": [
+        "Workload prod/app-deploy: automountServiceAccountToken not explicitly false",
+        "ServiceAccount prod/app-server bound to app-role"
+      ],
+      "mitigation": "Set automountServiceAccountToken: false on the Deployment spec and explicitly mount tokens only where needed.",
+      "affected_nodes": [
+        "workload:prod:app-deploy",
+        "sa:prod:app-server"
+      ]
+    }
+  ]
+}

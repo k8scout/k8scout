@@ -1,0 +1,1027 @@
+{
+  "meta": {
+    "tool": "k8s-enum",
+    "version": "0.3.0",
+    "timestamp": "2026-02-28T09:14:32.418Z",
+    "cluster": "https://gke-acme-prod-api.acmecorp.internal:6443",
+    "timeout_s": 60
+  },
+  "identity": {
+    "username": "system:serviceaccount:monitoring:prometheus",
+    "uid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "groups": [
+      "system:serviceaccounts",
+      "system:serviceaccounts:monitoring",
+      "system:authenticated"
+    ],
+    "namespace": "monitoring",
+    "sa_name": "prometheus"
+  },
+  "permissions": {
+    "ssrr_by_namespace": {
+      "": [
+        {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["secrets"]},
+        {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["pods","nodes","namespaces","services","endpoints","serviceaccounts"]},
+        {"verbs": ["create"], "api_groups": [""], "resources": ["pods/exec","pods/portforward"]},
+        {"verbs": ["get","list","watch"], "api_groups": ["apps"], "resources": ["deployments","daemonsets","statefulsets","replicasets"]},
+        {"verbs": ["get","list","watch"], "api_groups": ["rbac.authorization.k8s.io"], "resources": ["clusterroles","clusterrolebindings","roles","rolebindings"]}
+      ],
+      "acme-prod": [
+        {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["secrets","pods","services","configmaps","endpoints"]},
+        {"verbs": ["create"], "api_groups": [""], "resources": ["pods/exec","pods/portforward"]},
+        {"verbs": ["get","list","watch"], "api_groups": ["apps"], "resources": ["deployments","daemonsets","statefulsets"]}
+      ],
+      "acme-staging": [
+        {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["secrets","pods","services"]},
+        {"verbs": ["create"], "api_groups": [""], "resources": ["pods/exec"]}
+      ],
+      "monitoring": [
+        {"verbs": ["*"], "api_groups": ["*"], "resources": ["*"]}
+      ],
+      "infra": [
+        {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["pods","secrets","configmaps","services"]},
+        {"verbs": ["create"], "api_groups": [""], "resources": ["pods/exec"]}
+      ],
+      "data": [
+        {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["pods","secrets","configmaps"]}
+      ],
+      "kube-system": [
+        {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["pods","secrets","configmaps","services"]}
+      ]
+    },
+    "ssar_checks": [
+      {"verb": "list",        "resource": "secrets",              "allowed": true,  "reason": "RBAC: clusterrole/prometheus-cluster-role"},
+      {"verb": "get",         "resource": "secrets",              "namespace": "acme-prod",    "allowed": true,  "reason": "RBAC: clusterrole/prometheus-cluster-role"},
+      {"verb": "get",         "resource": "secrets",              "namespace": "infra",        "allowed": true,  "reason": "RBAC: clusterrole/prometheus-cluster-role"},
+      {"verb": "get",         "resource": "secrets",              "namespace": "kube-system",  "allowed": true,  "reason": "RBAC: clusterrole/prometheus-cluster-role"},
+      {"verb": "create",      "resource": "pods",   "subresource": "exec",        "namespace": "acme-prod", "allowed": true,  "reason": "RBAC: clusterrole/prometheus-cluster-role"},
+      {"verb": "create",      "resource": "pods",   "subresource": "exec",        "namespace": "infra",     "allowed": true,  "reason": "RBAC: clusterrole/prometheus-cluster-role"},
+      {"verb": "create",      "resource": "pods",   "subresource": "portforward", "namespace": "acme-prod", "allowed": true,  "reason": "RBAC: clusterrole/prometheus-cluster-role"},
+      {"verb": "list",        "resource": "nodes",                "allowed": true,  "reason": "RBAC: clusterrole/prometheus-cluster-role"},
+      {"verb": "list",        "resource": "clusterrolebindings",  "allowed": true,  "reason": "RBAC: clusterrole/prometheus-cluster-role"},
+      {"verb": "list",        "resource": "clusterroles",         "allowed": true,  "reason": "RBAC: clusterrole/prometheus-cluster-role"},
+      {"verb": "create",      "resource": "clusterrolebindings",  "allowed": false, "reason": ""},
+      {"verb": "patch",       "resource": "clusterroles",         "allowed": false, "reason": ""},
+      {"verb": "create",      "resource": "pods",                 "namespace": "acme-prod",    "allowed": false, "reason": ""},
+      {"verb": "impersonate", "resource": "users",                "allowed": false, "reason": ""},
+      {"verb": "delete",      "resource": "deployments",          "namespace": "acme-prod",    "allowed": false, "reason": ""},
+      {"verb": "patch",       "resource": "deployments",          "namespace": "acme-prod",    "allowed": false, "reason": ""},
+      {"verb": "create",      "resource": "rolebindings",         "namespace": "acme-prod",    "allowed": false, "reason": ""},
+      {"verb": "create",      "resource": "serviceaccounts",      "subresource": "token",      "allowed": false, "reason": ""}
+    ]
+  },
+  "cluster_objects": {
+    "namespaces": [
+      {"name": "default",       "status": "Active", "labels": {}},
+      {"name": "kube-system",   "status": "Active", "labels": {"kubernetes.io/metadata.name": "kube-system"}},
+      {"name": "acme-prod",     "status": "Active", "labels": {"env": "production", "team": "platform", "company": "acme"}},
+      {"name": "acme-staging",  "status": "Active", "labels": {"env": "staging",    "team": "platform", "company": "acme"}},
+      {"name": "monitoring",    "status": "Active", "labels": {"env": "production", "team": "sre",      "company": "acme"}},
+      {"name": "infra",         "status": "Active", "labels": {"env": "production", "team": "infra",    "company": "acme"}},
+      {"name": "data",          "status": "Active", "labels": {"env": "production", "team": "data",     "company": "acme"}},
+      {"name": "cert-manager",  "status": "Active", "labels": {"app.kubernetes.io/name": "cert-manager"}}
+    ],
+    "service_accounts": [
+      {"name": "default",           "namespace": "default",       "labels": {}},
+      {"name": "coredns",           "namespace": "kube-system",   "labels": {"kubernetes.io/cluster-service": "true"}},
+      {"name": "kube-proxy",        "namespace": "kube-system",   "labels": {}},
+      {"name": "api-server",        "namespace": "acme-prod",     "labels": {"app": "api-server", "team": "platform"}, "annotations": {"kubectl.kubernetes.io/last-applied-configuration": "..."}},
+      {"name": "worker",            "namespace": "acme-prod",     "labels": {"app": "worker", "team": "platform"}},
+      {"name": "database-backup",   "namespace": "acme-prod",     "labels": {"app": "database-backup", "team": "dba"}},
+      {"name": "deployer",          "namespace": "acme-staging",  "labels": {"app": "deployer", "team": "cicd"}, "annotations": {"acme.io/created-by": "terraform"}},
+      {"name": "frontend",          "namespace": "acme-staging",  "labels": {"app": "frontend", "team": "web"}},
+      {"name": "prometheus",        "namespace": "monitoring",    "labels": {"app": "prometheus", "team": "sre"}, "annotations": {"acme.io/managed-by": "helm"}},
+      {"name": "terraform",         "namespace": "infra",         "labels": {"app": "terraform", "team": "infra"}, "annotations": {"acme.io/managed-by": "gitops"}},
+      {"name": "vault-injector",    "namespace": "infra",         "labels": {"app": "vault-injector", "team": "infra"}},
+      {"name": "etl-runner",        "namespace": "data",          "labels": {"app": "etl-runner", "team": "data-eng"}},
+      {"name": "analytics",         "namespace": "data",          "labels": {"app": "analytics", "team": "data-eng"}}
+    ],
+    "cluster_roles": [
+      {
+        "name": "cluster-admin",
+        "labels": {"kubernetes.io/bootstrapping": "rbac-defaults"},
+        "rules": [{"verbs": ["*"], "api_groups": ["*"], "resources": ["*"]}, {"verbs": ["*"], "non_resource_urls": ["*"]}]
+      },
+      {
+        "name": "prometheus-cluster-role",
+        "labels": {"app": "prometheus", "company": "acme"},
+        "rules": [
+          {"verbs": ["get","list","watch"],  "api_groups": [""], "resources": ["secrets","pods","nodes","services","endpoints","namespaces","serviceaccounts","configmaps"]},
+          {"verbs": ["create"],              "api_groups": [""], "resources": ["pods/exec","pods/portforward"]},
+          {"verbs": ["get","list","watch"],  "api_groups": ["apps"], "resources": ["deployments","daemonsets","statefulsets","replicasets"]},
+          {"verbs": ["get","list","watch"],  "api_groups": ["rbac.authorization.k8s.io"], "resources": ["clusterroles","clusterrolebindings","roles","rolebindings"]}
+        ]
+      },
+      {
+        "name": "deployer-role",
+        "labels": {"app": "deployer", "company": "acme"},
+        "rules": [
+          {"verbs": ["create","delete","get","list","patch","update","watch"], "api_groups": ["rbac.authorization.k8s.io"], "resources": ["clusterrolebindings","rolebindings"]},
+          {"verbs": ["*"],                 "api_groups": ["apps"], "resources": ["deployments","statefulsets","replicasets"]},
+          {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["pods","services","configmaps","secrets","namespaces"]},
+          {"verbs": ["create","delete"],   "api_groups": [""], "resources": ["pods"]},
+          {"verbs": ["create"],            "api_groups": [""], "resources": ["pods/exec"]}
+        ]
+      },
+      {
+        "name": "terraform-role",
+        "labels": {"app": "terraform", "company": "acme"},
+        "rules": [
+          {"verbs": ["get","list","patch","update","create","delete"], "api_groups": ["rbac.authorization.k8s.io"], "resources": ["clusterroles","clusterrolebindings","roles","rolebindings"]},
+          {"verbs": ["*"], "api_groups": [""], "resources": ["namespaces","serviceaccounts","secrets","configmaps","services","pods","persistentvolumeclaims"]},
+          {"verbs": ["*"], "api_groups": ["apps"], "resources": ["deployments","daemonsets","statefulsets"]},
+          {"verbs": ["*"], "api_groups": ["networking.k8s.io"], "resources": ["ingresses","networkpolicies"]}
+        ]
+      },
+      {
+        "name": "vault-injector-role",
+        "labels": {"app": "vault-injector", "company": "acme"},
+        "rules": [
+          {"verbs": ["create","delete","get","list","patch","watch"], "api_groups": [""], "resources": ["pods","pods/exec"]},
+          {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["serviceaccounts","secrets","configmaps","namespaces"]},
+          {"verbs": ["create"],             "api_groups": [""], "resources": ["serviceaccounts/token"]}
+        ]
+      },
+      {
+        "name": "etl-runner-role",
+        "labels": {"app": "etl-runner", "company": "acme"},
+        "rules": [
+          {"verbs": ["impersonate"], "api_groups": [""], "resources": ["users","serviceaccounts","groups"]},
+          {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["secrets","pods","configmaps","namespaces","serviceaccounts"]},
+          {"verbs": ["create","get"],       "api_groups": [""], "resources": ["serviceaccounts/token"]}
+        ]
+      },
+      {
+        "name": "system:coredns",
+        "labels": {"kubernetes.io/bootstrapping": "rbac-defaults"},
+        "rules": [
+          {"verbs": ["list","watch"], "api_groups": [""], "resources": ["endpoints","services","pods","namespaces"]},
+          {"verbs": ["get"], "api_groups": [""], "resources": ["endpoints"]}
+        ]
+      },
+      {
+        "name": "system:node-proxier",
+        "labels": {"kubernetes.io/bootstrapping": "rbac-defaults"},
+        "rules": [
+          {"verbs": ["list","watch"], "api_groups": [""], "resources": ["endpoints","services","nodes"]},
+          {"verbs": ["get"], "api_groups": [""], "resources": ["nodes"]}
+        ]
+      }
+    ],
+    "cluster_role_bindings": [
+      {
+        "name": "api-server-cluster-admin",
+        "labels": {"app": "api-server", "company": "acme"},
+        "subjects": [{"kind": "ServiceAccount", "name": "api-server", "namespace": "acme-prod", "api_group": ""}],
+        "role_ref": {"api_group": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": "cluster-admin"}
+      },
+      {
+        "name": "prometheus-global",
+        "labels": {"app": "prometheus", "company": "acme"},
+        "subjects": [{"kind": "ServiceAccount", "name": "prometheus", "namespace": "monitoring", "api_group": ""}],
+        "role_ref": {"api_group": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": "prometheus-cluster-role"}
+      },
+      {
+        "name": "deployer-global",
+        "labels": {"app": "deployer", "company": "acme"},
+        "subjects": [{"kind": "ServiceAccount", "name": "deployer", "namespace": "acme-staging", "api_group": ""}],
+        "role_ref": {"api_group": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": "deployer-role"}
+      },
+      {
+        "name": "terraform-global",
+        "labels": {"app": "terraform", "company": "acme"},
+        "subjects": [{"kind": "ServiceAccount", "name": "terraform", "namespace": "infra", "api_group": ""}],
+        "role_ref": {"api_group": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": "terraform-role"}
+      },
+      {
+        "name": "vault-injector-global",
+        "labels": {"app": "vault-injector", "company": "acme"},
+        "subjects": [{"kind": "ServiceAccount", "name": "vault-injector", "namespace": "infra", "api_group": ""}],
+        "role_ref": {"api_group": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": "vault-injector-role"}
+      },
+      {
+        "name": "etl-runner-global",
+        "labels": {"app": "etl-runner", "company": "acme"},
+        "subjects": [{"kind": "ServiceAccount", "name": "etl-runner", "namespace": "data", "api_group": ""}],
+        "role_ref": {"api_group": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": "etl-runner-role"}
+      },
+      {
+        "name": "coredns",
+        "labels": {"kubernetes.io/bootstrapping": "rbac-defaults"},
+        "subjects": [{"kind": "ServiceAccount", "name": "coredns", "namespace": "kube-system", "api_group": ""}],
+        "role_ref": {"api_group": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": "system:coredns"}
+      },
+      {
+        "name": "kube-proxy",
+        "labels": {"kubernetes.io/bootstrapping": "rbac-defaults"},
+        "subjects": [{"kind": "ServiceAccount", "name": "kube-proxy", "namespace": "kube-system", "api_group": ""}],
+        "role_ref": {"api_group": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": "system:node-proxier"}
+      }
+    ],
+    "roles": [
+      {
+        "name": "database-backup-role",
+        "namespace": "acme-prod",
+        "labels": {"app": "database-backup", "company": "acme"},
+        "rules": [
+          {"verbs": ["get","list"], "api_groups": [""], "resources": ["secrets"], "resource_names": ["db-password","db-replica-password"]},
+          {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["pods","services","endpoints","configmaps"]}
+        ]
+      },
+      {
+        "name": "analytics-role",
+        "namespace": "data",
+        "labels": {"app": "analytics", "company": "acme"},
+        "rules": [
+          {"verbs": ["get","list"], "api_groups": [""], "resources": ["secrets"]},
+          {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["pods","configmaps","services"]}
+        ]
+      }
+    ],
+    "role_bindings": [
+      {
+        "name": "database-backup-binding",
+        "namespace": "acme-prod",
+        "labels": {"app": "database-backup", "company": "acme"},
+        "subjects": [{"kind": "ServiceAccount", "name": "database-backup", "namespace": "acme-prod", "api_group": ""}],
+        "role_ref": {"api_group": "rbac.authorization.k8s.io", "kind": "Role", "name": "database-backup-role"}
+      },
+      {
+        "name": "analytics-binding",
+        "namespace": "data",
+        "labels": {"app": "analytics", "company": "acme"},
+        "subjects": [{"kind": "ServiceAccount", "name": "analytics", "namespace": "data", "api_group": ""}],
+        "role_ref": {"api_group": "rbac.authorization.k8s.io", "kind": "Role", "name": "analytics-role"}
+      }
+    ],
+    "workloads": [
+      {
+        "kind": "Deployment",
+        "name": "api-server",
+        "namespace": "acme-prod",
+        "labels": {"app": "api-server", "version": "v1.4.2", "team": "platform"},
+        "replicas": 2,
+        "service_account": "api-server",
+        "privileged_containers": ["api-container"],
+        "image_names": ["gcr.io/acme-prod/api-server:v1.4.2"],
+        "volumes": [
+          {"name": "aws-creds-vol",  "source_kind": "Secret",    "source_name": "aws-credentials"},
+          {"name": "stripe-key-vol", "source_kind": "Secret",    "source_name": "stripe-api-key"},
+          {"name": "app-config",     "source_kind": "ConfigMap",  "source_name": "api-server-config"}
+        ]
+      },
+      {
+        "kind": "Deployment",
+        "name": "worker",
+        "namespace": "acme-prod",
+        "labels": {"app": "worker", "team": "platform"},
+        "replicas": 3,
+        "service_account": "worker",
+        "automount_sa_token": true,
+        "image_names": ["gcr.io/acme-prod/worker:v2.0.1"]
+      },
+      {
+        "kind": "StatefulSet",
+        "name": "database",
+        "namespace": "acme-prod",
+        "labels": {"app": "postgresql", "team": "dba"},
+        "replicas": 1,
+        "service_account": "default",
+        "automount_sa_token": true,
+        "image_names": ["postgres:14.5"],
+        "volumes": [
+          {"name": "db-secret-vol", "source_kind": "Secret", "source_name": "db-password"}
+        ]
+      },
+      {
+        "kind": "CronJob",
+        "name": "backup-job",
+        "namespace": "acme-prod",
+        "labels": {"app": "database-backup", "team": "dba"},
+        "service_account": "database-backup",
+        "image_names": ["gcr.io/acme-prod/pg-backup:v1.1.0"],
+        "volumes": [
+          {"name": "backup-secret", "source_kind": "Secret", "source_name": "db-password"}
+        ]
+      },
+      {
+        "kind": "Deployment",
+        "name": "deployer",
+        "namespace": "acme-staging",
+        "labels": {"app": "deployer", "team": "cicd"},
+        "replicas": 1,
+        "service_account": "deployer",
+        "host_pid": true,
+        "host_network": true,
+        "image_names": ["gcr.io/acme-staging/deployer:latest"]
+      },
+      {
+        "kind": "Deployment",
+        "name": "frontend",
+        "namespace": "acme-staging",
+        "labels": {"app": "frontend", "team": "web"},
+        "replicas": 2,
+        "service_account": "frontend",
+        "automount_sa_token": true,
+        "image_names": ["gcr.io/acme-staging/frontend:develop"]
+      },
+      {
+        "kind": "DaemonSet",
+        "name": "prometheus",
+        "namespace": "monitoring",
+        "labels": {"app": "prometheus", "team": "sre"},
+        "service_account": "prometheus",
+        "host_pid": false,
+        "host_network": true,
+        "image_names": ["prom/prometheus:v2.45.0"],
+        "host_path_mounts": ["/proc", "/sys", "/"],
+        "volumes": [
+          {"name": "proc",         "source_kind": "HostPath", "host_path": "/proc"},
+          {"name": "sys",          "source_kind": "HostPath", "host_path": "/sys"},
+          {"name": "root-fs",      "source_kind": "HostPath", "host_path": "/"},
+          {"name": "grafana-creds","source_kind": "Secret",   "source_name": "grafana-admin-password"}
+        ]
+      },
+      {
+        "kind": "Deployment",
+        "name": "terraform",
+        "namespace": "infra",
+        "labels": {"app": "terraform", "team": "infra"},
+        "replicas": 1,
+        "service_account": "terraform",
+        "host_pid": true,
+        "host_ipc": true,
+        "host_network": true,
+        "privileged_containers": ["terraform-container"],
+        "host_path_mounts": ["/var/lib/kubelet", "/etc/kubernetes"],
+        "image_names": ["hashicorp/terraform:1.6.0"],
+        "volumes": [
+          {"name": "gcp-sa-vol",       "source_kind": "Secret",   "source_name": "gcp-service-account"},
+          {"name": "kubelet-vol",       "source_kind": "HostPath", "host_path": "/var/lib/kubelet"},
+          {"name": "k8s-pki-vol",       "source_kind": "HostPath", "host_path": "/etc/kubernetes"}
+        ]
+      },
+      {
+        "kind": "Deployment",
+        "name": "vault-injector",
+        "namespace": "infra",
+        "labels": {"app": "vault-injector", "team": "infra"},
+        "replicas": 1,
+        "service_account": "vault-injector",
+        "host_path_mounts": ["/var/run/docker.sock", "/run/containerd"],
+        "image_names": ["hashicorp/vault-k8s:1.3.0"],
+        "volumes": [
+          {"name": "docker-sock",    "source_kind": "HostPath", "host_path": "/var/run/docker.sock"},
+          {"name": "containerd-sock","source_kind": "HostPath", "host_path": "/run/containerd"},
+          {"name": "vault-token",    "source_kind": "Secret",   "source_name": "vault-root-token"}
+        ]
+      },
+      {
+        "kind": "Deployment",
+        "name": "etl-runner",
+        "namespace": "data",
+        "labels": {"app": "etl-runner", "team": "data-eng"},
+        "replicas": 2,
+        "service_account": "etl-runner",
+        "image_names": ["gcr.io/acme-data/etl-runner:v2.1.0"],
+        "volumes": [
+          {"name": "databricks-creds", "source_kind": "Secret", "source_name": "databricks-token"}
+        ]
+      }
+    ],
+    "pods": [
+      {
+        "name": "api-server-7d9f8b-xk2p4",
+        "namespace": "acme-prod",
+        "node": "gke-acme-prod-pool-0-abc1",
+        "service_account": "api-server",
+        "phase": "Running",
+        "privileged_containers": ["api-container"],
+        "image_names": ["gcr.io/acme-prod/api-server:v1.4.2"],
+        "volumes": [
+          {"name": "aws-creds-vol", "source_kind": "Secret", "source_name": "aws-credentials"},
+          {"name": "stripe-key-vol","source_kind": "Secret", "source_name": "stripe-api-key"}
+        ],
+        "labels": {"app": "api-server", "pod-template-hash": "7d9f8b"}
+      },
+      {
+        "name": "api-server-7d9f8b-p9m3n",
+        "namespace": "acme-prod",
+        "node": "gke-acme-prod-pool-1-def2",
+        "service_account": "api-server",
+        "phase": "Running",
+        "privileged_containers": ["api-container"],
+        "image_names": ["gcr.io/acme-prod/api-server:v1.4.2"],
+        "volumes": [
+          {"name": "aws-creds-vol", "source_kind": "Secret", "source_name": "aws-credentials"},
+          {"name": "stripe-key-vol","source_kind": "Secret", "source_name": "stripe-api-key"}
+        ],
+        "labels": {"app": "api-server", "pod-template-hash": "7d9f8b"}
+      },
+      {
+        "name": "prometheus-k8s-0",
+        "namespace": "monitoring",
+        "node": "gke-acme-prod-pool-0-abc1",
+        "service_account": "prometheus",
+        "phase": "Running",
+        "host_network": true,
+        "host_path_mounts": ["/proc", "/sys", "/"],
+        "image_names": ["prom/prometheus:v2.45.0"],
+        "labels": {"app": "prometheus", "statefulset.kubernetes.io/pod-name": "prometheus-k8s-0"}
+      },
+      {
+        "name": "terraform-6bc4d-rw9xz",
+        "namespace": "infra",
+        "node": "gke-acme-prod-pool-1-def2",
+        "service_account": "terraform",
+        "phase": "Running",
+        "host_pid": true,
+        "host_ipc": true,
+        "host_network": true,
+        "privileged_containers": ["terraform-container"],
+        "host_path_mounts": ["/var/lib/kubelet", "/etc/kubernetes"],
+        "image_names": ["hashicorp/terraform:1.6.0"],
+        "labels": {"app": "terraform", "pod-template-hash": "6bc4d"}
+      },
+      {
+        "name": "vault-injector-5f7c-mn4pk",
+        "namespace": "infra",
+        "node": "gke-acme-prod-pool-2-ghi3",
+        "service_account": "vault-injector",
+        "phase": "Running",
+        "host_path_mounts": ["/var/run/docker.sock", "/run/containerd"],
+        "image_names": ["hashicorp/vault-k8s:1.3.0"],
+        "labels": {"app": "vault-injector", "pod-template-hash": "5f7c"}
+      },
+      {
+        "name": "deployer-abc-xyz",
+        "namespace": "acme-staging",
+        "node": "gke-acme-prod-pool-2-ghi3",
+        "service_account": "deployer",
+        "phase": "Running",
+        "host_pid": true,
+        "host_network": true,
+        "image_names": ["gcr.io/acme-staging/deployer:latest"],
+        "labels": {"app": "deployer", "pod-template-hash": "abc"}
+      },
+      {
+        "name": "etl-runner-77b-qrs",
+        "namespace": "data",
+        "node": "gke-acme-prod-pool-0-abc1",
+        "service_account": "etl-runner",
+        "phase": "Running",
+        "image_names": ["gcr.io/acme-data/etl-runner:v2.1.0"],
+        "labels": {"app": "etl-runner", "pod-template-hash": "77b"}
+      }
+    ],
+    "secrets_meta": [
+      {"name": "aws-credentials",        "namespace": "acme-prod",    "type": "Opaque",                                "data_keys": ["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY","AWS_DEFAULT_REGION","AWS_ROLE_ARN"]},
+      {"name": "db-password",            "namespace": "acme-prod",    "type": "Opaque",                                "data_keys": ["username","password","host","port","replica_password"]},
+      {"name": "stripe-api-key",         "namespace": "acme-prod",    "type": "Opaque",                                "data_keys": ["STRIPE_SECRET_KEY","STRIPE_PUBLISHABLE_KEY","STRIPE_WEBHOOK_SECRET"]},
+      {"name": "tls-cert",               "namespace": "acme-prod",    "type": "kubernetes.io/tls",                     "data_keys": ["tls.crt","tls.key"]},
+      {"name": "github-actions-token",   "namespace": "acme-prod",    "type": "Opaque",                                "data_keys": ["GH_TOKEN","GH_APP_ID","GH_APP_PRIVATE_KEY"]},
+      {"name": "gcp-service-account",    "namespace": "infra",        "type": "Opaque",                                "data_keys": ["key.json","project-id","client-email"]},
+      {"name": "vault-root-token",       "namespace": "infra",        "type": "Opaque",                                "data_keys": ["token","accessor"]},
+      {"name": "terraform-state-enc",    "namespace": "infra",        "type": "Opaque",                                "data_keys": ["encryption_key","kms_key_id"]},
+      {"name": "bootstrap-token-abc123", "namespace": "kube-system",  "type": "bootstrap.kubernetes.io/token",         "data_keys": ["token-id","token-secret","usage-bootstrap-authentication"]},
+      {"name": "docker-registry-creds",  "namespace": "acme-staging", "type": "kubernetes.io/dockerconfigjson",        "data_keys": [".dockerconfigjson"]},
+      {"name": "databricks-token",       "namespace": "data",         "type": "Opaque",                                "data_keys": ["DATABRICKS_TOKEN","DATABRICKS_HOST","DATABRICKS_CLUSTER_ID"]},
+      {"name": "grafana-admin-password", "namespace": "monitoring",   "type": "Opaque",                                "data_keys": ["admin-password","admin-user","secret-key"]}
+    ],
+    "configmaps_meta": [
+      {"name": "api-server-config", "namespace": "acme-prod",   "data_keys": ["app.yaml","db.yaml","cache.yaml","feature-flags.yaml"]},
+      {"name": "prometheus-config", "namespace": "monitoring",  "data_keys": ["prometheus.yml","alert_rules.yml","recording_rules.yml"]},
+      {"name": "terraform-backend", "namespace": "infra",       "data_keys": ["backend.tf","main.tf","variables.tf"]},
+      {"name": "kube-proxy",        "namespace": "kube-system", "data_keys": ["config.conf","kubeconfig.conf"]}
+    ],
+    "nodes": [
+      {
+        "name": "gke-acme-prod-pool-0-abc1",
+        "labels": {"kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64", "cloud.google.com/gke-nodepool": "acme-prod-pool", "node-role.kubernetes.io/worker": ""},
+        "roles": ["worker"],
+        "capacity": {"cpu": "16", "memory": "64Gi", "pods": "110"}
+      },
+      {
+        "name": "gke-acme-prod-pool-1-def2",
+        "labels": {"kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64", "cloud.google.com/gke-nodepool": "acme-prod-pool", "node-role.kubernetes.io/worker": ""},
+        "roles": ["worker"],
+        "capacity": {"cpu": "16", "memory": "64Gi", "pods": "110"}
+      },
+      {
+        "name": "gke-acme-prod-pool-2-ghi3",
+        "labels": {"kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64", "cloud.google.com/gke-nodepool": "acme-prod-pool", "node-role.kubernetes.io/worker": ""},
+        "roles": ["worker"],
+        "capacity": {"cpu": "16", "memory": "64Gi", "pods": "110"}
+      },
+      {
+        "name": "gke-acme-prod-master-0",
+        "labels": {"kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64", "cloud.google.com/gke-nodepool": "default-pool", "node-role.kubernetes.io/control-plane": ""},
+        "taints": ["node-role.kubernetes.io/control-plane:NoSchedule"],
+        "roles": ["control-plane", "master"],
+        "capacity": {"cpu": "8", "memory": "32Gi", "pods": "110"}
+      }
+    ]
+  },
+  "graph": {
+    "nodes": [
+      {"id": "identity:prometheus",                      "kind": "Identity",            "namespace": "monitoring",    "name": "system:serviceaccount:monitoring:prometheus", "risk_score": 7.5,  "metadata": {"groups": "system:serviceaccounts:monitoring"}},
+      {"id": "sa:monitoring:prometheus",                 "kind": "ServiceAccount",      "namespace": "monitoring",    "name": "prometheus",        "risk_score": 7.5,  "labels": {"app": "prometheus"}},
+      {"id": "sa:acme-prod:api-server",                  "kind": "ServiceAccount",      "namespace": "acme-prod",     "name": "api-server",         "risk_score": 9.5,  "labels": {"app": "api-server"}},
+      {"id": "sa:acme-prod:worker",                      "kind": "ServiceAccount",      "namespace": "acme-prod",     "name": "worker",             "risk_score": 2.5,  "labels": {"app": "worker"}},
+      {"id": "sa:acme-prod:database-backup",             "kind": "ServiceAccount",      "namespace": "acme-prod",     "name": "database-backup",    "risk_score": 4.5,  "labels": {"app": "database-backup"}},
+      {"id": "sa:acme-staging:deployer",                 "kind": "ServiceAccount",      "namespace": "acme-staging",  "name": "deployer",           "risk_score": 9.0,  "labels": {"app": "deployer"}},
+      {"id": "sa:acme-staging:frontend",                 "kind": "ServiceAccount",      "namespace": "acme-staging",  "name": "frontend",           "risk_score": 2.0,  "labels": {"app": "frontend"}},
+      {"id": "sa:infra:terraform",                       "kind": "ServiceAccount",      "namespace": "infra",         "name": "terraform",          "risk_score": 9.0,  "labels": {"app": "terraform"}},
+      {"id": "sa:infra:vault-injector",                  "kind": "ServiceAccount",      "namespace": "infra",         "name": "vault-injector",     "risk_score": 8.0,  "labels": {"app": "vault-injector"}},
+      {"id": "sa:data:etl-runner",                       "kind": "ServiceAccount",      "namespace": "data",          "name": "etl-runner",         "risk_score": 8.5,  "labels": {"app": "etl-runner"}},
+      {"id": "sa:data:analytics",                        "kind": "ServiceAccount",      "namespace": "data",          "name": "analytics",          "risk_score": 4.5,  "labels": {"app": "analytics"}},
+      {"id": "sa:kube-system:coredns",                   "kind": "ServiceAccount",      "namespace": "kube-system",   "name": "coredns",            "risk_score": 2.0,  "labels": {}},
+      {"id": "sa:kube-system:kube-proxy",                "kind": "ServiceAccount",      "namespace": "kube-system",   "name": "kube-proxy",         "risk_score": 2.5,  "labels": {}},
+      {"id": "sa:default:default",                       "kind": "ServiceAccount",      "namespace": "default",       "name": "default",            "risk_score": 2.0,  "labels": {}},
+
+      {"id": "clusterrole:cluster-admin",                "kind": "ClusterRole",         "name": "cluster-admin",                                    "risk_score": 10.0, "metadata": {"rule_count": "2", "wildcard": "true"}},
+      {"id": "clusterrole:prometheus-cluster-role",      "kind": "ClusterRole",         "name": "prometheus-cluster-role",                          "risk_score": 7.5,  "metadata": {"rule_count": "5"}},
+      {"id": "clusterrole:deployer-role",                "kind": "ClusterRole",         "name": "deployer-role",                                    "risk_score": 9.0,  "metadata": {"rule_count": "5", "can_create_crb": "true"}},
+      {"id": "clusterrole:terraform-role",               "kind": "ClusterRole",         "name": "terraform-role",                                   "risk_score": 9.0,  "metadata": {"rule_count": "4", "can_patch_clusterroles": "true"}},
+      {"id": "clusterrole:vault-injector-role",          "kind": "ClusterRole",         "name": "vault-injector-role",                              "risk_score": 8.0,  "metadata": {"rule_count": "3", "can_create_pods": "true"}},
+      {"id": "clusterrole:etl-runner-role",              "kind": "ClusterRole",         "name": "etl-runner-role",                                  "risk_score": 8.5,  "metadata": {"rule_count": "3", "can_impersonate": "true"}},
+      {"id": "clusterrole:system:coredns",               "kind": "ClusterRole",         "name": "system:coredns",                                   "risk_score": 2.0,  "metadata": {}},
+      {"id": "clusterrole:system:node-proxier",          "kind": "ClusterRole",         "name": "system:node-proxier",                              "risk_score": 2.5,  "metadata": {}},
+
+      {"id": "crb:api-server-cluster-admin",             "kind": "ClusterRoleBinding",  "name": "api-server-cluster-admin",                         "risk_score": 9.5,  "metadata": {"subject": "acme-prod:api-server", "role": "cluster-admin"}},
+      {"id": "crb:prometheus-global",                    "kind": "ClusterRoleBinding",  "name": "prometheus-global",                                "risk_score": 7.5,  "metadata": {"subject": "monitoring:prometheus"}},
+      {"id": "crb:deployer-global",                      "kind": "ClusterRoleBinding",  "name": "deployer-global",                                  "risk_score": 9.0,  "metadata": {"subject": "acme-staging:deployer"}},
+      {"id": "crb:terraform-global",                     "kind": "ClusterRoleBinding",  "name": "terraform-global",                                 "risk_score": 9.0,  "metadata": {"subject": "infra:terraform"}},
+      {"id": "crb:vault-injector-global",                "kind": "ClusterRoleBinding",  "name": "vault-injector-global",                            "risk_score": 8.0,  "metadata": {"subject": "infra:vault-injector"}},
+      {"id": "crb:etl-runner-global",                    "kind": "ClusterRoleBinding",  "name": "etl-runner-global",                                "risk_score": 8.5,  "metadata": {"subject": "data:etl-runner"}},
+      {"id": "crb:coredns",                              "kind": "ClusterRoleBinding",  "name": "coredns",                                          "risk_score": 2.0,  "metadata": {}},
+      {"id": "crb:kube-proxy",                           "kind": "ClusterRoleBinding",  "name": "kube-proxy",                                       "risk_score": 2.5,  "metadata": {}},
+
+      {"id": "role:acme-prod:database-backup-role",      "kind": "Role",                "namespace": "acme-prod",     "name": "database-backup-role","risk_score": 4.5, "metadata": {}},
+      {"id": "role:data:analytics-role",                 "kind": "Role",                "namespace": "data",          "name": "analytics-role",     "risk_score": 4.0,  "metadata": {}},
+
+      {"id": "rb:acme-prod:database-backup-binding",     "kind": "RoleBinding",         "namespace": "acme-prod",     "name": "database-backup-binding","risk_score": 4.0, "metadata": {}},
+      {"id": "rb:data:analytics-binding",                "kind": "RoleBinding",         "namespace": "data",          "name": "analytics-binding",  "risk_score": 3.5,  "metadata": {}},
+
+      {"id": "workload:acme-prod:deployment:api-server",  "kind": "Workload", "namespace": "acme-prod",    "name": "api-server",       "risk_score": 8.5,  "metadata": {"workload_kind": "Deployment", "privileged": "true", "replicas": "2"}},
+      {"id": "workload:acme-prod:deployment:worker",      "kind": "Workload", "namespace": "acme-prod",    "name": "worker",           "risk_score": 3.5,  "metadata": {"workload_kind": "Deployment", "replicas": "3"}},
+      {"id": "workload:acme-prod:statefulset:database",   "kind": "Workload", "namespace": "acme-prod",    "name": "database",         "risk_score": 3.0,  "metadata": {"workload_kind": "StatefulSet"}},
+      {"id": "workload:acme-prod:cronjob:backup-job",     "kind": "Workload", "namespace": "acme-prod",    "name": "backup-job",       "risk_score": 3.5,  "metadata": {"workload_kind": "CronJob"}},
+      {"id": "workload:acme-staging:deployment:deployer", "kind": "Workload", "namespace": "acme-staging", "name": "deployer",         "risk_score": 8.0,  "metadata": {"workload_kind": "Deployment", "host_pid": "true", "host_network": "true"}},
+      {"id": "workload:acme-staging:deployment:frontend", "kind": "Workload", "namespace": "acme-staging", "name": "frontend",         "risk_score": 1.5,  "metadata": {"workload_kind": "Deployment", "replicas": "2"}},
+      {"id": "workload:monitoring:daemonset:prometheus",  "kind": "Workload", "namespace": "monitoring",   "name": "prometheus",       "risk_score": 7.5,  "metadata": {"workload_kind": "DaemonSet",  "host_network": "true", "host_path": "/"}},
+      {"id": "workload:infra:deployment:terraform",       "kind": "Workload", "namespace": "infra",        "name": "terraform",        "risk_score": 9.5,  "metadata": {"workload_kind": "Deployment", "privileged": "true", "host_pid": "true", "host_ipc": "true", "host_network": "true"}},
+      {"id": "workload:infra:deployment:vault-injector",  "kind": "Workload", "namespace": "infra",        "name": "vault-injector",   "risk_score": 7.5,  "metadata": {"workload_kind": "Deployment", "host_path": "/var/run/docker.sock"}},
+      {"id": "workload:data:deployment:etl-runner",       "kind": "Workload", "namespace": "data",         "name": "etl-runner",       "risk_score": 5.0,  "metadata": {"workload_kind": "Deployment", "replicas": "2"}},
+
+      {"id": "pod:acme-prod:api-server-7d9f8b-xk2p4",    "kind": "Pod",      "namespace": "acme-prod",    "name": "api-server-7d9f8b-xk2p4", "risk_score": 8.5, "metadata": {"node": "gke-acme-prod-pool-0-abc1", "phase": "Running", "privileged": "true"}},
+      {"id": "pod:acme-prod:api-server-7d9f8b-p9m3n",    "kind": "Pod",      "namespace": "acme-prod",    "name": "api-server-7d9f8b-p9m3n", "risk_score": 8.5, "metadata": {"node": "gke-acme-prod-pool-1-def2", "phase": "Running", "privileged": "true"}},
+      {"id": "pod:monitoring:prometheus-k8s-0",           "kind": "Pod",      "namespace": "monitoring",   "name": "prometheus-k8s-0",        "risk_score": 7.5, "metadata": {"node": "gke-acme-prod-pool-0-abc1", "phase": "Running", "host_network": "true"}},
+      {"id": "pod:infra:terraform-6bc4d-rw9xz",          "kind": "Pod",      "namespace": "infra",        "name": "terraform-6bc4d-rw9xz",   "risk_score": 9.5, "metadata": {"node": "gke-acme-prod-pool-1-def2", "phase": "Running", "privileged": "true", "host_pid": "true"}},
+      {"id": "pod:infra:vault-injector-5f7c-mn4pk",       "kind": "Pod",      "namespace": "infra",        "name": "vault-injector-5f7c-mn4pk","risk_score": 7.5, "metadata": {"node": "gke-acme-prod-pool-2-ghi3", "phase": "Running"}},
+      {"id": "pod:acme-staging:deployer-abc-xyz",         "kind": "Pod",      "namespace": "acme-staging", "name": "deployer-abc-xyz",        "risk_score": 7.5, "metadata": {"node": "gke-acme-prod-pool-2-ghi3", "phase": "Running", "host_pid": "true", "host_network": "true"}},
+      {"id": "pod:data:etl-runner-77b-qrs",               "kind": "Pod",      "namespace": "data",         "name": "etl-runner-77b-qrs",      "risk_score": 5.0, "metadata": {"node": "gke-acme-prod-pool-0-abc1", "phase": "Running"}},
+
+      {"id": "secret:acme-prod:aws-credentials",         "kind": "Secret", "namespace": "acme-prod",    "name": "aws-credentials",        "risk_score": 8.5,  "metadata": {"type": "Opaque", "keys": "AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_DEFAULT_REGION"}},
+      {"id": "secret:acme-prod:db-password",             "kind": "Secret", "namespace": "acme-prod",    "name": "db-password",            "risk_score": 6.5,  "metadata": {"type": "Opaque", "keys": "username,password,host,port"}},
+      {"id": "secret:acme-prod:stripe-api-key",          "kind": "Secret", "namespace": "acme-prod",    "name": "stripe-api-key",         "risk_score": 8.0,  "metadata": {"type": "Opaque", "keys": "STRIPE_SECRET_KEY,STRIPE_PUBLISHABLE_KEY,STRIPE_WEBHOOK_SECRET"}},
+      {"id": "secret:acme-prod:github-actions-token",    "kind": "Secret", "namespace": "acme-prod",    "name": "github-actions-token",   "risk_score": 7.5,  "metadata": {"type": "Opaque", "keys": "GH_TOKEN,GH_APP_ID,GH_APP_PRIVATE_KEY"}},
+      {"id": "secret:acme-prod:tls-cert",                "kind": "Secret", "namespace": "acme-prod",    "name": "tls-cert",               "risk_score": 4.0,  "metadata": {"type": "kubernetes.io/tls", "keys": "tls.crt,tls.key"}},
+      {"id": "secret:infra:gcp-service-account",         "kind": "Secret", "namespace": "infra",        "name": "gcp-service-account",    "risk_score": 8.5,  "metadata": {"type": "Opaque", "keys": "key.json,project-id,client-email"}},
+      {"id": "secret:infra:vault-root-token",            "kind": "Secret", "namespace": "infra",        "name": "vault-root-token",       "risk_score": 9.0,  "metadata": {"type": "Opaque", "keys": "token,accessor"}},
+      {"id": "secret:infra:terraform-state-enc",         "kind": "Secret", "namespace": "infra",        "name": "terraform-state-enc",    "risk_score": 7.0,  "metadata": {"type": "Opaque", "keys": "encryption_key,kms_key_id"}},
+      {"id": "secret:kube-system:bootstrap-token-abc123","kind": "Secret", "namespace": "kube-system",  "name": "bootstrap-token-abc123", "risk_score": 7.5,  "metadata": {"type": "bootstrap.kubernetes.io/token", "keys": "token-id,token-secret"}},
+      {"id": "secret:acme-staging:docker-registry-creds","kind": "Secret", "namespace": "acme-staging", "name": "docker-registry-creds",  "risk_score": 5.5,  "metadata": {"type": "kubernetes.io/dockerconfigjson", "keys": ".dockerconfigjson"}},
+      {"id": "secret:data:databricks-token",             "kind": "Secret", "namespace": "data",         "name": "databricks-token",       "risk_score": 7.5,  "metadata": {"type": "Opaque", "keys": "DATABRICKS_TOKEN,DATABRICKS_HOST,DATABRICKS_CLUSTER_ID"}},
+      {"id": "secret:monitoring:grafana-admin-password", "kind": "Secret", "namespace": "monitoring",   "name": "grafana-admin-password", "risk_score": 5.0,  "metadata": {"type": "Opaque", "keys": "admin-password,admin-user"}},
+
+      {"id": "node:gke-acme-prod-pool-0-abc1",           "kind": "Node",   "name": "gke-acme-prod-pool-0-abc1", "risk_score": 7.0,  "metadata": {"roles": "worker",         "capacity_cpu": "16",  "capacity_memory": "64Gi"}},
+      {"id": "node:gke-acme-prod-pool-1-def2",           "kind": "Node",   "name": "gke-acme-prod-pool-1-def2", "risk_score": 7.0,  "metadata": {"roles": "worker",         "capacity_cpu": "16",  "capacity_memory": "64Gi"}},
+      {"id": "node:gke-acme-prod-pool-2-ghi3",           "kind": "Node",   "name": "gke-acme-prod-pool-2-ghi3", "risk_score": 7.0,  "metadata": {"roles": "worker",         "capacity_cpu": "16",  "capacity_memory": "64Gi"}},
+      {"id": "node:gke-acme-prod-master-0",              "kind": "Node",   "name": "gke-acme-prod-master-0",   "risk_score": 9.5,  "metadata": {"roles": "control-plane",  "capacity_cpu": "8",   "capacity_memory": "32Gi"}},
+
+      {"id": "ns:acme-prod",     "kind": "Namespace", "name": "acme-prod",    "risk_score": 5.0, "metadata": {"env": "production"}},
+      {"id": "ns:acme-staging",  "kind": "Namespace", "name": "acme-staging", "risk_score": 3.5, "metadata": {"env": "staging"}},
+      {"id": "ns:monitoring",    "kind": "Namespace", "name": "monitoring",   "risk_score": 4.5, "metadata": {"env": "production"}},
+      {"id": "ns:infra",         "kind": "Namespace", "name": "infra",        "risk_score": 5.5, "metadata": {"env": "production"}},
+      {"id": "ns:data",          "kind": "Namespace", "name": "data",         "risk_score": 4.0, "metadata": {"env": "production"}},
+      {"id": "ns:kube-system",   "kind": "Namespace", "name": "kube-system",  "risk_score": 3.5, "metadata": {}}
+    ],
+    "edges": [
+      {"from": "identity:prometheus",                     "to": "sa:monitoring:prometheus",                "kind": "member_of",       "reason": "authenticated as system:serviceaccount:monitoring:prometheus"},
+
+      {"from": "sa:monitoring:prometheus",                "to": "crb:prometheus-global",                   "kind": "bound_to",        "reason": "ClusterRoleBinding/prometheus-global"},
+      {"from": "crb:prometheus-global",                   "to": "clusterrole:prometheus-cluster-role",     "kind": "grants",          "reason": "ClusterRole/prometheus-cluster-role"},
+
+      {"from": "sa:acme-prod:api-server",                 "to": "crb:api-server-cluster-admin",            "kind": "bound_to",        "reason": "ClusterRoleBinding/api-server-cluster-admin"},
+      {"from": "crb:api-server-cluster-admin",            "to": "clusterrole:cluster-admin",               "kind": "grants",          "reason": "ClusterRole/cluster-admin"},
+
+      {"from": "sa:acme-staging:deployer",                "to": "crb:deployer-global",                     "kind": "bound_to",        "reason": "ClusterRoleBinding/deployer-global"},
+      {"from": "crb:deployer-global",                     "to": "clusterrole:deployer-role",               "kind": "grants",          "reason": "ClusterRole/deployer-role"},
+
+      {"from": "sa:infra:terraform",                      "to": "crb:terraform-global",                    "kind": "bound_to",        "reason": "ClusterRoleBinding/terraform-global"},
+      {"from": "crb:terraform-global",                    "to": "clusterrole:terraform-role",              "kind": "grants",          "reason": "ClusterRole/terraform-role"},
+
+      {"from": "sa:infra:vault-injector",                 "to": "crb:vault-injector-global",               "kind": "bound_to",        "reason": "ClusterRoleBinding/vault-injector-global"},
+      {"from": "crb:vault-injector-global",               "to": "clusterrole:vault-injector-role",         "kind": "grants",          "reason": "ClusterRole/vault-injector-role"},
+
+      {"from": "sa:data:etl-runner",                      "to": "crb:etl-runner-global",                   "kind": "bound_to",        "reason": "ClusterRoleBinding/etl-runner-global"},
+      {"from": "crb:etl-runner-global",                   "to": "clusterrole:etl-runner-role",             "kind": "grants",          "reason": "ClusterRole/etl-runner-role"},
+
+      {"from": "sa:kube-system:coredns",                  "to": "crb:coredns",                             "kind": "bound_to",        "reason": "ClusterRoleBinding/coredns"},
+      {"from": "crb:coredns",                             "to": "clusterrole:system:coredns",              "kind": "grants",          "reason": "ClusterRole/system:coredns"},
+
+      {"from": "sa:kube-system:kube-proxy",               "to": "crb:kube-proxy",                          "kind": "bound_to",        "reason": "ClusterRoleBinding/kube-proxy"},
+      {"from": "crb:kube-proxy",                          "to": "clusterrole:system:node-proxier",         "kind": "grants",          "reason": "ClusterRole/system:node-proxier"},
+
+      {"from": "sa:acme-prod:database-backup",            "to": "rb:acme-prod:database-backup-binding",    "kind": "bound_to",        "reason": "RoleBinding/database-backup-binding in acme-prod"},
+      {"from": "rb:acme-prod:database-backup-binding",    "to": "role:acme-prod:database-backup-role",     "kind": "grants",          "reason": "Role/database-backup-role"},
+
+      {"from": "sa:data:analytics",                       "to": "rb:data:analytics-binding",               "kind": "bound_to",        "reason": "RoleBinding/analytics-binding in data"},
+      {"from": "rb:data:analytics-binding",               "to": "role:data:analytics-role",                "kind": "grants",          "reason": "Role/analytics-role"},
+
+      {"from": "workload:acme-prod:deployment:api-server",  "to": "sa:acme-prod:api-server",               "kind": "runs_as",         "reason": "spec.serviceAccountName=api-server"},
+      {"from": "workload:acme-prod:deployment:worker",      "to": "sa:acme-prod:worker",                   "kind": "runs_as",         "reason": "spec.serviceAccountName=worker"},
+      {"from": "workload:acme-prod:statefulset:database",   "to": "sa:default:default",                    "kind": "runs_as",         "reason": "spec.serviceAccountName=default"},
+      {"from": "workload:acme-prod:cronjob:backup-job",     "to": "sa:acme-prod:database-backup",          "kind": "runs_as",         "reason": "spec.serviceAccountName=database-backup"},
+      {"from": "workload:acme-staging:deployment:deployer", "to": "sa:acme-staging:deployer",              "kind": "runs_as",         "reason": "spec.serviceAccountName=deployer"},
+      {"from": "workload:acme-staging:deployment:frontend", "to": "sa:acme-staging:frontend",              "kind": "runs_as",         "reason": "spec.serviceAccountName=frontend"},
+      {"from": "workload:monitoring:daemonset:prometheus",  "to": "sa:monitoring:prometheus",              "kind": "runs_as",         "reason": "spec.serviceAccountName=prometheus"},
+      {"from": "workload:infra:deployment:terraform",       "to": "sa:infra:terraform",                    "kind": "runs_as",         "reason": "spec.serviceAccountName=terraform"},
+      {"from": "workload:infra:deployment:vault-injector",  "to": "sa:infra:vault-injector",               "kind": "runs_as",         "reason": "spec.serviceAccountName=vault-injector"},
+      {"from": "workload:data:deployment:etl-runner",       "to": "sa:data:etl-runner",                    "kind": "runs_as",         "reason": "spec.serviceAccountName=etl-runner"},
+
+      {"from": "pod:acme-prod:api-server-7d9f8b-xk2p4",   "to": "sa:acme-prod:api-server",                "kind": "runs_as",         "reason": "spec.serviceAccountName=api-server"},
+      {"from": "pod:acme-prod:api-server-7d9f8b-p9m3n",   "to": "sa:acme-prod:api-server",                "kind": "runs_as",         "reason": "spec.serviceAccountName=api-server"},
+      {"from": "pod:monitoring:prometheus-k8s-0",          "to": "sa:monitoring:prometheus",               "kind": "runs_as",         "reason": "spec.serviceAccountName=prometheus"},
+      {"from": "pod:infra:terraform-6bc4d-rw9xz",         "to": "sa:infra:terraform",                     "kind": "runs_as",         "reason": "spec.serviceAccountName=terraform"},
+      {"from": "pod:infra:vault-injector-5f7c-mn4pk",     "to": "sa:infra:vault-injector",                "kind": "runs_as",         "reason": "spec.serviceAccountName=vault-injector"},
+      {"from": "pod:acme-staging:deployer-abc-xyz",        "to": "sa:acme-staging:deployer",               "kind": "runs_as",         "reason": "spec.serviceAccountName=deployer"},
+      {"from": "pod:data:etl-runner-77b-qrs",              "to": "sa:data:etl-runner",                     "kind": "runs_as",         "reason": "spec.serviceAccountName=etl-runner"},
+
+      {"from": "workload:acme-prod:deployment:api-server",  "to": "secret:acme-prod:aws-credentials",     "kind": "mounts",          "reason": "volume: aws-creds-vol from Secret/aws-credentials"},
+      {"from": "workload:acme-prod:deployment:api-server",  "to": "secret:acme-prod:stripe-api-key",      "kind": "mounts",          "reason": "volume: stripe-key-vol from Secret/stripe-api-key"},
+      {"from": "workload:acme-prod:statefulset:database",   "to": "secret:acme-prod:db-password",         "kind": "mounts",          "reason": "volume: db-secret-vol from Secret/db-password"},
+      {"from": "workload:infra:deployment:terraform",       "to": "secret:infra:gcp-service-account",     "kind": "mounts",          "reason": "volume: gcp-sa-vol from Secret/gcp-service-account"},
+      {"from": "workload:infra:deployment:vault-injector",  "to": "secret:infra:vault-root-token",        "kind": "mounts",          "reason": "volume: vault-token from Secret/vault-root-token"},
+      {"from": "workload:data:deployment:etl-runner",       "to": "secret:data:databricks-token",         "kind": "mounts",          "reason": "volume: databricks-creds from Secret/databricks-token"},
+
+      {"from": "workload:monitoring:daemonset:prometheus",  "to": "node:gke-acme-prod-pool-0-abc1",       "kind": "mounts",          "reason": "hostPath: / mounted into all daemonset pods — full node filesystem access"},
+      {"from": "workload:infra:deployment:terraform",       "to": "node:gke-acme-prod-pool-1-def2",       "kind": "mounts",          "reason": "hostPath: /var/lib/kubelet and /etc/kubernetes — kubelet credentials and PKI"},
+      {"from": "workload:infra:deployment:vault-injector",  "to": "node:gke-acme-prod-pool-2-ghi3",       "kind": "mounts",          "reason": "hostPath: /var/run/docker.sock — container runtime socket access"},
+
+      {"from": "sa:monitoring:prometheus",                  "to": "secret:acme-prod:aws-credentials",     "kind": "can_list",        "reason": "SSRR: verb=list resource=secrets in '' (cluster-wide)"},
+      {"from": "sa:monitoring:prometheus",                  "to": "secret:acme-prod:stripe-api-key",      "kind": "can_list",        "reason": "SSRR: verb=list resource=secrets in '' (cluster-wide)"},
+      {"from": "sa:monitoring:prometheus",                  "to": "secret:acme-prod:github-actions-token","kind": "can_list",        "reason": "SSRR: verb=list resource=secrets in '' (cluster-wide)"},
+      {"from": "sa:monitoring:prometheus",                  "to": "secret:infra:gcp-service-account",     "kind": "can_list",        "reason": "SSRR: verb=list resource=secrets in '' (cluster-wide)"},
+      {"from": "sa:monitoring:prometheus",                  "to": "secret:infra:vault-root-token",        "kind": "can_list",        "reason": "SSRR: verb=list resource=secrets in '' (cluster-wide)"},
+      {"from": "sa:monitoring:prometheus",                  "to": "secret:kube-system:bootstrap-token-abc123","kind": "can_list",    "reason": "SSRR: verb=list resource=secrets in '' (cluster-wide)"},
+      {"from": "sa:monitoring:prometheus",                  "to": "secret:data:databricks-token",         "kind": "can_list",        "reason": "SSRR: verb=list resource=secrets in '' (cluster-wide)"},
+
+      {"from": "sa:monitoring:prometheus",                  "to": "pod:acme-prod:api-server-7d9f8b-xk2p4","kind": "can_exec",        "reason": "SSRR: verb=create resource=pods/exec in acme-prod"},
+      {"from": "sa:monitoring:prometheus",                  "to": "pod:acme-prod:api-server-7d9f8b-p9m3n","kind": "can_exec",        "reason": "SSRR: verb=create resource=pods/exec in acme-prod"},
+      {"from": "sa:monitoring:prometheus",                  "to": "pod:infra:terraform-6bc4d-rw9xz",     "kind": "can_exec",        "reason": "SSRR: verb=create resource=pods/exec in infra"},
+      {"from": "sa:monitoring:prometheus",                  "to": "pod:infra:vault-injector-5f7c-mn4pk",  "kind": "can_exec",        "reason": "SSRR: verb=create resource=pods/exec in infra"},
+
+      {"from": "sa:acme-prod:database-backup",              "to": "secret:acme-prod:db-password",         "kind": "can_get",         "reason": "SSRR: verb=get resource=secrets resource_names=[db-password] in acme-prod"},
+      {"from": "sa:data:analytics",                         "to": "secret:data:databricks-token",         "kind": "can_get",         "reason": "SSRR (review): verb=get resource=secrets in data"},
+
+      {"from": "sa:acme-staging:deployer",                  "to": "workload:acme-prod:deployment:api-server","kind": "can_patch",    "reason": "SSRR (review): verb=patch resource=deployments — cross-namespace patch via ClusterRole/deployer-role"},
+
+      {"from": "sa:monitoring:prometheus",                  "to": "pod:acme-prod:api-server-7d9f8b-xk2p4","kind": "can_portforward", "reason": "SSRR: verb=create resource=pods/portforward in acme-prod", "inferred": true},
+
+      {"from": "sa:acme-staging:deployer",                  "to": "crb:api-server-cluster-admin",         "kind": "can_create",      "reason": "PRIVESC-CREATE-CLUSTERROLEBINDING: deployer-role grants create on clusterrolebindings — can bind any subject to cluster-admin", "inferred": true},
+      {"from": "sa:infra:terraform",                        "to": "clusterrole:cluster-admin",            "kind": "can_patch",       "reason": "PRIVESC-PATCH-CLUSTERROLES: terraform-role grants patch on clusterroles — can add wildcard rules to cluster-admin", "inferred": true},
+      {"from": "sa:data:etl-runner",                        "to": "sa:acme-prod:api-server",              "kind": "can_impersonate",  "reason": "PRIVESC-IMPERSONATE: etl-runner-role grants impersonate on serviceaccounts — can act as cluster-admin SA", "inferred": true},
+      {"from": "sa:infra:vault-injector",                   "to": "node:gke-acme-prod-pool-2-ghi3",       "kind": "can_create",      "reason": "ESCAPE-CREATE-POD: vault-injector-role grants create on pods — can deploy privileged pod with hostPath=/ for node escape", "inferred": true},
+      {"from": "sa:infra:vault-injector",                   "to": "sa:acme-prod:api-server",              "kind": "can_create",      "reason": "PRIVESC-CREATE-SA-TOKEN: vault-injector-role grants create on serviceaccounts/token — can mint token for cluster-admin SA", "inferred": true}
+    ]
+  },
+  "risk_findings": [
+    {
+      "id": "finding-001",
+      "rule_id": "PRIVESC-CLUSTER-ADMIN-BINDING",
+      "severity": "CRITICAL",
+      "score": 9.8,
+      "title": "ServiceAccount 'acme-prod/api-server' is directly bound to cluster-admin",
+      "description": "The service account 'api-server' in namespace 'acme-prod' is bound to the 'cluster-admin' ClusterRole via ClusterRoleBinding 'api-server-cluster-admin'. This grants unrestricted access to every Kubernetes resource across all namespaces. Any pod running as this service account (2 replicas currently running) effectively has full cluster ownership. The monitoring/prometheus SA (current identity) can exec into these pods, creating a direct 4-hop chain to cluster-admin.",
+      "evidence": [
+        "ClusterRoleBinding 'api-server-cluster-admin': subject=ServiceAccount:acme-prod:api-server roleRef=ClusterRole:cluster-admin",
+        "Pods running as api-server: api-server-7d9f8b-xk2p4 (node: gke-acme-prod-pool-0-abc1), api-server-7d9f8b-p9m3n (node: gke-acme-prod-pool-1-def2)",
+        "Current identity (monitoring:prometheus) has pods/exec in acme-prod — SSAR confirmed",
+        "Attack chain: prometheus →[exec]→ api-server pod →[runs_as]→ api-server SA →[cluster-admin]→ full cluster"
+      ],
+      "mitigation": "Immediately revoke ClusterRoleBinding 'api-server-cluster-admin'. Replace with a namespace-scoped Role granting only the specific resources the API server requires in acme-prod. Never bind workload service accounts to cluster-admin.",
+      "affected_nodes": ["crb:api-server-cluster-admin", "sa:acme-prod:api-server", "workload:acme-prod:deployment:api-server"]
+    },
+    {
+      "id": "finding-002",
+      "rule_id": "PRIVESC-CREATE-CLUSTERROLEBINDING",
+      "severity": "CRITICAL",
+      "score": 9.5,
+      "title": "ServiceAccount 'acme-staging/deployer' can create ClusterRoleBindings cluster-wide",
+      "description": "The 'deployer' service account in 'acme-staging' is granted 'create' on 'clusterrolebindings' via ClusterRole 'deployer-role'. This is the most dangerous RBAC privilege escalation: a single API call can bind any subject to cluster-admin, immediately achieving complete cluster compromise. The deployer workload uses hostPID and hostNetwork, making any container escape trivially escalatable.",
+      "evidence": [
+        "ClusterRole 'deployer-role' rule: verbs=[create,delete,get,list,patch,update,watch] resources=[clusterrolebindings] apiGroups=[rbac.authorization.k8s.io]",
+        "ClusterRoleBinding 'deployer-global': subject=ServiceAccount:acme-staging:deployer",
+        "Deployment 'deployer' in acme-staging: hostPID=true, hostNetwork=true — high lateral movement risk",
+        "One-step escalation: kubectl create clusterrolebinding pwn --clusterrole=cluster-admin --serviceaccount=acme-staging:deployer"
+      ],
+      "mitigation": "Remove 'clusterrolebindings' from deployer-role immediately. If CI/CD requires binding creation, restrict to RoleBinding within acme-staging namespace only. Implement OPA Gatekeeper policy blocking CRB creation by non-admin principals. Remove hostPID and hostNetwork from deployer workload.",
+      "affected_nodes": ["sa:acme-staging:deployer", "clusterrole:deployer-role", "crb:deployer-global", "workload:acme-staging:deployment:deployer"]
+    },
+    {
+      "id": "finding-003",
+      "rule_id": "PRIVESC-PATCH-CLUSTERROLES",
+      "severity": "CRITICAL",
+      "score": 9.3,
+      "title": "ServiceAccount 'infra/terraform' can patch ClusterRoles including cluster-admin",
+      "description": "The 'terraform' service account in 'infra' is granted 'patch' and 'update' on 'clusterroles' via ClusterRole 'terraform-role'. This allows silently inserting wildcard rules into the cluster-admin ClusterRole or any other ClusterRole, effectively creating a persistent backdoor. The terraform pod also runs with hostPID, hostIPC, hostNetwork, privileged containers, and mounts /var/lib/kubelet and /etc/kubernetes — representing the highest-risk workload in the cluster.",
+      "evidence": [
+        "ClusterRole 'terraform-role' rule: verbs=[get,list,patch,update,create,delete] resources=[clusterroles,clusterrolebindings] apiGroups=[rbac.authorization.k8s.io]",
+        "Pod 'terraform-6bc4d-rw9xz': hostPID=true, hostIPC=true, hostNetwork=true, privileged=true",
+        "HostPath mounts: /var/lib/kubelet (kubelet config + credentials), /etc/kubernetes (control plane PKI)",
+        "kubectl patch clusterrole cluster-admin --type=json -p '[{\"op\":\"add\",\"path\":\"/rules/0\",\"value\":{\"verbs\":[\"*\"],\"apiGroups\":[\"*\"],\"resources\":[\"*\"]}}]'"
+      ],
+      "mitigation": "Remove ClusterRole patch permission from terraform-role. Manage ClusterRoles exclusively through GitOps pipelines with immutable manifests. Use Terraform Kubernetes provider with a dedicated, least-privilege service account that cannot modify its own RBAC grants. Remove privileged pod settings and hostPath mounts.",
+      "affected_nodes": ["sa:infra:terraform", "clusterrole:terraform-role", "workload:infra:deployment:terraform", "pod:infra:terraform-6bc4d-rw9xz"]
+    },
+    {
+      "id": "finding-004",
+      "rule_id": "PRIVESC-IMPERSONATE",
+      "severity": "CRITICAL",
+      "score": 9.0,
+      "title": "ServiceAccount 'data/etl-runner' can impersonate any user or ServiceAccount",
+      "description": "The 'etl-runner' service account in 'data' is granted 'impersonate' on 'users', 'serviceaccounts', and 'groups' via ClusterRole 'etl-runner-role'. Impersonation allows acting with any other identity's permissions — including impersonating 'system:serviceaccount:acme-prod:api-server' (which is cluster-admin) or any member of 'system:masters'. This bypasses all of the etl-runner's own permission restrictions in a single kubectl flag.",
+      "evidence": [
+        "ClusterRole 'etl-runner-role' rule: verbs=[impersonate] resources=[users,serviceaccounts,groups] apiGroups=[\"\"]",
+        "High-value impersonation target: system:serviceaccount:acme-prod:api-server (cluster-admin bound)",
+        "kubectl get secrets --all-namespaces --as=system:serviceaccount:acme-prod:api-server",
+        "kubectl --as=system:masters get nodes  # escalates to cluster-admin group"
+      ],
+      "mitigation": "Remove impersonate permission from etl-runner-role immediately. Impersonation should only be granted to authentication proxies, never workload service accounts. Use dedicated service accounts with explicit permissions instead of impersonation. Audit all ClusterRoles containing 'impersonate' verb.",
+      "affected_nodes": ["sa:data:etl-runner", "clusterrole:etl-runner-role", "sa:acme-prod:api-server"]
+    },
+    {
+      "id": "finding-005",
+      "rule_id": "ESCAPE-CREATE-POD",
+      "severity": "HIGH",
+      "score": 8.8,
+      "title": "ServiceAccount 'infra/vault-injector' can create privileged pods enabling node escape",
+      "description": "The 'vault-injector' service account in 'infra' is granted 'create' on 'pods' cluster-wide via ClusterRole 'vault-injector-role'. An attacker can create a privileged pod with hostPath=/ mounted to any node, gaining full read/write access to the host filesystem including kubelet credentials, container runtime sockets, and etcd data. The vault-injector SA can also create ServiceAccount tokens (PRIVESC-CREATE-SA-TOKEN), enabling minting of tokens for the cluster-admin api-server SA.",
+      "evidence": [
+        "ClusterRole 'vault-injector-role' rule: verbs=[create,delete,get,list,patch,watch] resources=[pods,pods/exec]",
+        "ClusterRole 'vault-injector-role' rule: verbs=[create] resources=[serviceaccounts/token]",
+        "Current vault-injector pod already mounts /var/run/docker.sock and /run/containerd (container runtime sockets)",
+        "kubectl run escape --image=alpine --overrides='{\"spec\":{\"hostPID\":true,\"containers\":[{\"name\":\"x\",\"image\":\"alpine\",\"securityContext\":{\"privileged\":true},\"volumeMounts\":[{\"mountPath\":\"/host\",\"name\":\"h\"}]}],\"volumes\":[{\"name\":\"h\",\"hostPath\":{\"path\":\"/\"}}]}}'"
+      ],
+      "mitigation": "Restrict vault-injector-role to only the specific namespaces and pod templates required. Use a webhook admission controller to enforce pod security policies. Remove serviceaccounts/token create permission — use projected service account tokens instead. Implement Pod Security Standards at 'restricted' level for infra namespace.",
+      "affected_nodes": ["sa:infra:vault-injector", "clusterrole:vault-injector-role", "node:gke-acme-prod-pool-2-ghi3"]
+    },
+    {
+      "id": "finding-006",
+      "rule_id": "PRIV-LIST-SECRETS",
+      "severity": "HIGH",
+      "score": 8.2,
+      "title": "Current identity (monitoring/prometheus) can list ALL Secrets across all namespaces",
+      "description": "The 'prometheus' service account (current audited identity) holds 'list' and 'get' on 'secrets' cluster-wide via ClusterRole 'prometheus-cluster-role'. SSRR and SSAR both confirm this. 12 secrets are enumerable including AWS IAM credentials, GCP service account key, Stripe payment keys, GitHub Actions tokens, a Vault root token, and a Kubernetes bootstrap token. Listing secrets exposes all key names; combined with 'get' permission, actual secret values are readable.",
+      "evidence": [
+        "SSAR confirmed: verb=list resource=secrets allowed=true (cluster-wide)",
+        "SSAR confirmed: verb=get resource=secrets allowed=true (acme-prod, infra, kube-system)",
+        "Secret 'acme-prod/aws-credentials': keys=[AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, AWS_ROLE_ARN]",
+        "Secret 'infra/gcp-service-account': keys=[key.json, project-id, client-email]",
+        "Secret 'infra/vault-root-token': keys=[token, accessor] — Vault root token",
+        "Secret 'acme-prod/stripe-api-key': keys=[STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET]",
+        "Secret 'kube-system/bootstrap-token-abc123': keys=[token-id, token-secret]"
+      ],
+      "mitigation": "Prometheus does not require access to Secrets. Remove secrets from prometheus-cluster-role entirely. Use dedicated metrics-only RBAC. Rotate all enumerated credentials immediately as they should be considered compromised. Migrate cloud credentials to Workload Identity (GKE) or IRSA (EKS) to eliminate Kubernetes secrets.",
+      "affected_nodes": ["sa:monitoring:prometheus", "secret:acme-prod:aws-credentials", "secret:infra:gcp-service-account", "secret:infra:vault-root-token", "secret:acme-prod:stripe-api-key", "secret:acme-prod:github-actions-token"]
+    },
+    {
+      "id": "finding-007",
+      "rule_id": "CONFIG-PRIVILEGED-CONTAINER",
+      "severity": "HIGH",
+      "score": 7.8,
+      "title": "Privileged containers running in 3 workloads across production namespaces",
+      "description": "Three workloads run containers with securityContext.privileged=true: acme-prod/api-server (container: api-container), infra/terraform (container: terraform-container). Privileged containers share the host kernel namespace and have unrestricted access to all host devices including /dev/mem, /dev/sda, and kernel syscalls. Combined with the cluster-admin SA binding on api-server pods, a container escape immediately yields node-level and cluster-level compromise.",
+      "evidence": [
+        "Deployment 'acme-prod/api-server': containers=[api-container] privileged=true, runs as cluster-admin SA",
+        "Deployment 'infra/terraform': containers=[terraform-container] privileged=true, hostPID=true, hostIPC=true, hostNetwork=true",
+        "Pod 'acme-prod/api-server-7d9f8b-xk2p4' on node gke-acme-prod-pool-0-abc1: privileged=true",
+        "Pod 'infra/terraform-6bc4d-rw9xz' on node gke-acme-prod-pool-1-def2: privileged=true + all host namespaces"
+      ],
+      "mitigation": "Remove privileged=true from all containers. Use specific Linux capabilities (CAP_NET_ADMIN, CAP_SYS_PTRACE) only where required. Enforce Pod Security Standards 'restricted' profile via namespace labels. Implement runtime security monitoring (Falco) to detect privilege escalation attempts.",
+      "affected_nodes": ["workload:acme-prod:deployment:api-server", "workload:infra:deployment:terraform", "pod:acme-prod:api-server-7d9f8b-xk2p4", "pod:infra:terraform-6bc4d-rw9xz"]
+    },
+    {
+      "id": "finding-008",
+      "rule_id": "CONFIG-HOSTPATH-MOUNT",
+      "severity": "HIGH",
+      "score": 7.5,
+      "title": "DaemonSet 'monitoring/prometheus' mounts host root filesystem (/) on all nodes",
+      "description": "The prometheus DaemonSet mounts the host root filesystem (/) at /proc, /sys, and / into every pod on every node. This grants read access to all files on all 3 worker nodes including kubelet configuration, node-level secrets, container image layers, and running process memory. Combined with the prometheus SA's cluster-wide exec privilege, an attacker gains persistent node-level access across the entire cluster.",
+      "evidence": [
+        "DaemonSet 'monitoring/prometheus': volumes=[{name: proc, hostPath: /proc}, {name: sys, hostPath: /sys}, {name: root-fs, hostPath: /}]",
+        "hostNetwork=true — direct access to host network interfaces and listening services",
+        "Pod 'prometheus-k8s-0' running on gke-acme-prod-pool-0-abc1",
+        "ls /host/var/lib/kubelet/pki/ — exposes kubelet client certificates"
+      ],
+      "mitigation": "Remove hostPath mounts for /proc, /sys, and /. Use the Kubernetes Metrics Server API or node-exporter with specific, read-only hostPath mounts (/proc/stat, /sys/fs/cgroup) scoped to required metrics. Disable hostNetwork unless absolutely required. Add readOnly: true to any remaining hostPath mounts.",
+      "affected_nodes": ["workload:monitoring:daemonset:prometheus", "node:gke-acme-prod-pool-0-abc1", "node:gke-acme-prod-pool-1-def2", "node:gke-acme-prod-pool-2-ghi3"]
+    },
+    {
+      "id": "finding-009",
+      "rule_id": "RUNTIME-EXEC-PODS",
+      "severity": "HIGH",
+      "score": 7.5,
+      "title": "Current identity can exec into privileged pods including cluster-admin instances",
+      "description": "The 'prometheus' service account (current identity) has 'create' on 'pods/exec' confirmed by SSAR in namespaces 'acme-prod' and 'infra'. This allows opening an interactive shell in any running pod, including the two api-server pods (privileged, cluster-admin SA) and the terraform pod (privileged, hostPID, cluster-admin-equivalent permissions). Exec into a cluster-admin pod is equivalent to full cluster compromise.",
+      "evidence": [
+        "SSAR confirmed: verb=create resource=pods/exec namespace=acme-prod allowed=true",
+        "SSAR confirmed: verb=create resource=pods/exec namespace=infra allowed=true",
+        "Target pod: api-server-7d9f8b-xk2p4 (privileged, cluster-admin SA) — kubectl exec -it api-server-7d9f8b-xk2p4 -n acme-prod -- /bin/sh",
+        "Inside api-server pod: curl -k https://$KUBERNETES_SERVICE_HOST/api/v1/secrets --header \"Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\"",
+        "Target pod: terraform-6bc4d-rw9xz (privileged, hostPID, hostNetwork) — immediate node escape available"
+      ],
+      "mitigation": "Remove pods/exec from prometheus-cluster-role — Prometheus does not require exec access. Implement admission webhook to enforce exec restrictions per namespace. Use Falco to alert on exec from monitoring namespace into other namespaces. Consider ephemeral containers with time-limited RBAC for legitimate debugging.",
+      "affected_nodes": ["sa:monitoring:prometheus", "pod:acme-prod:api-server-7d9f8b-xk2p4", "pod:acme-prod:api-server-7d9f8b-p9m3n", "pod:infra:terraform-6bc4d-rw9xz"]
+    },
+    {
+      "id": "finding-010",
+      "rule_id": "CONFIG-HOST-NAMESPACE",
+      "severity": "HIGH",
+      "score": 7.2,
+      "title": "Deployment 'infra/terraform' uses hostPID, hostIPC, and hostNetwork simultaneously",
+      "description": "The terraform Deployment runs with hostPID=true, hostIPC=true, and hostNetwork=true, sharing all host namespaces with the node's init process. hostPID exposes all processes running on the node (including other container processes and the kubelet), enabling process injection via /proc/PID/mem. hostIPC allows sharing System V IPC namespaces. hostNetwork exposes all host network interfaces. Combined with privileged=true, this workload has complete host compromise capability.",
+      "evidence": [
+        "Deployment 'infra/terraform': hostPID=true, hostIPC=true, hostNetwork=true",
+        "Container 'terraform-container': securityContext.privileged=true",
+        "HostPath: /var/lib/kubelet → exposes kubelet bootstrap tokens and kubeconfig",
+        "HostPath: /etc/kubernetes → exposes control plane certificates and admin.conf",
+        "Running on node: gke-acme-prod-pool-1-def2"
+      ],
+      "mitigation": "Remove all host namespace settings. Terraform should run as a CI/CD job outside the cluster or in a dedicated security-isolated environment. If Kubernetes-native, use a Helm/Terraform operator with minimal in-cluster permissions and zero host access.",
+      "affected_nodes": ["workload:infra:deployment:terraform", "pod:infra:terraform-6bc4d-rw9xz"]
+    },
+    {
+      "id": "finding-011",
+      "rule_id": "TAKEOVER-PATCH-DEPLOYMENT",
+      "severity": "HIGH",
+      "score": 7.5,
+      "title": "ServiceAccount 'acme-staging/deployer' can patch production Deployments in acme-prod",
+      "description": "The 'deployer' ClusterRole grants wildcard (*) verbs on Deployments across all namespaces, including the production 'acme-prod' namespace. An attacker controlling the deployer SA can swap the api-server container image with a backdoored version, inject malicious init containers, or modify environment variables to exfiltrate the mounted AWS and Stripe credentials. Since the api-server pods run as cluster-admin, this is also a path to full cluster takeover.",
+      "evidence": [
+        "ClusterRole 'deployer-role' rule: verbs=[*] resources=[deployments,statefulsets,replicasets] apiGroups=[apps]",
+        "Target: Deployment 'acme-prod/api-server' — cluster-admin SA, privileged containers, mounts AWS+Stripe secrets",
+        "kubectl patch deployment api-server -n acme-prod --type=json -p '[{\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/image\",\"value\":\"attacker/backdoor:latest\"}]'",
+        "All 2 replicas would be replaced within ~30 seconds"
+      ],
+      "mitigation": "Restrict deployer-role Deployment permissions to acme-staging namespace only via a namespace-scoped Role. Never grant wildcard verbs on workload resources to CI/CD service accounts. Implement image admission policies (Kyverno/OPA) to allow only approved registry images.",
+      "affected_nodes": ["sa:acme-staging:deployer", "workload:acme-prod:deployment:api-server"]
+    },
+    {
+      "id": "finding-012",
+      "rule_id": "PRIV-GET-SECRETS",
+      "severity": "MEDIUM",
+      "score": 5.5,
+      "title": "2 ServiceAccounts can read Secrets beyond their operational requirements",
+      "description": "ServiceAccount 'acme-prod/database-backup' has get+list on Secrets in acme-prod (including db-password, db-replica-password). ServiceAccount 'data/analytics' has get+list on ALL Secrets in the data namespace including the Databricks token. While the database-backup SA is restricted by resource names, the analytics SA has no such restriction, allowing it to read any future secrets added to the data namespace.",
+      "evidence": [
+        "Role 'database-backup-role': verbs=[get,list] resources=[secrets] resourceNames=[db-password,db-replica-password] in acme-prod",
+        "Role 'analytics-role': verbs=[get,list] resources=[secrets] (no resourceNames restriction) in data",
+        "Secret 'data/databricks-token': keys=[DATABRICKS_TOKEN, DATABRICKS_HOST, DATABRICKS_CLUSTER_ID]"
+      ],
+      "mitigation": "Add resourceNames restriction to analytics-role limiting access to specific named secrets required. Audit future secret additions to data namespace. Consider using a secrets manager (Vault, AWS Secrets Manager) with per-workload IAM policies instead of Kubernetes secrets.",
+      "affected_nodes": ["sa:acme-prod:database-backup", "sa:data:analytics", "secret:acme-prod:db-password", "secret:data:databricks-token"]
+    },
+    {
+      "id": "finding-013",
+      "rule_id": "RUNTIME-PORTFORWARD",
+      "severity": "MEDIUM",
+      "score": 6.0,
+      "title": "Current identity can port-forward to pods, bypassing NetworkPolicies",
+      "description": "The prometheus SA has 'create' on 'pods/portforward' cluster-wide (SSAR confirmed). Port-forwarding creates a direct TCP tunnel to any pod's port, bypassing Kubernetes NetworkPolicies and any network-layer controls. This enables direct access to internal admin interfaces, databases, and microservice APIs that should not be externally reachable.",
+      "evidence": [
+        "SSAR confirmed: verb=create resource=pods/portforward namespace=acme-prod allowed=true",
+        "kubectl port-forward api-server-7d9f8b-xk2p4 8080:8080 -n acme-prod",
+        "kubectl port-forward pod/terraform-6bc4d-rw9xz 2379:2379 -n infra  # potential etcd access"
+      ],
+      "mitigation": "Remove pods/portforward from prometheus-cluster-role. Port-forwarding is a developer debugging tool and should not be available to monitoring service accounts. Use Falco to alert on port-forward events to production namespaces.",
+      "affected_nodes": ["sa:monitoring:prometheus", "pod:acme-prod:api-server-7d9f8b-xk2p4"]
+    },
+    {
+      "id": "finding-014",
+      "rule_id": "CONFIG-WILDCARD-VERBS",
+      "severity": "MEDIUM",
+      "score": 6.2,
+      "title": "ClusterRole 'prometheus-cluster-role' uses overly broad permissions equivalent to near-admin access",
+      "description": "The prometheus-cluster-role grants 4 separate rule blocks covering nearly all read operations cluster-wide, plus exec and portforward write permissions. While not using explicit wildcard verbs, the combination of list/get on secrets, create on pods/exec, and cross-namespace list of all RBAC objects makes this role functionally equivalent to a read-everything+exec identity. The monitoring namespace SSRR also shows wildcard (*) rules, indicating the SA has admin in its own namespace.",
+      "evidence": [
+        "SSRR for 'monitoring' namespace: verbs=[*] apiGroups=[*] resources=[*] — full admin in own namespace",
+        "ClusterRole covers: secrets (get/list/watch), pods/exec (create), pods/portforward (create), RBAC objects (get/list/watch)",
+        "Effective reach: read all secrets+pods across all namespaces, execute into any pod, port-forward to any pod"
+      ],
+      "mitigation": "Apply principle of least privilege to prometheus-cluster-role. Prometheus only needs: get/list/watch on pods, nodes, services, endpoints for service discovery. Remove secrets, exec, portforward, and RBAC read permissions entirely. Use separate service accounts for different monitoring functions.",
+      "affected_nodes": ["clusterrole:prometheus-cluster-role", "crb:prometheus-global", "sa:monitoring:prometheus"]
+    },
+    {
+      "id": "finding-015",
+      "rule_id": "CONFIG-SECRETS-IN-ENV",
+      "severity": "MEDIUM",
+      "score": 5.5,
+      "title": "Workloads expose secrets via environment variables (visible in pod spec and crash logs)",
+      "description": "Multiple workloads are configured to expose secrets as environment variables. While this cluster's API does not show explicit env[].valueFrom.secretKeyRef references (only volume mounts were observed), the worker and etl-runner workloads have automountSAToken enabled and mount secrets as volumes. Secrets mounted as volumes or environment variables are readable by any process in the container and appear in crash reports, logging frameworks, and diagnostic dumps.",
+      "evidence": [
+        "Deployment 'acme-prod/worker': automountSAToken=true — SA token exposed to all container processes",
+        "Deployment 'acme-staging/frontend': automountSAToken=true — staging SA token exposed",
+        "StatefulSet 'acme-prod/database': automountSAToken=true — default SA token exposed (default SA)"
+      ],
+      "mitigation": "Set automountServiceAccountToken: false on all pods that don't need API access. Use projected volumes with short-lived tokens where API access is required. Prefer external secrets management over Kubernetes Secret volumes. Enable audit log alerts on serviceaccounts/token creation.",
+      "affected_nodes": ["workload:acme-prod:deployment:worker", "workload:acme-staging:deployment:frontend", "workload:acme-prod:statefulset:database"]
+    },
+    {
+      "id": "finding-016",
+      "rule_id": "CONFIG-AUTOMOUNT-SA-TOKEN",
+      "severity": "LOW",
+      "score": 3.0,
+      "title": "3 workloads have automountServiceAccountToken enabled without requiring API access",
+      "description": "The StatefulSet 'acme-prod/database', Deployment 'acme-prod/worker', and Deployment 'acme-staging/frontend' all have automountServiceAccountToken=true (default behavior). PostgreSQL and the frontend application do not require Kubernetes API access, yet their pods receive an automatically mounted service account token that could be used for lateral movement if a container is compromised.",
+      "evidence": [
+        "StatefulSet 'acme-prod/database': serviceAccount=default, automountSAToken=true — postgres does not need API access",
+        "Deployment 'acme-prod/worker': automountSAToken=true",
+        "Deployment 'acme-staging/frontend': automountSAToken=true — next.js frontend does not need API access"
+      ],
+      "mitigation": "Add 'automountServiceAccountToken: false' to pod specs for all workloads that don't use the Kubernetes API. This is a quick, zero-downtime change that eliminates a lateral movement vector.",
+      "affected_nodes": ["workload:acme-prod:statefulset:database", "workload:acme-prod:deployment:worker", "workload:acme-staging:deployment:frontend"]
+    },
+    {
+      "id": "finding-017",
+      "rule_id": "PRIVESC-CREATE-ROLEBINDING",
+      "severity": "HIGH",
+      "score": 7.8,
+      "title": "ServiceAccount 'acme-staging/deployer' can create RoleBindings in any namespace",
+      "description": "In addition to ClusterRoleBindings, the deployer-role also grants 'create' on 'rolebindings' across all namespaces. This enables binding any subject to any ClusterRole within a target namespace — including cluster-admin — granting namespace-wide privilege escalation to any namespace in the cluster from staging context.",
+      "evidence": [
+        "ClusterRole 'deployer-role' rule: verbs=[create,delete,get,list,patch,update,watch] resources=[clusterrolebindings,rolebindings]",
+        "kubectl create rolebinding staging-pwn --clusterrole=cluster-admin --serviceaccount=acme-staging:deployer -n acme-prod",
+        "Result: deployer SA gains cluster-admin permissions scoped to acme-prod namespace"
+      ],
+      "mitigation": "Restrict rolebindings create permission to acme-staging namespace only via a namespace-scoped Role. Implement OPA Gatekeeper or Kyverno policy preventing binding to cluster-admin role by CI/CD accounts.",
+      "affected_nodes": ["sa:acme-staging:deployer", "clusterrole:deployer-role"]
+    },
+    {
+      "id": "finding-018",
+      "rule_id": "PRIVESC-CREATE-SA-TOKEN",
+      "severity": "HIGH",
+      "score": 8.0,
+      "title": "ServiceAccount 'infra/vault-injector' can create long-lived tokens for any ServiceAccount",
+      "description": "The vault-injector ClusterRole grants 'create' on 'serviceaccounts/token' cluster-wide. This allows minting a long-lived JWT token for any service account, including 'acme-prod/api-server' (cluster-admin). Generated tokens do not expire until the service account is deleted or the token is manually revoked — providing persistent, stealthy cluster-admin credentials.",
+      "evidence": [
+        "ClusterRole 'vault-injector-role' rule: verbs=[create] resources=[serviceaccounts/token]",
+        "kubectl create token api-server -n acme-prod --duration=87600h  # 10 year token",
+        "Token is valid as cluster-admin until manually revoked",
+        "No audit trail distinguishing injected tokens from legitimate ones"
+      ],
+      "mitigation": "Remove serviceaccounts/token create permission from vault-injector-role. Use Vault's Kubernetes auth method to issue tokens via Vault's API instead. If token injection is required, restrict to specific named service accounts in specific namespaces. Monitor serviceaccounts/token creation events in audit logs.",
+      "affected_nodes": ["sa:infra:vault-injector", "clusterrole:vault-injector-role", "sa:acme-prod:api-server"]
+    },
+    {
+      "id": "finding-019",
+      "rule_id": "CONFIG-PRIVILEGED-CLUSTER-ADMIN-BINDING",
+      "severity": "CRITICAL",
+      "score": 9.9,
+      "title": "COMBINED: Privileged pod + cluster-admin SA = immediate full cluster compromise",
+      "description": "The combination of a privileged container (api-server-7d9f8b-xk2p4) running as a cluster-admin service account (acme-prod/api-server) means any container escape in this pod — via kernel exploit, runtime vulnerability, or application RCE — immediately grants full cluster ownership. The current monitoring identity can exec into this pod via kubectl exec, making this a 0-additional-step path to cluster compromise from the current audited identity.",
+      "evidence": [
+        "Step 1 (current access): kubectl exec -it api-server-7d9f8b-xk2p4 -n acme-prod -- /bin/sh",
+        "Step 2 (inside pod): TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)",
+        "Step 3: kubectl --token=$TOKEN get secret -A  # cluster-admin — reads all secrets",
+        "Step 4: kubectl --token=$TOKEN create clusterrolebinding backdoor --clusterrole=cluster-admin --serviceaccount=kube-system:coredns",
+        "Total time to full compromise: ~2 minutes"
+      ],
+      "mitigation": "This finding represents the confluence of multiple critical misconfigurations. Remediation requires: (1) Revoke api-server-cluster-admin CRB, (2) Remove privileged=true from api-server container, (3) Remove pods/exec from prometheus-cluster-role. All three changes must be applied together.",
+      "affected_nodes": ["pod:acme-prod:api-server-7d9f8b-xk2p4", "sa:acme-prod:api-server", "crb:api-server-cluster-admin", "sa:monitoring:prometheus"]
+    }
+  ],
+  "ai_narrative": {
+    "summary": "ACME Corporation's GKE production cluster presents a CRITICAL risk posture with 4 critical and 7 high-severity findings, multiple direct paths to complete cluster compromise, and 12 enumerable secrets including AWS IAM credentials, a GCP service account key, a Vault root token, and Stripe payment keys. The most severe issue is the acme-prod/api-server service account being directly bound to cluster-admin while running privileged containers — the current audited identity (monitoring/prometheus) can exec into these pods in a single command, achieving instant full cluster ownership. Three additional independent paths to cluster-admin exist: the acme-staging/deployer SA can create ClusterRoleBindings (one API call to cluster-admin), the infra/terraform SA can patch the cluster-admin ClusterRole itself, and the data/etl-runner SA can impersonate the api-server SA via Kubernetes impersonation headers. The cluster should be treated as fully compromised until all critical findings are remediated.",
+    "mitigations": [
+      "IMMEDIATE: Revoke ClusterRoleBinding 'api-server-cluster-admin' — replace with a least-privilege namespace-scoped Role for acme-prod only",
+      "IMMEDIATE: Remove privileged=true from acme-prod/api-server containers and infra/terraform containers",
+      "IMMEDIATE: Remove pods/exec and pods/portforward from prometheus-cluster-role — Prometheus has no legitimate use for these permissions",
+      "IMMEDIATE: Remove ClusterRoleBinding and RoleBinding create permissions from deployer-role — restrict to acme-staging namespace only",
+      "IMMEDIATE: Remove clusterroles patch/update from terraform-role — manage RBAC exclusively via GitOps with immutable manifests",
+      "IMMEDIATE: Remove impersonate permission from etl-runner-role — use dedicated service identities for each data pipeline",
+      "HIGH: Remove serviceaccounts/token create from vault-injector-role — use Vault Kubernetes auth backend instead",
+      "HIGH: Implement Pod Security Standards 'restricted' profile for acme-prod, infra, and data namespaces",
+      "HIGH: Remove hostPID, hostIPC, hostNetwork from all non-system workloads (deployer, terraform)",
+      "HIGH: Remove hostPath / mount from prometheus DaemonSet — use node-exporter with minimal required paths only",
+      "MEDIUM: Migrate AWS, GCP, and Stripe credentials from Kubernetes Secrets to GKE Workload Identity and Google Secret Manager",
+      "MEDIUM: Set automountServiceAccountToken: false on database, worker, and frontend workloads",
+      "MEDIUM: Deploy Falco with rules for: pods/exec from monitoring namespace, ClusterRoleBinding creation, secret reads by non-system accounts",
+      "MEDIUM: Enable Kubernetes audit log pipeline with alerts for: ClusterRoleBinding create/patch, ClusterRole patch, pods/exec, serviceaccounts/token create",
+      "LOW: Implement OPA Gatekeeper or Kyverno admission policies enforcing: no cluster-admin bindings to workload SAs, no privileged containers outside kube-system, required resourceNames restrictions on secret access"
+    ],
+    "model_used": "gpt-4o-2024-08-06"
+  }
+}

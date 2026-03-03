@@ -1,0 +1,91 @@
+---
+# k8scout Reviewer Mode — Kubernetes Job manifest
+#
+# Runs the enumerator in --reviewer-mode: enumerates full cluster RBAC attack surface
+# for all service accounts, checks pod security contexts, and produces a detailed JSON report.
+#
+# Prerequisites:
+#   kubectl apply -f deploy/reviewer-rbac.yaml
+#
+# Retrieve results:
+#   kubectl wait --for=condition=complete job/k8scout-reviewer --timeout=120s
+#   kubectl cp $(kubectl get pod -l job-name=k8scout-reviewer -o jsonpath='{.items[0].metadata.name}'):/out/reviewer-result.json ./reviewer-result.json
+#
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k8scout-reviewer
+  namespace: default
+  labels:
+    app: k8scout
+    mode: reviewer
+    purpose: security-audit
+spec:
+  ttlSecondsAfterFinished: 3600   # Clean up 1 hour after completion.
+  backoffLimit: 0                  # Don't retry on failure.
+  template:
+    metadata:
+      labels:
+        app: k8scout
+        mode: reviewer
+      annotations:
+        security.company.com/purpose: "authorized-security-assessment"
+    spec:
+      serviceAccountName: k8scout-reviewer-sa
+      restartPolicy: Never
+      automountServiceAccountToken: true   # Required for API access.
+
+      # ── Security hardening ─────────────────────────────────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: k8scout
+          image: ghcr.io/hac01/k8scout:latest
+          imagePullPolicy: Always
+
+          args:
+            - --reviewer-mode
+            - --format=text
+            - --all-namespaces
+            - --out=/out/reviewer-result.json
+            - --log-level=info
+            - --timeout=120
+
+          # Optional: provide OpenAI key via a secret for AI narrative.
+          # env:
+          #   - name: OPENAI_API_KEY
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: openai-credentials
+          #         key: api-key
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          volumeMounts:
+            - name: out
+              mountPath: /out
+
+      volumes:
+        - name: out
+          emptyDir: {}
+
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule

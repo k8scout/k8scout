@@ -1,0 +1,82 @@
+---
+# k8scout Kubernetes Job manifest
+# Runs the enumerator as a one-shot Job and writes the JSON report to an
+# emptyDir volume. Mount a PVC or use kubectl cp to retrieve results.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k8scout
+  namespace: default
+  labels:
+    app: k8scout
+    purpose: security-audit
+spec:
+  ttlSecondsAfterFinished: 3600   # Clean up 1 hour after completion.
+  backoffLimit: 0                  # Don't retry on failure.
+  template:
+    metadata:
+      labels:
+        app: k8scout
+      annotations:
+        # Prevent this pod from being enumerated as a suspicious workload
+        # in normal security scanners (optional documentation annotation).
+        security.company.com/purpose: "authorized-security-assessment"
+    spec:
+      serviceAccountName: k8scout-sa    # See deploy/rbac.yaml
+      restartPolicy: Never
+      automountServiceAccountToken: true  # Required for API access.
+
+      # ── Security hardening ────────────────────────────────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: k8scout
+          image: ghcr.io/hac01/k8scout:latest
+          imagePullPolicy: Always
+
+          args:
+            - --format=text
+            - --all-namespaces
+            - --out=/out/k8scout-result.json
+            - --log-level=info
+            - --timeout=60
+
+          # Optional: provide OpenAI key via a secret for AI narrative.
+          # env:
+          #   - name: OPENAI_API_KEY
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: openai-credentials
+          #         key: api-key
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+
+          volumeMounts:
+            - name: out
+              mountPath: /out
+
+      volumes:
+        - name: out
+          emptyDir: {}
+
+      # Run on any node; don't require scheduling on specific nodes.
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule

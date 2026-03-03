@@ -1,0 +1,136 @@
+---
+# k8scout read-only assessment RBAC
+# This RBAC grants the minimum permissions required for the enumeration tool.
+# It deliberately omits: create, update, patch, delete on any resource.
+# The identity is intentionally limited so the tool itself cannot escalate.
+#
+# IMPORTANT: Do NOT grant this SA any write permissions.
+# The tool uses SelfSubjectRulesReview/AccessReview (always permitted)
+# to check what the *target* identity (the one being assessed) can do.
+
+# ── ServiceAccount ────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8scout-sa
+  namespace: default
+  labels:
+    app: k8scout
+  annotations:
+    description: "Read-only service account for k8scout security assessment tool"
+automountServiceAccountToken: false   # Controlled explicitly by the Job spec.
+
+---
+# ── ClusterRole: Read-Only Enumeration ───────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8scout-reader
+  labels:
+    app: k8scout
+rules:
+  # Namespace enumeration.
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+
+  # ServiceAccount discovery.
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list"]
+
+  # Secret METADATA only. Note: 'list' on secrets exposes names but NOT values.
+  # Remove this rule if you want the strictest possible tool SA.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["list"]     # list = metadata only when tool is written correctly
+
+  # ConfigMap metadata.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["list"]
+
+  # Node metadata (no sensitive data).
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+
+  # Pod metadata (no exec, no logs, no port-forward).
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+
+  # Workload metadata.
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets", "statefulsets", "replicasets"]
+    verbs: ["get", "list"]
+
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list"]
+
+  # RBAC enumeration (read-only).
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+    verbs: ["get", "list"]
+
+---
+# ── ClusterRoleBinding ────────────────────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8scout-reader-binding
+  labels:
+    app: k8scout
+subjects:
+  - kind: ServiceAccount
+    name: k8scout-sa
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8scout-reader
+
+---
+# ── NetworkPolicy: Restrict egress ───────────────────────────────────────────
+# Allow the tool to reach the Kubernetes API server only.
+# Deny all other egress (including internet) unless you need OpenAI integration.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: k8scout-netpol
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: k8scout
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress: []     # No inbound traffic needed.
+  egress:
+    # Allow DNS.
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+    # Allow Kubernetes API server (adjust CIDR for your cluster).
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+
+    # Uncomment to allow OpenAI API egress:
+    # - to:
+    #     - ipBlock:
+    #         cidr: 0.0.0.0/0
+    #         except:
+    #           - 10.0.0.0/8
+    #           - 172.16.0.0/12
+    #           - 192.168.0.0/16
+    #   ports:
+    #     - port: 443
+    #       protocol: TCP

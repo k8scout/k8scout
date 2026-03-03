@@ -1,0 +1,137 @@
+---
+# k8scout reviewer-mode RBAC
+#
+# Reviewer mode performs a full cluster RBAC attack-surface analysis: it computes
+# effective permissions for ALL service accounts from RBAC bindings (without issuing
+# per-SA SelfSubjectRulesReview) and checks pod security contexts.
+#
+# This requires broader read access than the standard enumeration SA (k8scout-sa).
+# It is intentionally kept read-only — no write, patch, or delete verbs.
+#
+# Usage:
+#   kubectl apply -f deploy/reviewer-rbac.yaml
+#   kubectl apply -f deploy/reviewer-job.yaml
+
+# ── ServiceAccount ─────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8scout-reviewer-sa
+  namespace: default
+  labels:
+    app: k8scout
+    mode: reviewer
+  annotations:
+    description: "Read-only service account for k8scout reviewer mode (full RBAC attack-surface analysis)"
+automountServiceAccountToken: false   # Controlled explicitly by the Job spec.
+
+---
+# ── ClusterRole: Reviewer Read Access ─────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8scout-reviewer
+  labels:
+    app: k8scout
+    mode: reviewer
+rules:
+  # Namespace enumeration.
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+
+  # ServiceAccount discovery (needed to enumerate all subjects).
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list"]
+
+  # Secret METADATA only — list exposes names but never values when tool is correct.
+  # Required to identify secrets mounted by workloads and flag dangerous SA permissions.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["list"]
+
+  # ConfigMap metadata.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["list"]
+
+  # Node metadata (needed for node-level risk context).
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+
+  # Pod metadata — needed to inspect security contexts (privileged, hostPID, hostIPC, etc.)
+  # and identify running workloads not covered by higher-level controllers.
+  # Note: no pods/exec, pods/log, or pods/portforward — read-only metadata only.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+
+  # Workload metadata — needed to check pod security contexts and SA assignments.
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets", "statefulsets", "replicasets"]
+    verbs: ["get", "list"]
+
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list"]
+
+  # RBAC enumeration — required to compute effective permissions for all subjects.
+  # This is the key difference from the standard enumeration SA.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - roles
+      - rolebindings
+      - clusterroles
+      - clusterrolebindings
+    verbs: ["get", "list"]
+
+---
+# ── ClusterRoleBinding ─────────────────────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8scout-reviewer-binding
+  labels:
+    app: k8scout
+    mode: reviewer
+subjects:
+  - kind: ServiceAccount
+    name: k8scout-reviewer-sa
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8scout-reviewer
+
+---
+# ── NetworkPolicy: Restrict egress ────────────────────────────────────────────
+# Allow reviewer pod to reach the Kubernetes API server only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: k8scout-reviewer-netpol
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: k8scout
+      mode: reviewer
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress: []   # No inbound traffic needed.
+  egress:
+    # Allow DNS.
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow Kubernetes API server (adjust CIDR for your cluster).
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP

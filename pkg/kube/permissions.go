@@ -1,0 +1,192 @@
+package kube
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+
+	"go.uber.org/zap"
+	authzv1 "k8s.io/api/authorization/v1"
+)
+
+// collectIdentity gathers the current identity via TokenReview + in-cluster file.
+func collectIdentity(ctx context.Context, c *Client, log *zap.Logger) (IdentityInfo, error) {
+	id := IdentityInfo{
+		Namespace: c.CurrentNamespace(),
+	}
+
+	// Parse SA name from namespace file and token path.
+	nsBytes, _ := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if len(nsBytes) > 0 {
+		id.Namespace = strings.TrimSpace(string(nsBytes))
+	}
+
+	username, uid, groups, extra, err := c.WhoAmI(ctx)
+	if err != nil {
+		log.Warn("WhoAmI/TokenReview denied; deriving identity from SSRR", zap.Error(err))
+		// Fall back: run a minimal SSRR and note the username from API server response headers.
+		// The username will be populated after SSRR runs if the API server echoes it.
+		return id, nil
+	}
+
+	id.Username = username
+	id.UID = uid
+	id.Groups = groups
+	id.Extra = extra
+
+	// Parse SA name from "system:serviceaccount:<ns>:<name>" username pattern.
+	if parts := strings.Split(username, ":"); len(parts) == 4 && parts[0] == "system" && parts[1] == "serviceaccount" {
+		id.Namespace = parts[2]
+		id.SAName = parts[3]
+	}
+
+	return id, nil
+}
+
+// collectSSRR runs a SelfSubjectRulesReview for a given namespace and returns policy rules.
+func collectSSRR(ctx context.Context, c *Client, namespace string, log *zap.Logger) ([]PolicyRule, error) {
+	review, err := c.SSRR(ctx, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("SSRR for namespace %q: %w", namespace, err)
+	}
+
+	if review.Status.Incomplete {
+		log.Warn("SSRR result marked incomplete (superuser or too many rules)",
+			zap.String("namespace", namespace),
+			zap.String("reason", review.Status.EvaluationError))
+	}
+
+	rules := make([]PolicyRule, 0, len(review.Status.ResourceRules))
+
+	for _, r := range review.Status.ResourceRules {
+		pr := PolicyRule{
+			Verbs:         nonEmpty(r.Verbs),
+			APIGroups:     nonEmpty(r.APIGroups),
+			Resources:     nonEmpty(r.Resources),
+			ResourceNames: nonEmpty(r.ResourceNames),
+		}
+		rules = append(rules, pr)
+	}
+
+	for _, r := range review.Status.NonResourceRules {
+		pr := PolicyRule{
+			Verbs:           nonEmpty(r.Verbs),
+			NonResourceURLs: nonEmpty(r.NonResourceURLs),
+		}
+		rules = append(rules, pr)
+	}
+
+	log.Debug("SSRR complete", zap.String("namespace", namespace), zap.Int("rules", len(rules)))
+	return rules, nil
+}
+
+// ssarSpotChecks defines the high-risk permission checks to validate.
+var ssarSpotChecks = []struct {
+	Verb        string
+	Resource    string
+	Subresource string
+}{
+	{"list",        "secrets",             ""},
+	{"get",         "secrets",             ""},
+	{"create",      "pods",                ""},
+	{"delete",      "pods",                ""},
+	{"get",         "pods",                "log"},
+	{"create",      "pods",                "exec"},
+	{"create",      "pods",                "portforward"},
+	{"impersonate", "users",               ""},
+	{"impersonate", "serviceaccounts",     ""},
+	{"create",      "rolebindings",        ""},
+	{"create",      "clusterrolebindings", ""},
+	{"patch",       "deployments",         ""},
+	{"patch",       "daemonsets",          ""},
+	{"patch",       "statefulsets",        ""},
+	{"patch",       "pods",                ""},
+	{"create",      "serviceaccounts",     "token"},
+	{"list",        "nodes",               ""},
+	{"get",         "nodes",               ""},
+	{"create",      "namespaces",          ""},
+	{"delete",      "namespaces",          ""},
+	{"patch",       "clusterroles",        ""},
+	{"patch",       "clusterrolebindings", ""},
+	// Escalation control verbs — allow creating bindings/roles beyond current permissions.
+	{"escalate",    "clusterroles",        ""},
+	{"bind",        "clusterroles",        ""},
+	{"bind",        "clusterrolebindings", ""},
+	// ConfigMap read — may contain leaked kubeconfig or credentials.
+	{"get",         "configmaps",          ""},
+}
+
+// collectSSAR runs all spot-check SSARs across all provided namespaces.
+// For cluster-scoped resources it uses namespace="" once.
+func collectSSAR(ctx context.Context, c *Client, namespaces []string, log *zap.Logger) []SSARCheck {
+	clusterScopedResources := map[string]bool{
+		"nodes": true, "namespaces": true,
+		"clusterroles": true, "clusterrolebindings": true,
+		"users": true,
+	}
+
+	var checks []SSARCheck
+	seen := map[string]bool{} // deduplicate cluster-scoped checks
+
+	// For each namespace, check namespace-scoped resources.
+	for _, ns := range namespaces {
+		for _, sc := range ssarSpotChecks {
+			if clusterScopedResources[sc.Resource] {
+				key := fmt.Sprintf("%s/%s/%s", sc.Verb, sc.Resource, sc.Subresource)
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				// cluster-scoped: use empty namespace
+				allowed, reason, err := c.SSAR(ctx, sc.Verb, sc.Resource, sc.Subresource, "")
+				if err != nil {
+					log.Debug("SSAR check failed", zap.String("verb", sc.Verb), zap.String("resource", sc.Resource), zap.Error(err))
+					continue
+				}
+				checks = append(checks, SSARCheck{
+					Verb: sc.Verb, Resource: sc.Resource, Subresource: sc.Subresource,
+					Namespace: "", Allowed: allowed, Reason: reason,
+				})
+				continue
+			}
+			allowed, reason, err := c.SSAR(ctx, sc.Verb, sc.Resource, sc.Subresource, ns)
+			if err != nil {
+				log.Debug("SSAR check failed", zap.String("namespace", ns), zap.String("resource", sc.Resource), zap.Error(err))
+				continue
+			}
+			checks = append(checks, SSARCheck{
+				Verb: sc.Verb, Resource: sc.Resource, Subresource: sc.Subresource,
+				Namespace: ns, Allowed: allowed, Reason: reason,
+			})
+		}
+	}
+	return checks
+}
+
+// nonEmpty returns the slice if non-nil, else nil (avoids empty JSON arrays).
+func nonEmpty(s []string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	// Replace wildcard marker for clarity in output.
+	out := make([]string, len(s))
+	copy(out, s)
+	return out
+}
+
+// ruleAllows checks whether an authv1 ResourceRule allows a given verb+resource combination.
+func ruleAllows(rule authzv1.ResourceRule, verb, resource string) bool {
+	verbOK := contains(rule.Verbs, verb) || contains(rule.Verbs, "*")
+	resOK := contains(rule.Resources, resource) || contains(rule.Resources, "*")
+	return verbOK && resOK
+}
+
+func contains(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}

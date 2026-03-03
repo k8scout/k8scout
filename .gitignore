@@ -1,0 +1,37 @@
+# Binaries
+k8scout
+k8scout-linux-amd64
+k8scout-darwin-*
+k8scout-windows-*
+*.exe
+
+# Build output
+dist/
+
+# Scan result files (may contain sensitive cluster data)
+k8scout-result*.json
+*.result.json
+
+# Kubernetes config / secrets
+kubeconfig
+*.kubeconfig
+*.pem
+*.key
+
+# Go toolchain
+vendor/
+
+# macOS
+.DS_Store
+
+# Old binary names (pre-rename)
+k8s-enum
+k8s-enum-linux-amd64
+k8s-enum-result*.json
+
+# Claude Code local settings
+.claude/
+
+# Misc cluster YAML dumps
+misconfig*.yaml
+
