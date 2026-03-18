@@ -17,11 +17,21 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: false  # golangci-lint-action manages its own cache
+          # cache: false is intentional — golangci-lint-action manages its own
+          # lint result cache; the Go module cache below is separate and needed
+          # for package loading to stay under the timeout.
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: gomod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: gomod-${{ runner.os }}-
 
       - uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+          args: --timeout=5m
 
   # ── Test ──────────────────────────────────────────────────────────────────
   test:
