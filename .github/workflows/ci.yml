@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Lint ──────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          # cache: false is intentional — golangci-lint-action manages its own
+          # lint result cache; the Go module cache below is separate and needed
+          # for package loading to stay under the timeout.
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: gomod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: gomod-${{ runner.os }}-
+
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+  # ── Test ──────────────────────────────────────────────────────────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: make test
+
+      - name: Cleanup
+        if: always()
+        run: go clean -testcache
+
+  # ── Build ─────────────────────────────────────────────────────────────────
+  # Cross-compiles all four release targets on a single ubuntu runner.
+  # Pure-Go + CGO_ENABLED=0 means no platform-specific toolchain is needed.
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            make_target: build-linux
+            artifact: k8scout-linux-amd64
+          - target: linux-arm64
+            make_target: build-linux-arm64
+            artifact: k8scout-linux-arm64
+          - target: darwin-amd64
+            make_target: build-darwin
+            artifact: k8scout-darwin-amd64
+          - target: darwin-arm64
+            make_target: build-darwin-arm64
+            artifact: k8scout-darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # required for `git describe --tags` used in VERSION
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build ${{ matrix.target }}
+        run: make ${{ matrix.make_target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          retention-days: 3
+
+      - name: Cleanup
+        if: always()
+        run: make clean
+
+  # ── Smoke Test ────────────────────────────────────────────────────────────
+  # Downloads the linux/amd64 binary and verifies it executes without a cluster.
+  smoke-test:
+    name: Smoke Test
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: k8scout-linux-amd64
+
+      - name: Run smoke test
+        run: |
+          chmod +x k8scout-linux-amd64
+          ./k8scout-linux-amd64 --help
+
+      - name: Cleanup
+        if: always()
+        run: rm -f k8scout-linux-amd64

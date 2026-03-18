@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
-	authzv1 "k8s.io/api/authorization/v1"
 )
 
 // collectIdentity gathers the current identity via TokenReview + in-cluster file.
@@ -175,18 +174,3 @@ func nonEmpty(s []string) []string {
 	return out
 }
 
-// ruleAllows checks whether an authv1 ResourceRule allows a given verb+resource combination.
-func ruleAllows(rule authzv1.ResourceRule, verb, resource string) bool {
-	verbOK := contains(rule.Verbs, verb) || contains(rule.Verbs, "*")
-	resOK := contains(rule.Resources, resource) || contains(rule.Resources, "*")
-	return verbOK && resOK
-}
-
-func contains(slice []string, s string) bool {
-	for _, v := range slice {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
