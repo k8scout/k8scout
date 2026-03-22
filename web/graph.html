@@ -186,21 +186,23 @@ svg#graph{width:100%;height:100%;display:block;}
 #minimap-vp{fill:rgba(76,201,240,.12);stroke:var(--accent);stroke-width:1;}
 
 /* ─── SVG graph styles ─── */
-.node-circle{cursor:pointer;stroke-width:1.5;transition:filter .2s;}
-.node-circle.dimmed{opacity:.12;}
+.node-circle{cursor:pointer;stroke-width:1.5;transition:filter .2s,opacity .2s;}
+.node-circle.dimmed{opacity:.1;}
+.node-circle.dimmed ~ text{opacity:.07;}
 .node-circle.highlighted{stroke:#fff !important;stroke-width:2.5;}
-.node-circle.path-active{stroke:var(--path-glow) !important;stroke-width:2.5;filter:drop-shadow(0 0 6px var(--path-glow));}
+.node-circle.path-active{stroke:var(--path-glow) !important;stroke-width:4;filter:drop-shadow(0 0 14px var(--path-glow)) !important;}
+.node-circle.path-active ~ text.node-label{fill:#fff;font-weight:700;}
 .node-icon{pointer-events:none;user-select:none;dominant-baseline:middle;text-anchor:middle;}
-.node-label{pointer-events:none;user-select:none;}
+.node-label{pointer-events:none;user-select:none;transition:opacity .2s;}
 .edge-path{fill:none;stroke-width:1.5;transition:opacity .2s;cursor:pointer;}
 .edge-path:hover{stroke-width:2.5;opacity:1 !important;}
 .show-more-btn{background:none;border:1px solid var(--border);border-radius:4px;color:var(--accent);cursor:pointer;font-size:10px;padding:3px 8px;margin-top:4px;width:100%;text-align:center;transition:border-color .1s;}
 .show-more-btn:hover{border-color:var(--accent);background:rgba(76,201,240,.06);}
 .edge-detail-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:#fff;margin-bottom:4px;}
-.edge-path.dimmed{opacity:.04;}
+.edge-path.dimmed{opacity:.03;}
 .edge-path.highlighted{stroke-width:2.5;opacity:1 !important;}
-.edge-path.path-active{stroke:var(--path-glow) !important;stroke-width:3;opacity:1 !important;animation:edgePulse 1.8s ease-in-out infinite;}
-@keyframes edgePulse{0%,100%{opacity:.6;}50%{opacity:1;}}
+.edge-path.path-active{stroke:var(--path-glow) !important;stroke-width:5;opacity:1 !important;animation:edgePulse 1.5s ease-in-out infinite;}
+@keyframes edgePulse{0%,100%{opacity:.7;}50%{opacity:1;}}
 .crit-glow{filter:drop-shadow(0 0 5px rgba(255,71,87,.5));}
 .high-glow{filter:drop-shadow(0 0 4px rgba(255,127,80,.4));}
 
@@ -371,6 +373,50 @@ code{background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'C
 @keyframes critPulse{0%,100%{opacity:.5;r:var(--pr);}50%{opacity:1;r:calc(var(--pr) + 3px);}}
 @keyframes nodeGlow{0%,100%{filter:drop-shadow(0 0 4px rgba(255,71,87,.4));}50%{filter:drop-shadow(0 0 10px rgba(255,71,87,.9));}}
 
+/* ─── Target ring (goal node halo) ─── */
+.target-ring{pointer-events:none;fill:none;stroke:#ff4757;stroke-width:1.5;stroke-dasharray:4,3;}
+@keyframes targetPulse{0%,100%{opacity:.5;stroke-width:1.5;}50%{opacity:1;stroke-width:2.5;}}
+.target-ring{animation:targetPulse 2s ease-in-out infinite;}
+
+/* ─── Category-aware node styles ─── */
+.node-circle.cat-context{fill-opacity:.5;}
+.node-circle.cat-context ~ text.node-label{opacity:0 !important;}
+.edge-path.tier-3{opacity:.25;}
+
+/* ─── Namespace zones (replace namespace nodes with visual regions) ─── */
+.ns-zone{fill-opacity:.04;stroke-dasharray:5,4;stroke-opacity:.3;cursor:default;}
+.ns-label{pointer-events:none;font-weight:700;opacity:.35;text-transform:uppercase;letter-spacing:.06em;fill:inherit;}
+
+/* ─── Host / Kubernetes node (Linux machine) — diamond shape ─── */
+.host-shape{stroke-width:2.5;cursor:pointer;transition:filter .2s,opacity .2s;}
+.host-shape.dimmed{opacity:.1;}
+.host-shape.path-active{stroke:var(--path-glow) !important;stroke-width:4;filter:drop-shadow(0 0 14px var(--path-glow));}
+.host-shape.path-start{stroke:var(--accent) !important;stroke-width:4;}
+.host-shape.path-end{stroke:var(--crit) !important;stroke-width:4;filter:drop-shadow(0 0 16px var(--crit));}
+
+/* ─── Path step number markers (SVG overlay) ─── */
+.path-step-num{pointer-events:none;font-weight:800;paint-order:stroke fill;}
+/* Start/end node emphasis on active path */
+.node-circle.path-start{stroke:var(--accent) !important;stroke-width:4 !important;}
+.node-circle.path-end{stroke:var(--crit) !important;stroke-width:4 !important;filter:drop-shadow(0 0 16px var(--crit)) !important;}
+
+/* ─── Attack chain narrative strip (floating bar at bottom of canvas) ─── */
+#chain-strip{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(19,20,26,.97);border:1px solid var(--border);border-radius:10px;padding:7px 12px;display:none;align-items:center;gap:0;z-index:15;max-width:calc(100% - 96px);overflow-x:auto;box-shadow:0 6px 28px rgba(0,0,0,.7);backdrop-filter:blur(6px);}
+#chain-strip.visible{display:flex;}
+#chain-strip::-webkit-scrollbar{height:3px;}
+#chain-strip::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+#chain-strip-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 0 0 10px;flex-shrink:0;line-height:1;}
+#chain-strip-close:hover{color:var(--text);}
+.cs-step{display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.cs-node{display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid transparent;white-space:nowrap;cursor:pointer;transition:filter .1s;}
+.cs-node:hover{filter:brightness(1.3);}
+.cs-node-num{width:14px;height:14px;border-radius:50%;background:rgba(0,0,0,.5);font-size:8px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.cs-arrow{display:flex;flex-direction:column;align-items:center;padding:0 2px;flex-shrink:0;}
+.cs-edge-label{font-size:8px;color:#a29bfe;white-space:nowrap;line-height:1;margin-bottom:1px;}
+.cs-edge-icon{color:var(--muted);font-size:10px;line-height:1;}
+.cs-start-badge{font-size:8px;background:#0a1a2a;color:#4cc9f0;border:1px solid #4cc9f030;padding:1px 4px;border-radius:3px;margin-left:2px;font-weight:700;}
+.cs-end-badge{font-size:8px;background:#2a0000;color:#ff8a95;border:1px solid #ff475730;padding:1px 4px;border-radius:3px;margin-left:2px;font-weight:700;}
+
 /* ─── Enhanced finding modal ─── */
 .modal-impact{background:#1a0000;border:1px solid #ff475730;border-radius:6px;padding:10px 12px;margin-bottom:4px;}
 .modal-impact p{color:#ff9f9f;font-size:12px;line-height:1.6;}
@@ -437,7 +483,7 @@ code{background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'C
   <button class="filter-btn" data-sev="LOW">LOW</button>
   <div class="toolbar-sep"></div>
   <button class="tb-btn" id="fit-btn" title="Fit to screen (F)">⊞ Fit</button>
-  <button class="tb-btn" id="cluster-btn" title="Toggle namespace clusters">⬡ Cluster</button>
+  <button class="tb-btn active" id="cluster-btn" title="Toggle namespace zones">⬡ Zones</button>
   <button class="tb-btn" id="crossns-btn" title="Toggle cross-namespace edge highlight">⟷ Cross-NS</button>
   <div class="toolbar-sep"></div>
   <button class="tb-btn" id="diff-btn" title="Load second scan for diff comparison">⊕ Diff</button>
@@ -483,30 +529,26 @@ code{background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'C
     <div class="tab-panel" id="tab-legend">
       <div id="legend-panel">
         <div class="legend-section">
-          <h4>Node Types</h4>
-          <div class="legend-row"><div class="legend-dot" style="background:#e84c5a"></div>Identity</div>
-          <div class="legend-row"><div class="legend-dot" style="background:#ff7f50"></div>ServiceAccount</div>
-          <div class="legend-row"><div class="legend-dot" style="background:#9b59b6"></div>ClusterRole</div>
-          <div class="legend-row"><div class="legend-dot" style="background:#3498db"></div>Role</div>
-          <div class="legend-row"><div class="legend-dot" style="background:#8e44ad"></div>ClusterRoleBinding</div>
-          <div class="legend-row"><div class="legend-dot" style="background:#2980b9"></div>RoleBinding</div>
-          <div class="legend-row"><div class="legend-dot" style="background:#2ecc71"></div>Workload</div>
-          <div class="legend-row"><div class="legend-dot" style="background:#27ae60"></div>Pod</div>
-          <div class="legend-row"><div class="legend-dot" style="background:#f1c40f"></div>Secret</div>
-          <div class="legend-row"><div class="legend-dot" style="background:#1abc9c"></div>Namespace</div>
-          <div class="legend-row"><div class="legend-dot" style="background:#7f8c8d"></div>Node</div>
-          <div class="legend-row"><div class="legend-dot" style="background:#e67e22"></div>Webhook</div>
+          <h4>Security Categories</h4>
+          <div class="legend-row"><div class="legend-dot" style="background:#ff4757;border:1.5px dashed #ff4757"></div><span><b style="color:#ff8a95">Target</b> — high-value goal node</span></div>
+          <div class="legend-row"><div class="legend-dot" style="background:#4cc9f0"></div><span><b style="color:#4cc9f0">Actor</b> — identity / service account</span></div>
+          <div class="legend-row"><div class="legend-dot" style="background:#2ecc71"></div><span><b style="color:#2ecc71">Workload</b> — pod / deployment</span></div>
+          <div class="legend-row"><div class="legend-dot" style="background:#f1c40f"></div><span><b style="color:#f1c40f">Secret</b> — sensitive credential</span></div>
+          <div class="legend-row"><div class="legend-dot" style="background:#9b59b6"></div><span><b style="color:#9b59b6">Privilege</b> — role / binding</span></div>
+          <div class="legend-row"><div class="legend-dot" style="background:#ff9f43"></div><span><b style="color:#ff9f43">Hook</b> — admission webhook</span></div>
+          <div class="legend-row"><div style="width:11px;height:11px;transform:rotate(45deg);background:#c0392b;flex-shrink:0"></div><span><b style="color:#ff8080">Host Node</b> — Linux machine (diamond)</span></div>
         </div>
         <div class="legend-section">
-          <h4>Edge Types</h4>
-          <div class="legend-row"><div class="legend-line" style="background:#ff4757;height:3px"></div>Node breakout path</div>
-          <div class="legend-row"><div class="legend-line" style="background:#ffd166" class="legend-dashed"></div>Secret exfiltration</div>
-          <div class="legend-row"><div class="legend-line" style="background:#74b9ff"></div>Recon / list</div>
-          <div class="legend-row"><div class="legend-line" style="background:#ff4757"></div>exec / impersonate</div>
-          <div class="legend-row"><div class="legend-line" style="background:#ff7f50"></div>create / patch / delete</div>
-          <div class="legend-row"><div class="legend-line" style="background:#888"></div>runs_as / bound_to / grants</div>
-          <div class="legend-row"><div class="legend-line" style="background:#a29bfe"></div>mounts</div>
-          <div class="legend-row"><div class="legend-line legend-dashed"></div>inferred rule</div>
+          <h4>Namespace Zones</h4>
+          <div class="legend-row"><div style="width:22px;height:14px;border:1.5px dashed #7b9;background:rgba(100,200,130,.06);border-radius:3px;flex-shrink:0"></div>Namespace boundary</div>
+          <div class="legend-row" style="font-size:10px;color:var(--muted);line-height:1.5">Colored zones group cluster resources by namespace. Namespace nodes are not rendered in the graph.</div>
+        </div>
+        <div class="legend-section">
+          <h4>Edge Tiers</h4>
+          <div class="legend-row"><div class="legend-line" style="background:#ff4757;height:2.5px"></div><b>Tier 1</b> — direct exploitation</div>
+          <div class="legend-row"><div class="legend-line" style="background:#ff79c6;background:repeating-linear-gradient(90deg,#ff79c6 0,#ff79c6 5px,transparent 5px,transparent 8px)"></div>inferred escalation</div>
+          <div class="legend-row"><div class="legend-line" style="background:#7b6fff"></div><b>Tier 2</b> — privilege chain</div>
+          <div class="legend-row"><div class="legend-line" style="background:#555;opacity:.4"></div><b>Tier 3</b> — structural (runs_as, mounts)</div>
           <div class="legend-row"><div class="legend-line" style="background:#a9e34b"></div>active attack path</div>
           <div class="legend-row"><div class="legend-line" style="background:#ff6b35;border-top:2px dashed #ff6b35;height:0"></div>Cross-namespace edge</div>
         </div>
@@ -623,6 +665,12 @@ code{background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'C
       <div class="canvas-btn" id="zoom-out-btn" title="Zoom out">−</div>
     </div>
 
+    <!-- Attack chain narrative strip -->
+    <div id="chain-strip">
+      <div id="chain-strip-inner"></div>
+      <button id="chain-strip-close" title="Clear path">✕</button>
+    </div>
+
     <!-- Minimap -->
     <div id="minimap" title="Click to navigate">
       <svg id="minimap-svg"><rect id="minimap-vp"></rect></svg>
@@ -728,20 +776,20 @@ code{background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'C
    CONSTANTS
    ================================================================ */
 const NODE_COLORS = {
-  Identity:           '#e84c5a',
-  ServiceAccount:     '#ff7f50',
-  ClusterRole:        '#9b59b6',
-  Role:               '#3498db',
-  ClusterRoleBinding: '#8e44ad',
-  RoleBinding:        '#2980b9',
-  Workload:           '#2ecc71',
-  Pod:                '#27ae60',
-  Secret:             '#f1c40f',
-  ConfigMap:          '#bdc3c7',
-  Node:               '#7f8c8d',
-  Namespace:          '#1abc9c',
-  Webhook:            '#e67e22',
-  CRD:                '#9b59b6',
+  Identity:           '#4cc9f0',  // actor
+  ServiceAccount:     '#4cc9f0',  // actor
+  ClusterRole:        '#9b59b6',  // privilege
+  Role:               '#9b59b6',  // privilege
+  ClusterRoleBinding: '#7b6fff',  // privilege (binding)
+  RoleBinding:        '#7b6fff',  // privilege (binding)
+  Workload:           '#2ecc71',  // workload
+  Pod:                '#2ecc71',  // workload
+  Secret:             '#f1c40f',  // secret
+  ConfigMap:          '#3a3d4a',  // context
+  Node:               '#ff4757',  // target (host)
+  Namespace:          '#3a3d4a',  // context
+  Webhook:            '#ff9f43',  // hook
+  CRD:                '#9b59b6',  // privilege
 };
 const DEFAULT_NODE_COLOR = '#555';
 
@@ -778,6 +826,28 @@ const EDGE_COLORS = {
   mounts:          '#a29bfe',
 };
 const DEFAULT_EDGE_COLOR = '#444';
+
+/* Security category color palette (semantic, not kind-based) */
+const CATEGORY_COLORS = {
+  actor:     '#4cc9f0',  // identity / service account = attacker-controlled
+  target:    '#ff4757',  // high-value targets = goal nodes
+  workload:  '#2ecc71',  // pods / workloads
+  secret:    '#f1c40f',  // secrets
+  privilege: '#9b59b6',  // roles / bindings
+  hook:      '#ff9f43',  // webhooks
+  context:   '#3a3d4a',  // namespaces, config maps — background objects
+};
+
+/* Edge exploitation tier: 1=direct exploitation, 2=privilege chain, 3=structural */
+const EDGE_TIER = {
+  can_exec:1, can_impersonate:1, can_create:1, can_patch:1,
+  can_delete:1, can_escalate:1, can_bind:1, inferred:1,
+  grants:2, bound_to:2, granted_by:2, can_get:2, can_portforward:2, can_list:2,
+  runs_as:3, mounts:3, member_of:3,
+};
+
+/* Goal node IDs (populated from findings before renderGraph) */
+let goalNodeSet = new Set();
 
 /* kubectl command templates for each edge type */
 const ATTACK_CMD = {
@@ -1508,16 +1578,27 @@ function populateGodSASelector() {
     if (!sourcePaths[src] || score > sourcePaths[src]) sourcePaths[src] = score;
   });
 
-  // Also include all SA/Identity nodes even if no computed path
+  // Include all SA/Identity nodes, sorted by:
+  // 1. SA has running workload (foothold-backed first)
+  // 2. Max attack path score
+  // 3. Raw risk_score
   graphData.nodes
     .filter(n => n.kind === 'ServiceAccount' || n.kind === 'Identity')
-    .sort((a, b) => (sourcePaths[b.id]||0) - (sourcePaths[a.id]||0))
+    .sort((a, b) => {
+      const aHasWL = saWithWorkload.has(a.id) ? 1 : 0;
+      const bHasWL = saWithWorkload.has(b.id) ? 1 : 0;
+      if (aHasWL !== bHasWL) return bHasWL - aHasWL;
+      const aScore = sourcePaths[a.id] || (a.risk_score || 0);
+      const bScore = sourcePaths[b.id] || (b.risk_score || 0);
+      return bScore - aScore;
+    })
     .forEach(n => {
-      const opt  = document.createElement('option');
-      opt.value  = n.id;
+      const opt   = document.createElement('option');
+      opt.value   = n.id;
       const score = sourcePaths[n.id];
       const label = `${n.namespace ? n.namespace+'/' : ''}${n.name||n.id}`;
-      opt.textContent = score ? `${label}  [score ${score}]` : label;
+      const foothold = saWithWorkload.has(n.id) ? ' ⬢' : '';
+      opt.textContent = score ? `${label}${foothold}  [score ${score}]` : `${label}${foothold}`;
       sel.appendChild(opt);
     });
 }
@@ -2395,6 +2476,11 @@ let rawGraphData   = null;   // before filtering (for large files)
 let simulation     = null;
 let nodeById       = {};
 let zoomBehavior   = null;
+// SA usage index: populated from runs_as edges after data load.
+// saWithWorkload — SA IDs that have at least one pod/workload running as them.
+// saWithPrivilegedWorkload — SA IDs used by a privileged/host-namespace workload.
+let saWithWorkload           = new Set();
+let saWithPrivilegedWorkload = new Set();
 let currentTransform = d3.zoomIdentity;
 window._findings   = {};
 let activeFilters  = new Set(['CRITICAL','HIGH','MEDIUM','LOW']);
@@ -2402,7 +2488,7 @@ let selectedNodeId = null;
 let activeFindingId = null;
 let activePathIdx   = null;
 let computedPaths   = [];
-let showClusters    = false;
+let showClusters    = true;
 let showCrossNS     = false;
 let rawGraphData2   = null; // second scan for diff
 let playbackTimer   = null; // attack playback timer
@@ -2814,6 +2900,29 @@ function updateLargeFilePreview(raw, nodes, edges) {
 }
 
 /* ================================================================
+   SA USAGE INDEX
+   Tracks which ServiceAccounts are actually used by running pods/workloads.
+   Populated from runs_as edges after data load; used by securityCategory()
+   to distinguish "privilege with a foothold" from "privilege in isolation".
+   ================================================================ */
+function buildSAUsageIndex() {
+  saWithWorkload.clear();
+  saWithPrivilegedWorkload.clear();
+  if (!graphData) return;
+  graphData.edges.forEach(e => {
+    if (e.kind !== 'runs_as') return;
+    const src = edgeNodeId(e.source || e.from);
+    const tgt = edgeNodeId(e.target || e.to);
+    if (!src || !tgt) return;
+    saWithWorkload.add(tgt);
+    const wl = nodeById[src];
+    if (wl && nodeHasSpecialConfig(wl)) {
+      saWithPrivilegedWorkload.add(tgt);
+    }
+  });
+}
+
+/* ================================================================
    DATA INGESTION
    ================================================================ */
 function ingestData(raw, nodes, edges) {
@@ -2839,10 +2948,23 @@ function ingestData(raw, nodes, edges) {
 
   graphData = { nodes: simNodes, edges: simEdges, findings };
 
+  // Build SA usage index so securityCategory() can differentiate used vs unused SAs.
+  buildSAUsageIndex();
+
+  // Build goal node set BEFORE renderGraph so securityCategory() works correctly
+  goalNodeSet = buildGoalNodeSetFromFindings(findings);
+
+  // Clear any stale path highlight from a previous data load.
+  if (nodeSel) clearPathHighlight();
+
   dropOverlay.classList.add('hidden');
   renderSidebar();
   renderGraph();
   computeAttackPaths();
+  importFindingPaths();
+  // Refresh after path computation adds more goal info
+  goalNodeSet = buildGoalNodeSetFromFindings(findings);
+  refreshGoalNodeVisuals();
   renderAttackPaths();
   updateStats();
   // Refresh GOD panel if open
@@ -2860,6 +2982,8 @@ const ATTACK_EDGE_KINDS = new Set([
   'can_exec','can_impersonate','can_create','can_patch',
   'can_delete','can_get','can_list','can_portforward','member_of',
   'can_escalate','can_bind',
+  'inferred',   // backend-emitted inferred escalation edges (e.g. create bindings → cluster-admin)
+  'granted_by', // SA → binding reverse edge enabling workload→SA→binding→role traversal
 ]);
 
 function edgeNodeId(val) {
@@ -2885,11 +3009,19 @@ function computeAttackPaths() {
     }
   });
 
-  // Source nodes: identities, SAs, pods, workloads
-  let sources = nodes.filter(n =>
-    n.kind === 'Identity' || n.kind === 'ServiceAccount' ||
-    n.kind === 'Pod'      || n.kind === 'Workload'
+  // Source nodes ordered by attack realism:
+  // 1. Pods/Workloads — the most concrete foothold an attacker would land on
+  // 2. SAs used by running pods — realistic identity pivot points
+  // 3. SAs with no workloads — privilege-in-isolation, lower priority
+  // 4. Identities — catch-all for non-SA human/system accounts
+  const sourcesFoothold = nodes.filter(n => n.kind === 'Pod' || n.kind === 'Workload').map(n => n.id);
+  const sourcesUsedSA   = nodes.filter(n =>
+    (n.kind === 'ServiceAccount' || n.kind === 'Identity') && saWithWorkload.has(n.id)
   ).map(n => n.id);
+  const sourcesOther    = nodes.filter(n =>
+    (n.kind === 'ServiceAccount' || n.kind === 'Identity') && !saWithWorkload.has(n.id)
+  ).map(n => n.id);
+  let sources = [...sourcesFoothold, ...sourcesUsedSA, ...sourcesOther];
   if (!sources.length) {
     sources = nodes.filter(n => (adj[n.id] || []).length > 0).map(n => n.id);
   }
@@ -2951,17 +3083,57 @@ function computeAttackPaths() {
     }
   }
 
-  // Sort: impact score desc, then path length asc
+  // Sort: impact score desc, then prefer paths starting from pods/workloads, then path length asc
+  const isConcreteFoothold = id => {
+    const n = nodeById[id];
+    return n && (n.kind === 'Pod' || n.kind === 'Workload');
+  };
   paths.sort((a, b) => {
     const ia = pathImpactType(a), ib = pathImpactType(b);
     if (ia.score !== ib.score) return ib.score - ia.score;
     const ta = nodeById[a.nodes[a.nodes.length-1]];
     const tb = nodeById[b.nodes[b.nodes.length-1]];
     if ((ta?.risk_score||0) !== (tb?.risk_score||0)) return (tb?.risk_score||0) - (ta?.risk_score||0);
+    // Prefer paths that start from a concrete foothold (pod/workload)
+    const aFoothold = isConcreteFoothold(a.nodes[0]) ? 0 : 1;
+    const bFoothold = isConcreteFoothold(b.nodes[0]) ? 0 : 1;
+    if (aFoothold !== bFoothold) return aFoothold - bFoothold;
     return a.nodes.length - b.nodes.length;
   });
 
   computedPaths = paths;
+}
+
+// importFindingPaths merges backend-computed attack_path data from risk_findings
+// into computedPaths. The backend's BFS paths are authoritative and may include
+// paths through inferred edges that the frontend's DFS didn't find.
+function importFindingPaths() {
+  if (!graphData) return;
+  const existingSigs = new Set(computedPaths.map(p => p.nodes.join('→')));
+
+  (graphData.findings || []).forEach(f => {
+    const ap = f.attack_path;
+    if (!ap || ap.length < 2) return;
+
+    // Convert []PathStep → {nodes, edges} internal format.
+    const nodes = ap.map(s => s.node && s.node.id).filter(Boolean);
+    const edges = ap.slice(1).map(s => (s.edge && s.edge.kind) || 'inferred');
+    if (nodes.length < 2) return;
+
+    const sig = nodes.join('→');
+    if (existingSigs.has(sig)) return;
+    existingSigs.add(sig);
+
+    // Tag with the source finding so UI can cross-reference.
+    computedPaths.push({ nodes, edges, _findingId: f.id, _score: f.score });
+  });
+
+  // Re-sort so newly imported high-score paths surface at the top.
+  computedPaths.sort((a, b) => {
+    const ia = pathImpactType(a), ib = pathImpactType(b);
+    if (ia.score !== ib.score) return ib.score - ia.score;
+    return a.nodes.length - b.nodes.length;
+  });
 }
 
 /* ================================================================
@@ -3131,7 +3303,29 @@ function renderSidebar() {
       <div class="finding-title"><span class="sev-badge ${f.severity||'LOW'}">${f.severity||'?'}</span> ${escHtml(f.title||fid)}</div>
       <div class="finding-meta"><span>${(f.affected_nodes||[]).length} node(s)</span><span>score ${f.score||0}</span><span>${f.rule_id||''}</span></div>
     `;
-    card.addEventListener('click', () => openFindingModal(fid));
+    card.addEventListener('click', () => {
+      openFindingModal(fid);
+      // If this finding has an attack_path, highlight it in the graph and switch to paths tab.
+      const ap = f.attack_path;
+      if (ap && ap.length >= 2) {
+        const nodes = ap.map(s => s.node && s.node.id).filter(Boolean);
+        const sig = nodes.join('→');
+        const pathIdx = computedPaths.findIndex(p => p.nodes.join('→') === sig);
+        if (pathIdx >= 0) {
+          clearPathHighlight();
+          activePathIdx = pathIdx;
+          highlightPath(computedPaths[pathIdx]);
+          // Activate the matching path card and switch tab.
+          document.querySelector('.tab[data-tab="paths"]').click();
+          const matchCard = document.querySelector(`.path-card[data-path-idx="${pathIdx}"]`);
+          if (matchCard) {
+            document.querySelectorAll('.path-card').forEach(c => c.classList.remove('active'));
+            matchCard.classList.add('active');
+            matchCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }
+      }
+    });
     list.appendChild(card);
   });
 }
@@ -3227,7 +3421,7 @@ function renderAttackPaths() {
       let chainHtml = '';
       path.nodes.forEach((nid, i) => {
         const n    = nodeById[nid];
-        const col2 = NODE_COLORS[n?.kind] || DEFAULT_NODE_COLOR;
+        const col2 = n ? (CATEGORY_COLORS[securityCategory(n)] || DEFAULT_NODE_COLOR) : DEFAULT_NODE_COLOR;
         const label = n ? (n.name || nid).split(':').pop() : nid;
         chainHtml += `<span class="path-node-chip" style="background:${col2}20;color:${col2};border:1px solid ${col2}40">${escHtml(label)}</span>`;
         if (i < path.nodes.length - 1) {
@@ -3409,21 +3603,108 @@ function ensureMarker(color, dashed) {
   return id;
 }
 
-function nodeRadius(d) { return 9 + (d.risk_score || 0) * 0.85; }
-function nodeColor(d)  { return NODE_COLORS[d.kind] || DEFAULT_NODE_COLOR; }
+function nodeRadius(d) {
+  const cat = securityCategory(d);
+  if (cat === 'target') return Math.max(16, 14 + (d.risk_score||0) * 0.8);
+  if (cat === 'context') return 7;
+  // Workloads are primary footholds — slightly larger than SAs to emphasize their role.
+  if (cat === 'workload') return Math.max(13, 11 + (d.risk_score||0) * 0.75);
+  if (cat === 'actor') return Math.max(11, 10 + (d.risk_score||0) * 0.7);
+  return 9 + (d.risk_score||0) * 0.75;
+}
+function nodeColor(d) {
+  const cat = securityCategory(d);
+  return CATEGORY_COLORS[cat] || DEFAULT_NODE_COLOR;
+}
 function edgeColor(d)  { return EDGE_COLORS[d.kind] || DEFAULT_EDGE_COLOR; }
 
 function nodeHasSpecialConfig(d) {
-  return d.privileged || d.host_path || d.host_pid || d.host_network ||
+  const m = d.metadata || {};
+  return m.privileged_containers || m.host_pid === 'true' || m.host_network === 'true' ||
+    m.host_path === 'true' || m.automount_service_account_token === 'true' ||
+    d.privileged || d.host_path || d.host_pid || d.host_network ||
     d.host_path_mount || d.privileged_container || d.automount_sa_token ||
     (d.properties && (d.properties.privileged || d.properties.host_path));
 }
 function nodeSpecialIcon(d) {
-  if (d.privileged || d.privileged_container || (d.properties?.privileged)) return '🛡';
-  if (d.host_path || d.host_path_mount || (d.properties?.host_path)) return '💾';
-  if (d.host_pid || d.host_network) return '🌐';
-  if (d.automount_sa_token) return '🔑';
+  const m = d.metadata || {};
+  if (m.privileged_containers || d.privileged || d.privileged_container || (d.properties?.privileged)) return '🛡';
+  if (m.host_path === 'true' || d.host_path || d.host_path_mount || (d.properties?.host_path)) return '💾';
+  if (m.host_pid === 'true' || m.host_network === 'true' || d.host_pid || d.host_network) return '🌐';
+  if (m.automount_service_account_token === 'true' || d.automount_sa_token) return '🔑';
   return '⚠';
+}
+
+// Security category — semantic role of a node in the attack graph
+function securityCategory(d) {
+  if (!d) return 'context';
+  // Explicit goal/target conditions
+  if (d.kind === 'Node') return 'target';
+  if (d.id === 'clusterrole:cluster-admin') return 'target';
+  if (goalNodeSet.has(d.id)) return 'target';
+  if ((d.risk_score||0) >= 8) return 'target';
+  const meta = d.metadata || {};
+  // Workloads/pods with dangerous config are targets
+  if ((d.kind === 'Workload' || d.kind === 'Pod') &&
+    (meta.privileged_containers || meta.host_pid === 'true' || meta.host_network === 'true')) return 'target';
+  // SA with cloud IAM is a target
+  if (d.kind === 'ServiceAccount' && meta.cloud_role) return 'target';
+  // SA-token secrets or secrets with captured values are targets
+  if (d.kind === 'Secret' && (meta.type === 'kubernetes.io/service-account-token' || meta.has_captured_values === 'true')) return 'target';
+  // Actors — SA is only prominent if it actually has running workloads using it.
+  // An SA with privilege but no execution foothold is de-emphasized as context.
+  if (d.kind === 'Identity') return 'actor';
+  if (d.kind === 'ServiceAccount') {
+    if (saWithWorkload.has(d.id)) return 'actor';  // realistic foothold exists
+    if (meta.cloud_role) return 'actor';            // cloud IAM — always relevant
+    return 'context';                               // privilege without execution foothold
+  }
+  // Object categories
+  if (d.kind === 'Pod' || d.kind === 'Workload') return 'workload';
+  if (d.kind === 'Secret') return 'secret';
+  if (['ClusterRole','Role','ClusterRoleBinding','RoleBinding'].includes(d.kind)) return 'privilege';
+  if (d.kind === 'Webhook') return 'hook';
+  return 'context';
+}
+
+// Build goalNodeSet from the backend's risk_findings attack_path data
+function buildGoalNodeSetFromFindings(findings) {
+  const set = new Set();
+  if (!findings) return set;
+  findings.forEach(f => {
+    // Terminal node of backend attack paths
+    const ap = f.attack_path;
+    if (ap && ap.length >= 2) {
+      const last = ap[ap.length - 1];
+      if (last.node && last.node.id) set.add(last.node.id);
+    }
+    // Any affected node with critical score is also a goal
+    if ((f.score || 0) >= 9) {
+      (f.affected_nodes || []).forEach(nid => set.add(nid));
+    }
+  });
+  // Always include cluster-admin role
+  set.add('clusterrole:cluster-admin');
+  return set;
+}
+
+// Re-apply category colors/classes after goalNodeSet is updated post-path-computation
+function refreshGoalNodeVisuals() {
+  if (!nodeSel) return;
+  nodeSel.select('circle.node-circle')
+    .attr('fill', d => {
+      const cat = securityCategory(d);
+      return CATEGORY_COLORS[cat] || DEFAULT_NODE_COLOR;
+    })
+    .attr('class', d => {
+      const cat = securityCategory(d);
+      return `node-circle cat-${cat}`;
+    });
+  // Add/remove target rings
+  nodeSel.selectAll('circle.target-ring').remove();
+  nodeSel.filter(d => securityCategory(d) === 'target').append('circle')
+    .attr('class', 'target-ring')
+    .attr('r', d => nodeRadius(d) + 5);
 }
 
 // Curved path for edge
@@ -3455,7 +3736,12 @@ function renderGraph() {
   setupFilters();
 
   const { nodes, edges } = graphData;
-  const simNodes = nodes.map(n => ({...n}));
+  const allNodes = nodes.map(n => ({...n}));
+
+  // ── Display projection: filter namespace-kind nodes out of graph.
+  // Namespaces become visual zone regions (hulls), not graph nodes.
+  // We keep their data for zone rendering via the namespace property on other nodes.
+  const simNodes = allNodes.filter(n => n.kind !== 'Namespace');
 
   // Normalize edge source/target fields
   const idxMap = {};
@@ -3488,28 +3774,40 @@ function renderGraph() {
     pairCount[key] += 20;
   });
 
-  // Classify edge visual style
+  // Classify edge visual style (3-tier: 1=exploitation, 2=privilege, 3=structural)
   function edgeVisualStyle(d) {
+    const tier = EDGE_TIER[d.kind] || 2;
     const tgt = typeof d.target === 'object' ? d.target : simNodes[d.target];
+    const tgtCat = tgt ? securityCategory(tgt) : 'context';
     const isNodeBreakout = tgt?.kind === 'Node' ||
       (d.kind === 'can_create' && (tgt?.kind === 'Pod' || tgt?.kind === 'Workload'));
     const isSecretExfil = (d.kind === 'can_get' || d.kind === 'can_list') && tgt?.kind === 'Secret';
-    const isRecon = d.kind === 'can_list' && !isSecretExfil;
-    if (isNodeBreakout) return { stroke: '#ff4757', width: '3', dash: null };
-    if (isSecretExfil)  return { stroke: '#ffd166', width: '1.5', dash: '6,3' };
-    if (isRecon)        return { stroke: '#74b9ff', width: '1.2', dash: '3,3' };
-    if (d.inferred)     return { stroke: edgeColor(d), width: '1.2', dash: '5,3' };
-    return { stroke: edgeColor(d), width: '1.5', dash: null };
+
+    // Tier 1: exploitation — full opacity, thick, vivid color
+    if (tier === 1) {
+      if (isNodeBreakout) return { stroke: '#ff4757', width: '2.5', dash: null, opacity: 1 };
+      if (d.inferred)     return { stroke: '#ff79c6', width: '2', dash: '5,3', opacity: 0.9 };
+      const col = EDGE_COLORS[d.kind] || '#ff7f50';
+      return { stroke: col, width: '2', dash: null, opacity: 1 };
+    }
+    // Tier 2: privilege chain — medium opacity, normal width
+    if (tier === 2) {
+      if (isSecretExfil) return { stroke: '#ffd166', width: '1.5', dash: '6,3', opacity: 0.75 };
+      return { stroke: EDGE_COLORS[d.kind] || '#7b6fff', width: '1.5', dash: null, opacity: 0.65 };
+    }
+    // Tier 3: structural — low opacity, thin
+    return { stroke: '#555', width: '1', dash: null, opacity: 0.25 };
   }
 
   // Links (paths for curves)
   linkSel = linksLayer.selectAll('path.edge-path')
     .data(simEdges)
     .join('path')
-      .attr('class', 'edge-path')
+      .attr('class', d => `edge-path${(EDGE_TIER[d.kind]||2) === 3 ? ' tier-3' : ''}`)
       .attr('stroke', d => edgeVisualStyle(d).stroke)
       .attr('stroke-width', d => edgeVisualStyle(d).width)
       .attr('stroke-dasharray', d => edgeVisualStyle(d).dash)
+      .attr('opacity', d => edgeVisualStyle(d).opacity)
       .attr('marker-end', d => {
         const st = edgeVisualStyle(d);
         return `url(#${ensureMarker(st.stroke, !!st.dash)})`;
@@ -3543,14 +3841,28 @@ function renderGraph() {
         .on('drag',  (e, d) => { d.fx=e.x; d.fy=e.y; })
         .on('end',   (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx=null; d.fy=null; }));
 
-  // Circle
+  // Circle (hidden for host nodes — they use diamond polygon instead)
   nodeSel.append('circle')
-    .attr('class', 'node-circle')
+    .attr('class', d => `node-circle cat-${securityCategory(d)}`)
     .attr('r', d => nodeRadius(d))
     .attr('fill', d => nodeColor(d))
-    .attr('fill-opacity', 0.85)
-    .attr('stroke', d => d3.color(nodeColor(d)).brighter(0.7))
+    .attr('fill-opacity', d => {
+      if (d.kind === 'Node') return 0;   // host: invisible circle, polygon renders shape
+      return securityCategory(d) === 'context' ? 0.4 : 0.85;
+    })
+    .attr('stroke-opacity', d => d.kind === 'Node' ? 0 : 1)
+    .attr('stroke', d => {
+      const cat = securityCategory(d);
+      if (cat === 'target') return '#ff4757';
+      if (cat === 'actor')  return '#4cc9f0';
+      return d3.color(nodeColor(d)).brighter(0.5);
+    })
+    .attr('stroke-width', d => {
+      const cat = securityCategory(d);
+      return cat === 'target' ? 2 : cat === 'actor' ? 1.5 : 1;
+    })
     .attr('filter', d => {
+      if (d.kind === 'Node') return null;  // filter applied to polygon
       if ((d.risk_score||0) >= 8) return 'url(#glow-crit)';
       if ((d.risk_score||0) >= 6) return 'url(#glow-high)';
       return null;
@@ -3559,8 +3871,40 @@ function renderGraph() {
     .on('mousemove', (e, d) => {
       const score = (d.risk_score||0).toFixed(1);
       const sev = score>=8?'CRITICAL':score>=6?'HIGH':score>=4?'MEDIUM':'LOW';
+      let extra = '';
+      if (d.kind === 'ServiceAccount') {
+        if (saWithWorkload.has(d.id)) {
+          const privFlag = saWithPrivilegedWorkload.has(d.id) ? ' (privileged workload)' : '';
+          extra = `\nFoothold: used by running workload(s)${privFlag}`;
+        } else {
+          extra = '\nFoothold: no running workloads — privilege without execution context';
+        }
+      } else if (d.kind === 'Pod' || d.kind === 'Workload') {
+        extra = '\nRole: attacker foothold';
+      }
       showTooltip(e, `${d.kind}: ${d.name||d.id}`,
-        `Namespace: ${d.namespace||'(cluster)'}\nRisk Score: ${score}/10 (${sev})`);
+        `Namespace: ${d.namespace||'(cluster)'}\nRisk Score: ${score}/10 (${sev})${extra}`);
+    })
+    .on('mouseleave', hideTooltip);
+
+  // Diamond polygon for Kubernetes Node (Linux host / machine layer)
+  nodeSel.filter(d => d.kind === 'Node').append('polygon')
+    .attr('class', 'host-shape')
+    .attr('points', d => {
+      const r = nodeRadius(d);
+      const rw = r * 1.05, rh = r * 1.35;
+      return `0,${-rh} ${rw},0 0,${rh} ${-rw},0`;
+    })
+    .attr('fill', '#c0392b')
+    .attr('fill-opacity', 0.9)
+    .attr('stroke', '#ff8080')
+    .attr('stroke-width', 2.5)
+    .attr('filter', d => (d.risk_score||0) >= 8 ? 'url(#glow-crit)' : 'url(#glow-high)')
+    .on('click', (e, d) => { e.stopPropagation(); selectNode(d.id); })
+    .on('mousemove', (e, d) => {
+      const score = (d.risk_score||0).toFixed(1);
+      showTooltip(e, `Host Node: ${d.name||d.id}`,
+        `Linux machine — breakout target\nRisk Score: ${score}/10`);
     })
     .on('mouseleave', hideTooltip);
 
@@ -3583,6 +3927,11 @@ function renderGraph() {
     .attr('transform', 'rotate(-90)')  // start arc from top
     .attr('stroke-linecap', 'round')
     .attr('opacity', 0.85);
+
+  // Target halo — pulsing dashed ring for goal nodes
+  nodeSel.filter(d => securityCategory(d) === 'target').append('circle')
+    .attr('class', 'target-ring')
+    .attr('r', d => nodeRadius(d) + 5);
 
   // Persistent score badge (floating text above node for score >= 7)
   nodeSel.filter(d => (d.risk_score||0) >= 7).append('text')
@@ -3616,16 +3965,22 @@ function renderGraph() {
     .attr('fill', '#fff')
     .text(d => nodeSpecialIcon(d));
 
-  // Label (shown based on zoom level)
+  // Label (shown based on security category; context nodes are silent)
   nodeSel.append('text')
     .attr('class', 'node-label')
     .attr('dy', d => nodeRadius(d) + 12)
     .attr('text-anchor', 'middle')
-    .attr('fill', '#9098a5')
-    .attr('font-size', '9px')
+    .attr('fill', d => {
+      const cat = securityCategory(d);
+      if (cat === 'target') return '#ff8a95';
+      if (cat === 'actor')  return '#4cc9f0';
+      return '#9098a5';
+    })
+    .attr('font-size', d => securityCategory(d) === 'target' ? '10px' : '9px')
+    .attr('font-weight', d => securityCategory(d) === 'target' ? '600' : '400')
     .text(d => {
-      const show = (d.risk_score||0) > 2 || ['Identity','Secret','ServiceAccount'].includes(d.kind);
-      if (!show) return '';
+      const cat = securityCategory(d);
+      if (cat === 'context') return '';  // suppress namespace/configmap labels
       const nm = d.name || d.id || '';
       return nm.length > 24 ? nm.slice(0,22)+'…' : nm;
     });
@@ -3637,17 +3992,26 @@ function renderGraph() {
   const alphaDecay = nodeCount > 500 ? 0.1 : nodeCount > 200 ? 0.05 : 0.028;
   const chargeStr  = nodeCount > 500 ? -120 : nodeCount > 200 ? -200 : -280;
 
+  // Y-layer targets: workloads/pods at top, hosts at bottom, RBAC in middle.
+  // Using a weak forceY nudge so the layout is guided but not rigid.
+  const yLayerTarget = d => {
+    if (d.kind === 'Pod' || d.kind === 'Workload') return H * 0.15;
+    if (d.kind === 'Node') return H * 0.85;
+    if (d.kind === 'ClusterRole' || d.kind === 'Role' ||
+        d.kind === 'ClusterRoleBinding' || d.kind === 'RoleBinding') return H * 0.55;
+    return H * 0.4;
+  };
+
   simulation = d3.forceSimulation(simNodes)
-    .force('link',    d3.forceLink(simEdges).id((_,i) => i).distance(85).strength(0.4))
+    .force('link',    d3.forceLink(simEdges).id((_,i) => i)
+      .distance(d => (EDGE_TIER[d.kind]||2) === 1 ? 120 : (EDGE_TIER[d.kind]||2) === 3 ? 60 : 90)
+      .strength(d => (EDGE_TIER[d.kind]||2) === 3 ? 0.15 : 0.4))
     .force('charge',  d3.forceManyBody().strength(chargeStr))
     .force('center',  d3.forceCenter(W/2, H/2))
+    .force('y',       d3.forceY().y(yLayerTarget).strength(0.06))
     .force('collide', d3.forceCollide().radius(d => nodeRadius(d) + 5))
     .alphaDecay(alphaDecay)
-    .on('tick', ticked)
-    .on('end',  () => {
-      hideLoading();
-      updateMinimap();
-    });
+    .on('tick', ticked);
 
   // Show loading until simulation settles
   showLoading('Simulating layout…', 50);
@@ -3674,8 +4038,16 @@ function renderGraph() {
     updateMinimapViewport();
   }
 
-  // Clusters (namespace hulls)
-  if (showClusters) renderHulls(simNodes);
+  // Namespace zones — always render (namespace nodes filtered out of graph, shown as zones)
+  const onSimEnd = () => {
+    hideLoading();
+    updateMinimap();
+    renderNamespaceZones(simNodes);
+  };
+  simulation.on('end', onSimEnd);
+
+  // Clusters (namespace hulls - legacy toggle support)
+  if (showClusters) renderNamespaceZones(simNodes);
 
   // Store simNodes reference for path highlighting
   svg._simNodes = simNodes;
@@ -3683,39 +4055,72 @@ function renderGraph() {
 }
 
 /* ================================================================
-   NAMESPACE HULL CLUSTERS
+   NAMESPACE ZONE RENDERING
+   Namespace nodes are not rendered as graph nodes. Instead they are
+   shown as visual zone regions (filled hulls) that enclose the
+   namespaced resources (pods, SAs, workloads, secrets, etc.).
    ================================================================ */
-function renderHulls(simNodes) {
-  const nsByNs = d3.group(simNodes.filter(n => n.namespace), n => n.namespace);
-  hullLayer.selectAll('path.hull').remove();
+
+// Stable hue per namespace name so colors are deterministic across reloads
+function nsHue(ns) {
+  let h = 5381;
+  for (let i = 0; i < ns.length; i++) h = (h * 33 + ns.charCodeAt(i)) & 0xffff;
+  return h % 360;
+}
+
+function renderNamespaceZones(simNodes) {
+  if (!showClusters) { hullLayer.selectAll('*').remove(); return; }
+  hullLayer.selectAll('*').remove();
+
+  const nsByNs = d3.group(simNodes.filter(n => n.namespace && n.x != null), n => n.namespace);
 
   nsByNs.forEach((nodes, ns) => {
-    if (nodes.length < 2) return;
-    const pts = nodes.map(n => [n.x||0, n.y||0]);
-    const hull = d3.polygonHull(pts);
+    if (nodes.length < 1) return;
+    const pts = nodes.map(n => [n.x, n.y]);
+
+    // Pad single nodes or collinear points to form a valid hull
+    const padded = [];
+    const extra = 28;
+    pts.forEach(([px, py]) => {
+      padded.push([px-extra, py-extra],[px+extra, py-extra],
+                  [px+extra, py+extra],[px-extra, py+extra]);
+    });
+    const hull = d3.polygonHull(padded);
     if (!hull) return;
-    // Expand hull
+
     const c = d3.polygonCentroid(hull);
-    const expanded = hull.map(p => [c[0]+(p[0]-c[0])*1.3, c[1]+(p[1]-c[1])*1.3]);
+    const margin = 22;
+    const expanded = hull.map(([px, py]) => {
+      const dx = px - c[0], dy = py - c[1];
+      const len = Math.sqrt(dx*dx+dy*dy)||1;
+      return [px + dx/len*margin, py + dy/len*margin];
+    });
+
     const pathStr = 'M' + expanded.map(p => p.join(',')).join('L') + 'Z';
+    const hue = nsHue(ns);
+    const zoneColor = `hsl(${hue},55%,55%)`;
 
     hullLayer.append('path')
-      .attr('class', 'hull')
+      .attr('class', 'ns-zone')
       .attr('d', pathStr)
-      .attr('fill', 'rgba(255,255,255,0.02)')
-      .attr('stroke', 'rgba(255,255,255,0.06)')
-      .attr('stroke-width', 1.5)
-      .attr('stroke-dasharray', '6,3');
+      .attr('fill', zoneColor)
+      .attr('stroke', zoneColor);
 
+    // Label: find topmost point of expanded hull and place label above it
+    const minY = Math.min(...expanded.map(p => p[1]));
     hullLayer.append('text')
+      .attr('class', 'ns-label')
       .attr('x', c[0])
-      .attr('y', c[1] - expanded.reduce((mn,p) => Math.min(mn,p[1]), Infinity) + c[1] - 8)
+      .attr('y', minY - 6)
       .attr('text-anchor', 'middle')
-      .attr('fill', 'rgba(255,255,255,0.2)')
-      .attr('font-size', '11px')
+      .attr('font-size', '10px')
+      .attr('fill', zoneColor)
       .text(ns);
   });
 }
+
+// Legacy renderHulls shim (kept for cluster-btn toggle handler)
+function renderHulls(nodes) { renderNamespaceZones(nodes); }
 
 /* ================================================================
    MINIMAP
@@ -3787,6 +4192,9 @@ function selectNode(id) {
     .classed('dimmed',      d => !neighborIds.has(d.id))
     .classed('highlighted', d => d.id === id)
     .classed('path-active', false);
+  nodesLayer.selectAll('polygon.host-shape')
+    .classed('dimmed',      d => !neighborIds.has(d.id))
+    .classed('path-active', false);
   linksLayer.selectAll('path.edge-path')
     .classed('dimmed', d => {
       const sid = edgeNodeId(d.source), tid = edgeNodeId(d.target);
@@ -3803,8 +4211,11 @@ function selectNode(id) {
 
 function clearSelection() {
   selectedNodeId = null;
-  nodesLayer.selectAll('circle.node-circle').classed('dimmed',false).classed('highlighted',false).classed('path-active',false);
+  nodesLayer.selectAll('circle.node-circle').classed('dimmed',false).classed('highlighted',false).classed('path-active',false).classed('path-start',false).classed('path-end',false);
+  nodesLayer.selectAll('polygon.host-shape').classed('dimmed',false).classed('path-active',false).classed('path-start',false).classed('path-end',false);
   linksLayer.selectAll('path.edge-path').classed('dimmed',false).classed('highlighted',false).classed('path-active',false);
+  nodesLayer.selectAll('text.path-step-num').remove();
+  nodesLayer.selectAll('g.path-edge-label').remove();
   hideDetailPanel();
   document.querySelectorAll('.finding-card').forEach(c => c.classList.remove('active'));
 }
@@ -3813,18 +4224,28 @@ function highlightPath(path) {
   if (!path) return;
   const pathNodeSet = new Set(path.nodes);
   const pathEdgeSet = new Set();
-  // Build set of edge (src→tgt) for this path
   path.nodes.forEach((nid, i) => {
-    if (i < path.nodes.length - 1) {
-      pathEdgeSet.add(`${nid}→${path.nodes[i+1]}`);
-    }
+    if (i < path.nodes.length - 1) pathEdgeSet.add(`${nid}→${path.nodes[i+1]}`);
   });
+  const startId = path.nodes[0];
+  const endId   = path.nodes[path.nodes.length - 1];
 
+  // Dim/highlight circles
   nodesLayer.selectAll('circle.node-circle')
     .classed('dimmed',      d => !pathNodeSet.has(d.id))
     .classed('highlighted', false)
-    .classed('path-active', d => pathNodeSet.has(d.id));
+    .classed('path-active', d => pathNodeSet.has(d.id))
+    .classed('path-start',  d => d.id === startId)
+    .classed('path-end',    d => d.id === endId);
 
+  // Host diamond polygons
+  nodesLayer.selectAll('polygon.host-shape')
+    .classed('dimmed',      d => !pathNodeSet.has(d.id))
+    .classed('path-active', d => pathNodeSet.has(d.id))
+    .classed('path-start',  d => d.id === startId)
+    .classed('path-end',    d => d.id === endId);
+
+  // Dim/highlight edges
   linksLayer.selectAll('path.edge-path')
     .classed('dimmed', d => {
       const sid = edgeNodeId(d.source), tid = edgeNodeId(d.target);
@@ -3836,17 +4257,132 @@ function highlightPath(path) {
       return pathEdgeSet.has(`${sid}→${tid}`);
     });
 
+  // Step number overlays: numbered badges on each path node
+  nodesLayer.selectAll('text.path-step-num').remove();
+  path.nodes.forEach((nid, i) => {
+    const nodeG = nodesLayer.selectAll('g.node-g').filter(d => d.id === nid);
+    if (nodeG.empty()) return;
+    const d = nodeG.datum();
+    const r = nodeRadius(d);
+    nodeG.append('text')
+      .attr('class', 'path-step-num')
+      .attr('x', 0).attr('y', 0)
+      .attr('dy', -r - 8)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', '9px')
+      .attr('font-weight', '800')
+      .attr('fill', i === 0 ? '#4cc9f0' : (i === path.nodes.length-1 ? '#ff4757' : '#a9e34b'))
+      .attr('stroke', '#0d0f13')
+      .attr('stroke-width', '2.5')
+      .text(i === 0 ? '▶' : (i === path.nodes.length-1 ? '⬛' : String(i)));
+  });
+
+  // Edge kind labels on active path edges
+  nodesLayer.selectAll('text.path-edge-label').remove();
+  path.nodes.forEach((nid, i) => {
+    if (i >= path.nodes.length - 1) return;
+    const nextId = path.nodes[i+1];
+    // Find the simEdge for this hop
+    const edgeKind = path.edges && path.edges[i] ? path.edges[i] : '';
+    if (!edgeKind) return;
+    // Find source node position
+    const srcG = nodesLayer.selectAll('g.node-g').filter(d => d.id === nid);
+    const tgtG = nodesLayer.selectAll('g.node-g').filter(d => d.id === nextId);
+    if (srcG.empty() || tgtG.empty()) return;
+    const s = srcG.datum(), t = tgtG.datum();
+    if (s.x == null || t.x == null) return;
+    const mx = ((s.x||0)+(t.x||0))/2 - (s.y||0)*0.02;
+    const my = ((s.y||0)+(t.y||0))/2 + (s.x||0)*0.02;
+    // Place label relative to zoomLayer — use a separate labels group approach
+    // We place it in nodesLayer but at the midpoint, offset in screen space
+    const g = nodesLayer.append('g')
+      .attr('class', 'path-edge-label')
+      .attr('transform', `translate(${mx},${my})`);
+    g.append('rect')
+      .attr('x', -22).attr('y', -7).attr('width', 44).attr('height', 13)
+      .attr('rx', 4).attr('fill', '#0d0f1a').attr('fill-opacity', 0.85)
+      .attr('stroke', '#a29bfe30');
+    g.append('text')
+      .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+      .attr('font-size', '8px').attr('fill', '#a29bfe').attr('font-weight', '700')
+      .text(edgeKind.replace('can_','').replace('_',' '));
+  });
+
   hideDetailPanel();
-  // Zoom to fit path nodes
+  showChainStrip(path);
   fitNodesToView(path.nodes);
 }
 
 function clearPathHighlight() {
   activePathIdx = null;
-  nodesLayer.selectAll('circle.node-circle').classed('dimmed',false).classed('highlighted',false).classed('path-active',false);
+  nodesLayer.selectAll('circle.node-circle')
+    .classed('dimmed',false).classed('highlighted',false).classed('path-active',false)
+    .classed('path-start',false).classed('path-end',false);
+  nodesLayer.selectAll('polygon.host-shape')
+    .classed('dimmed',false).classed('path-active',false)
+    .classed('path-start',false).classed('path-end',false);
   linksLayer.selectAll('path.edge-path').classed('dimmed',false).classed('highlighted',false).classed('path-active',false);
+  nodesLayer.selectAll('text.path-step-num').remove();
+  nodesLayer.selectAll('g.path-edge-label').remove();
+  hideChainStrip();
   document.querySelectorAll('.path-card').forEach(c => c.classList.remove('active'));
 }
+
+/* ================================================================
+   CHAIN STRIP — narrative bar showing path steps at canvas bottom
+   ================================================================ */
+function showChainStrip(path) {
+  const strip = document.getElementById('chain-strip');
+  const inner = document.getElementById('chain-strip-inner');
+  if (!strip || !inner) return;
+
+  inner.innerHTML = '';
+  path.nodes.forEach((nid, i) => {
+    const node = nodeById[nid];
+    const cat  = node ? securityCategory(node) : 'context';
+    const col  = CATEGORY_COLORS[cat] || '#555';
+    const label = node ? (node.name || nid).split(':').pop() : nid;
+    const isStart = i === 0;
+    const isEnd   = i === path.nodes.length - 1;
+
+    const step = document.createElement('div');
+    step.className = 'cs-step';
+
+    // Node chip
+    const chip = document.createElement('div');
+    chip.className = `cs-node${isStart?' cs-start':''}${isEnd?' cs-end':''}`;
+    chip.style.cssText = `background:${col}18;color:${col};border-color:${col}50`;
+    chip.innerHTML = `<span class="cs-node-num" style="background:${col}30">${isStart?'▶':(isEnd?'✖':i)}</span>${escHtml(label)}`;
+    if (isStart) chip.innerHTML += `<span class="cs-start-badge">START</span>`;
+    if (isEnd)   chip.innerHTML += `<span class="cs-end-badge">TARGET</span>`;
+    chip.title = nid;
+    chip.addEventListener('click', () => { selectNode(nid); });
+    step.appendChild(chip);
+
+    // Arrow + edge label (between steps)
+    if (i < path.nodes.length - 1) {
+      const edgeKind = (path.edges && path.edges[i]) ? path.edges[i] : '→';
+      const arrow = document.createElement('div');
+      arrow.className = 'cs-arrow';
+      arrow.innerHTML = `<span class="cs-edge-label">${escHtml(edgeKind.replace('can_',''))}</span><span class="cs-edge-icon">›</span>`;
+      step.appendChild(arrow);
+    }
+
+    inner.appendChild(step);
+  });
+
+  strip.classList.add('visible');
+}
+
+function hideChainStrip() {
+  const strip = document.getElementById('chain-strip');
+  if (strip) strip.classList.remove('visible');
+}
+
+// Close button
+document.getElementById('chain-strip-close').addEventListener('click', () => {
+  clearPathHighlight();
+});
 
 function fitNodesToView(nodeIds) {
   if (!graphData || !zoomBehavior) return;
@@ -3889,7 +4425,7 @@ document.getElementById('zoom-out-btn').addEventListener('click', () => {
 document.getElementById('cluster-btn').addEventListener('click', () => {
   showClusters = !showClusters;
   document.getElementById('cluster-btn').classList.toggle('active', showClusters);
-  if (graphData && svg._simNodes) renderHulls(svg._simNodes);
+  if (graphData && svg._simNodes) renderNamespaceZones(svg._simNodes);
   else hullLayer.selectAll('*').remove();
 });
 

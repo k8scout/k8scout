@@ -40,8 +40,11 @@ const (
 	EdgeRunsAs     EdgeKind = "runs_as"
 	EdgeBoundTo    EdgeKind = "bound_to"
 	EdgeGrants     EdgeKind = "grants"
-	EdgeMemberOf   EdgeKind = "member_of"
-	EdgeInferred   EdgeKind = "inferred"
+	// EdgeGrantedBy is the reverse of EdgeGrants: SA → binding that grants it permissions.
+	// This forward edge enables BFS traversal along the path workload → SA → binding → role.
+	EdgeGrantedBy EdgeKind = "granted_by"
+	EdgeMemberOf  EdgeKind = "member_of"
+	EdgeInferred  EdgeKind = "inferred"
 )
 
 // Node represents a vertex in the permission graph.

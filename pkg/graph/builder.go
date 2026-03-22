@@ -300,7 +300,7 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 	for _, crb := range result.ClusterObjects.ClusterRoleBindings {
 		crbID := "crb:" + crb.Name
 		nm[crbID] = &Node{ID: crbID, Kind: KindClusterRoleBinding, Name: crb.Name}
-		roleID := resolveRoleRefID(crb.RoleRef)
+		roleID := resolveRoleRefID(crb.RoleRef, "")
 		edges = append(edges, Edge{From: crbID, To: roleID, Kind: EdgeBoundTo, Reason: "ClusterRoleBinding → role"})
 		for _, subj := range crb.Subjects {
 			if subjID := subjectNodeID(subj); subjID != "" {
@@ -310,13 +310,20 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 					Kind:   EdgeGrants,
 					Reason: fmt.Sprintf("ClusterRoleBinding %q grants %s", crb.Name, roleID),
 				})
+				// Reverse edge: SA → CRB so BFS can traverse workload → SA → binding → role.
+				edges = append(edges, Edge{
+					From:   subjID,
+					To:     crbID,
+					Kind:   EdgeGrantedBy,
+					Reason: fmt.Sprintf("%s is subject of ClusterRoleBinding %q", subjID, crb.Name),
+				})
 			}
 		}
 	}
 	for _, rb := range result.ClusterObjects.RoleBindings {
 		rbID := "rb:" + rb.Namespace + ":" + rb.Name
 		nm[rbID] = &Node{ID: rbID, Kind: KindRoleBinding, Name: rb.Name, Namespace: rb.Namespace}
-		roleID := resolveRoleRefID(rb.RoleRef)
+		roleID := resolveRoleRefID(rb.RoleRef, rb.Namespace)
 		edges = append(edges, Edge{From: rbID, To: roleID, Kind: EdgeBoundTo, Reason: "RoleBinding → role"})
 		for _, subj := range rb.Subjects {
 			if subjID := subjectNodeID(subj); subjID != "" {
@@ -326,6 +333,13 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 					Kind:   EdgeGrants,
 					Reason: fmt.Sprintf("RoleBinding %q in %q grants %s", rb.Name, rb.Namespace, roleID),
 				})
+				// Reverse edge: SA → RB so BFS can traverse workload → SA → binding → role.
+				edges = append(edges, Edge{
+					From:   subjID,
+					To:     rbID,
+					Kind:   EdgeGrantedBy,
+					Reason: fmt.Sprintf("%s is subject of RoleBinding %q in %q", subjID, rb.Name, rb.Namespace),
+				})
 			}
 		}
 	}
@@ -333,12 +347,28 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 	// Pass 3: Workload → SA (runs_as) edges + Pass 4: volume mount edges.
 	for _, wl := range result.ClusterObjects.Workloads {
 		wlID := "workload:" + wl.Namespace + ":" + wl.Name
+		wlMeta := map[string]string{"workload_kind": wl.Kind}
+		if len(wl.PrivilegedContainers) > 0 {
+			wlMeta["privileged_containers"] = strings.Join(wl.PrivilegedContainers, ",")
+		}
+		if wl.HostPID {
+			wlMeta["host_pid"] = "true"
+		}
+		if wl.HostNetwork {
+			wlMeta["host_network"] = "true"
+		}
+		if wl.HostIPC {
+			wlMeta["host_ipc"] = "true"
+		}
+		// Base risk score: all workloads are potential footholds; elevated for dangerous configs.
+		wlRisk := workloadBaseRisk(len(wl.PrivilegedContainers) > 0, wl.HostPID, wl.HostNetwork, wl.HostIPC)
 		nm[wlID] = &Node{
 			ID:        wlID,
 			Kind:      KindWorkload,
 			Name:      wl.Name,
 			Namespace: wl.Namespace,
-			Metadata:  map[string]string{"workload_kind": wl.Kind},
+			Metadata:  wlMeta,
+			RiskScore: wlRisk,
 		}
 		if wl.ServiceAccount != "" {
 			saID := saNodeID(wl.Namespace, wl.ServiceAccount)
@@ -370,7 +400,31 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 	// Pods.
 	for _, pod := range result.ClusterObjects.Pods {
 		podID := "pod:" + pod.Namespace + ":" + pod.Name
-		nm[podID] = &Node{ID: podID, Kind: KindPod, Name: pod.Name, Namespace: pod.Namespace}
+		podMeta := map[string]string{}
+		if len(pod.PrivilegedContainers) > 0 {
+			podMeta["privileged_containers"] = strings.Join(pod.PrivilegedContainers, ",")
+		}
+		if pod.HostPID {
+			podMeta["host_pid"] = "true"
+		}
+		if pod.HostNetwork {
+			podMeta["host_network"] = "true"
+		}
+		if pod.HostIPC {
+			podMeta["host_ipc"] = "true"
+		}
+		podRisk := workloadBaseRisk(len(pod.PrivilegedContainers) > 0, pod.HostPID, pod.HostNetwork, pod.HostIPC)
+		podNode := &Node{
+			ID:        podID,
+			Kind:      KindPod,
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+			RiskScore: podRisk,
+		}
+		if len(podMeta) > 0 {
+			podNode.Metadata = podMeta
+		}
+		nm[podID] = podNode
 		if pod.ServiceAccount != "" {
 			saID := saNodeID(pod.Namespace, pod.ServiceAccount)
 			edges = append(edges, Edge{From: podID, To: saID, Kind: EdgeRunsAs, Reason: "Pod runs as ServiceAccount"})
@@ -539,9 +593,24 @@ func subjectNodeID(s kube.Subject) string {
 	return ""
 }
 
-func resolveRoleRefID(ref kube.RoleRef) string {
+// workloadBaseRisk returns a base risk score for a workload/pod node.
+// All workloads are potential attacker footholds; dangerous security configs raise the score.
+func workloadBaseRisk(privileged, hostPID, hostNetwork, hostIPC bool) float64 {
+	if privileged {
+		return 9.0
+	}
+	if hostPID || hostNetwork || hostIPC {
+		return 7.5
+	}
+	return 3.0 // base score: workloads are always potential footholds
+}
+
+// resolveRoleRefID returns the graph node ID for a role reference.
+// ns is the namespace of the binding — used only when the RoleRef targets a
+// namespace-scoped Role (ClusterRoleBindings always reference ClusterRoles).
+func resolveRoleRefID(ref kube.RoleRef, ns string) string {
 	if ref.Kind == "ClusterRole" {
 		return "clusterrole:" + ref.Name
 	}
-	return "role::" + ref.Name // namespace unknown at this point
+	return "role:" + ns + ":" + ref.Name
 }

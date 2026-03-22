@@ -32,6 +32,9 @@ type RiskFinding struct {
 	AffectedNodes []string `json:"affected_nodes,omitempty"`
 	// MITREIDs maps this finding to MITRE ATT&CK for Containers technique IDs.
 	MITREIDs []string `json:"mitre_ids,omitempty"`
+	// AttackPath is the ordered sequence of graph steps for multi-hop findings.
+	// Nil for single-step (non-traversal) findings.
+	AttackPath []PathStep `json:"attack_path,omitempty"`
 }
 
 // inferenceRule defines a single detection rule applied to the graph + raw data.
@@ -77,8 +80,19 @@ func Infer(g *Graph, result *kube.EnumerationResult, log *zap.Logger) []RiskFind
 			zap.Float64("score", rule.Score))
 	}
 
-	// Emit inferred edges from inference results.
+	// Pass 5: emit inferred edges — must complete before multi-hop traversal
+	// so that paths through inferred edges (e.g. identity → clusterrole:cluster-admin)
+	// are visible to FindPaths.
 	emitInferredEdges(g, result)
+
+	// Multi-hop attack path analysis: one finding per discovered path.
+	// Runs as a separate phase (not via allRules) because inferenceRule.check
+	// produces exactly one finding per invocation, which cannot express
+	// the one-finding-per-path requirement.
+	for j, mhf := range inferMultiHopFindings(g, result, findings, log) {
+		mhf.ID = fmt.Sprintf("finding-mh-%03d", j+1)
+		findings = append(findings, mhf)
+	}
 
 	return findings
 }
@@ -1983,6 +1997,19 @@ func ruleWebhookNamespaceGap() inferenceRule {
 
 // emitInferredEdges adds inferred edges to the graph based on observed permissions.
 func emitInferredEdges(g *Graph, r *kube.EnumerationResult) {
+	// Ensure clusterrole:cluster-admin exists as a traversal target.
+	// The builder only adds nodes it can enumerate; if the identity lacks
+	// list-clusterroles permission the node won't be present, but inferred
+	// edges still target it and FindPaths requires the node to exist.
+	const clusterAdminID = "clusterrole:cluster-admin"
+	if g.nodeByID(clusterAdminID) == nil {
+		g.Nodes = append(g.Nodes, Node{
+			ID:   clusterAdminID,
+			Kind: KindClusterRole,
+			Name: "cluster-admin",
+		})
+	}
+
 	identityID := "identity:" + r.Identity.Username
 
 	for _, c := range r.Permissions.SSARChecks {
@@ -2039,6 +2066,74 @@ func emitInferredEdges(g *Graph, r *kube.EnumerationResult) {
 			})
 		}
 	}
+}
+
+// ── SA usage index ────────────────────────────────────────────────────────────
+
+// buildSAUsageIndex scans the graph for runs_as edges and returns a map from
+// SA node ID to the list of workload/pod node IDs that run as that SA.
+// Used to enrich reviewer findings with workload context and to distinguish
+// "privilege in use" from "privilege with no execution foothold".
+func buildSAUsageIndex(g *Graph) map[string][]string {
+	idx := make(map[string][]string)
+	for i := range g.Edges {
+		e := &g.Edges[i]
+		if e.Kind == EdgeRunsAs {
+			idx[e.To] = append(idx[e.To], e.From)
+		}
+	}
+	return idx
+}
+
+// buildWorkloadUsageEvidence returns human-readable evidence lines describing
+// which workloads use a given SA, and whether any are privileged.
+// If no workloads use the SA, returns a single line noting the lack of foothold.
+func buildWorkloadUsageEvidence(g *Graph, workloadIDs []string) []string {
+	if len(workloadIDs) == 0 {
+		return []string{
+			"No running pods or workloads use this ServiceAccount — " +
+				"privilege exists but there is no direct execution foothold.",
+		}
+	}
+	lines := make([]string, 0, len(workloadIDs)+1)
+	lines = append(lines, fmt.Sprintf("Used by %d running workload/pod(s):", len(workloadIDs)))
+	for _, wid := range workloadIDs {
+		n := g.nodeByID(wid)
+		if n == nil {
+			continue
+		}
+		extra := ""
+		if m := n.Metadata; m != nil {
+			if m["privileged_containers"] != "" {
+				extra += " [PRIVILEGED]"
+			}
+			if m["host_pid"] == "true" || m["host_network"] == "true" || m["host_ipc"] == "true" {
+				extra += " [HOST-PID/NET/IPC]"
+			}
+		}
+		lines = append(lines, fmt.Sprintf("  • %s (%s/%s)%s", wid, n.Namespace, n.Name, extra))
+	}
+	return lines
+}
+
+// isPrivilegedWorkload returns true if any workload in workloadIDs has privileged
+// or host-namespace security properties.
+func isPrivilegedWorkload(g *Graph, workloadIDs []string) bool {
+	for _, wid := range workloadIDs {
+		n := g.nodeByID(wid)
+		if n == nil {
+			continue
+		}
+		m := n.Metadata
+		if m == nil {
+			continue
+		}
+		if m["privileged_containers"] != "" || m["host_pid"] == "true" ||
+			m["host_network"] == "true" || m["host_ipc"] == "true" {
+			return true
+		}
+	}
+	return false
 }
 
 // ── Reviewer-mode inference ───────────────────────────────────────────────────
@@ -2167,6 +2262,10 @@ func InferReviewer(g *Graph, result *kube.ReviewerEnumerateResult, log *zap.Logg
 	var findings []RiskFinding
 	idx := 1
 
+	// Build SA → workload usage index so we can assess whether privileged SAs
+	// are actually reachable via a running execution context.
+	saUsage := buildSAUsageIndex(g)
+
 	// ── Per-SA dangerous permission checks ────────────────────────────────────
 	for _, ip := range result.AllIdentityPerms {
 		// Skip node/kube-system component accounts to reduce noise.
@@ -2175,48 +2274,90 @@ func InferReviewer(g *Graph, result *kube.ReviewerEnumerateResult, log *zap.Logg
 			continue
 		}
 
+		nodeID := reviewerFindingNodeID(ip)
+		workloadIDs := saUsage[nodeID]
+		workloadEvidence := buildWorkloadUsageEvidence(g, workloadIDs)
+		hasWorkload := len(workloadIDs) > 0
+		hasPrivilegedWorkload := isPrivilegedWorkload(g, workloadIDs)
+
 		for _, dp := range reviewerDangerousPerms {
 			if !ipHasPermission(ip, dp.verb, dp.resource) {
 				continue
 			}
-			nodeID := reviewerFindingNodeID(ip)
-			evidence := fmt.Sprintf("%s %s — bound via: %s",
+
+			// Adjust score by execution-foothold reachability.
+			// A highly privileged SA with no running workloads is a configuration risk
+			// but not immediately exploitable — reduce its score to reflect that.
+			// A SA used by a privileged workload has an amplified real-world impact.
+			score := dp.score
+			if !hasWorkload {
+				score -= 1.5 // privilege without a foothold — lower exploitability
+				if score < 1.0 {
+					score = 1.0
+				}
+			} else if hasPrivilegedWorkload {
+				score += 0.3 // privileged workload amplifies exploitability (cap at 10)
+				if score > 10.0 {
+					score = 10.0
+				}
+			}
+
+			baseEvidence := fmt.Sprintf("%s %s — bound via: %s",
 				ip.Subject, dp.desc, strings.Join(ip.BoundRoles, ", "))
+			evidence := append([]string{baseEvidence}, workloadEvidence...)
+
+			foothold := "no running workloads"
+			if hasWorkload {
+				foothold = fmt.Sprintf("%d running workload(s)", len(workloadIDs))
+			}
+			title := fmt.Sprintf("[%s/%s] %s", ip.Namespace, ip.Name, dp.title)
+			if !hasWorkload {
+				title += " (no active foothold)"
+			}
+
 			findings = append(findings, RiskFinding{
 				ID:       fmt.Sprintf("finding-%03d", idx),
 				RuleID:   dp.ruleID,
-				Severity: dp.severity,
-				Score:    dp.score,
-				Title:    fmt.Sprintf("[%s/%s] %s", ip.Namespace, ip.Name, dp.title),
-				Description: fmt.Sprintf("ServiceAccount %q in namespace %q %s.",
-					ip.Name, ip.Namespace, dp.desc),
-				Evidence:      []string{evidence},
+				Severity: severityFromScore(score),
+				Score:    score,
+				Title:    title,
+				Description: fmt.Sprintf(
+					"ServiceAccount %q in namespace %q %s. Foothold: %s.",
+					ip.Name, ip.Namespace, dp.desc, foothold),
+				Evidence:      evidence,
 				Mitigation:    dp.mitigation,
 				AffectedNodes: []string{nodeID},
 			})
 			idx++
 			log.Info("reviewer finding",
 				zap.String("subject", ip.Subject),
-				zap.String("rule", dp.ruleID))
+				zap.String("rule", dp.ruleID),
+				zap.Bool("has_workload", hasWorkload),
+				zap.Float64("score", score))
 		}
 
 		// Wildcard RBAC rule check.
 		for _, rule := range ip.Rules {
 			if containsAny(rule.Verbs, "*") || containsAny(rule.Resources, "*") {
-				nodeID := reviewerFindingNodeID(ip)
+				score := 8.0
+				if !hasWorkload {
+					score = 6.5
+				}
+				evidence := []string{
+					fmt.Sprintf("Rule: verbs=%v resources=%v apiGroups=%v", rule.Verbs, rule.Resources, rule.APIGroups),
+					fmt.Sprintf("Bound via: %s", strings.Join(ip.BoundRoles, ", ")),
+				}
+				evidence = append(evidence, workloadEvidence...)
 				findings = append(findings, RiskFinding{
 					ID:       fmt.Sprintf("finding-%03d", idx),
 					RuleID:   "REVIEW-SA-WILDCARD",
-					Severity: SeverityHigh,
-					Score:    8.0,
+					Severity: severityFromScore(score),
+					Score:    score,
 					Title:    fmt.Sprintf("[%s/%s] Wildcard RBAC grant", ip.Namespace, ip.Name),
 					Description: fmt.Sprintf("ServiceAccount %q in namespace %q has a wildcard RBAC rule "+
 						"(verbs=%v, resources=%v). This grants broad and potentially unintended permissions.",
 						ip.Name, ip.Namespace, rule.Verbs, rule.Resources),
-					Evidence: []string{
-						fmt.Sprintf("Rule: verbs=%v resources=%v apiGroups=%v", rule.Verbs, rule.Resources, rule.APIGroups),
-						fmt.Sprintf("Bound via: %s", strings.Join(ip.BoundRoles, ", ")),
-					},
+					Evidence:      evidence,
 					Mitigation:    "Replace wildcard grants with specific verb+resource combinations (least-privilege).",
 					AffectedNodes: []string{nodeID},
 				})
@@ -2262,8 +2403,22 @@ func InferReviewer(g *Graph, result *kube.ReviewerEnumerateResult, log *zap.Logg
 	}
 	findings = append(findings, standardFindings...)
 
+	// ── Reviewer multi-hop: workload-centric attack chains ────────────────────
+	// Generates realistic paths from every pod/workload in the cluster to
+	// high-value targets via the SA they run as. These show paths like:
+	//   Pod → SA → ClusterRoleBinding → cluster-admin
+	// rather than the reviewer's own identity's access.
+	// Runs AFTER Infer() so that emitInferredEdges has already added inferred edges.
+	reviewerMHFindings := inferReviewerMultiHopFindings(g, result.EnumerationResult, findings, log)
+	for i := range reviewerMHFindings {
+		reviewerMHFindings[i].ID = fmt.Sprintf("finding-%03d", idx)
+		idx++
+	}
+	findings = append(findings, reviewerMHFindings...)
+
 	log.Info("reviewer inference complete",
-		zap.Int("total_findings", len(findings)))
+		zap.Int("total_findings", len(findings)),
+		zap.Int("reviewer_multihop", len(reviewerMHFindings)))
 	return findings
 }
 
@@ -2284,6 +2439,381 @@ func reviewerFindingNodeID(ip kube.IdentityPermissions) string {
 		return fmt.Sprintf("sa:%s:%s", ip.Namespace, ip.Name)
 	}
 	return "identity:" + ip.Name
+}
+
+// ── Multi-hop attack path analysis ───────────────────────────────────────────
+//
+// This phase runs AFTER emitInferredEdges so that paths through inferred edges
+// (e.g. identity → [inferred] → clusterrole:cluster-admin) are traversable.
+// It cannot be expressed as an inferenceRule because that struct produces exactly
+// one RiskFinding per check; multi-hop emits one finding per path.
+
+// currentIdentityNodeID returns the graph node ID used as the traversal origin.
+// In standard mode the builder always registers "identity:<username>" and
+// emitInferredEdges adds outbound edges from it, so that is always the start.
+func currentIdentityNodeID(r *kube.EnumerationResult) string {
+	return "identity:" + r.Identity.Username
+}
+
+// goalKindMITRE maps a GoalKind to its relevant MITRE ATT&CK for Containers IDs.
+func goalKindMITRE(kind GoalKind) []string {
+	switch kind {
+	case ClusterAdmin:
+		return []string{"T1078.001"} // Valid Accounts: Local Accounts
+	case NodeExec:
+		return []string{"T1611"} // Escape to Host
+	case SecretAccess:
+		return []string{"T1552.007"} // Unsecured Credentials: Container API
+	case IdentityTakeover:
+		return []string{"T1078.004"} // Valid Accounts: Cloud Accounts
+	case WorkloadTakeover:
+		return []string{"T1610"} // Deploy Container
+	case CloudEscalation:
+		return []string{"T1078.004"} // Valid Accounts: Cloud Accounts
+	default:
+		return nil
+	}
+}
+
+// severityFromScore converts a numeric score to a Severity label.
+func severityFromScore(score float64) Severity {
+	switch {
+	case score >= 9.0:
+		return SeverityCritical
+	case score >= 7.5:
+		return SeverityHigh
+	case score >= 5.0:
+		return SeverityMedium
+	default:
+		return SeverityLow
+	}
+}
+
+// formatPathDescription builds a human-readable chain representation of a path:
+//
+//	sa:default:app → [can_create] → resource:default:clusterrolebindings → [inferred] → clusterrole:cluster-admin
+func formatPathDescription(path AttackPath) string {
+	if len(path) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, step := range path {
+		if i > 0 && step.Edge != nil {
+			b.WriteString(fmt.Sprintf(" → [%s] → ", step.Edge.Kind))
+		}
+		// Prefer name + kind label for readability; fall back to raw ID.
+		if step.Node.Name != "" && step.Node.Name != step.Node.ID {
+			b.WriteString(fmt.Sprintf("%s (%s)", step.Node.ID, step.Node.Kind))
+		} else {
+			b.WriteString(step.Node.ID)
+		}
+	}
+	return b.String()
+}
+
+// buildPathEvidence returns one evidence string per hop (edge traversal).
+func buildPathEvidence(path AttackPath) []string {
+	if len(path) < 2 {
+		return nil
+	}
+	evidence := make([]string, 0, len(path)-1)
+	for i := 1; i < len(path); i++ {
+		step := path[i]
+		prev := path[i-1]
+		edgeLabel := ""
+		if step.Edge != nil {
+			edgeLabel = string(step.Edge.Kind)
+			if step.Edge.Reason != "" {
+				edgeLabel += ": " + step.Edge.Reason
+			}
+		}
+		evidence = append(evidence, fmt.Sprintf("%s --(%s)--> %s", prev.Node.ID, edgeLabel, step.Node.ID))
+	}
+	return evidence
+}
+
+// pathAffectedNodes extracts all node IDs from a path in traversal order.
+func pathAffectedNodes(path AttackPath) []string {
+	ids := make([]string, len(path))
+	for i, step := range path {
+		ids[i] = step.Node.ID
+	}
+	return ids
+}
+
+// isDuplicatePath returns true if the path's terminal node is already covered
+// by an existing single-step finding. This prevents multi-hop from re-flagging
+// goals that are directly surfaced by existing rules (e.g. ruleClusterAdminBinding
+// already flags crb:* nodes; rulePrivilegedContainers already flags workload nodes).
+// Paths with 2+ hops are never considered duplicates since no single-step rule
+// covers a chained attack path.
+func isDuplicatePath(path AttackPath, existing []RiskFinding) bool {
+	if len(path) != 2 {
+		// Only suppress 1-hop paths; multi-hop findings are always novel.
+		return false
+	}
+	targetID := path[len(path)-1].Node.ID
+	for _, f := range existing {
+		for _, n := range f.AffectedNodes {
+			if n == targetID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// footholdNodesForIdentity returns all realistic attacker-controlled start nodes for
+// the current identity, ordered from most-concrete (workload/pod) to most-abstract
+// (identity node). This drives realistic attack chains of the form:
+//
+//	Pod → SA → Binding → Role → Goal
+//
+// rather than the purely abstract form:
+//
+//	Identity → Goal
+func footholdNodesForIdentity(g *Graph, r *kube.EnumerationResult) []string {
+	seen := make(map[string]bool)
+	var starts []string
+
+	addStart := func(id string) {
+		if !seen[id] && g.nodeByID(id) != nil {
+			seen[id] = true
+			starts = append(starts, id)
+		}
+	}
+
+	// Workload/Pod footholds running as the current SA (most concrete — add first).
+	username := r.Identity.Username
+	if strings.HasPrefix(username, "system:serviceaccount:") {
+		parts := strings.SplitN(strings.TrimPrefix(username, "system:serviceaccount:"), ":", 2)
+		if len(parts) == 2 {
+			saID := saNodeID(parts[0], parts[1])
+			// Pods and workloads that run as this SA via runs_as edges.
+			for i := range g.Edges {
+				e := &g.Edges[i]
+				if e.Kind == EdgeRunsAs && e.To == saID {
+					addStart(e.From) // workload:<ns>:<name> or pod:<ns>:<name>
+				}
+			}
+			// The SA node itself (intermediate foothold).
+			addStart(saID)
+		}
+	}
+
+	// Abstract identity node (least concrete — fallback for non-SA identities).
+	addStart("identity:" + username)
+
+	return starts
+}
+
+// inferMultiHopFindings traverses the graph from all realistic foothold nodes toward
+// high-value targets and emits one RiskFinding per discovered attack path.
+// It must be called after emitInferredEdges so that inferred edges are visible.
+//
+// Start nodes are ordered concrete-to-abstract (workload/pod → SA → identity) so that
+// realistic paths (e.g. Pod → SA → CRB → ClusterRole) are emitted first and the
+// per-goal cap is reached before redundant abstract paths.
+func inferMultiHopFindings(g *Graph, r *kube.EnumerationResult, existing []RiskFinding, log *zap.Logger) []RiskFinding {
+	startIDs := footholdNodesForIdentity(g, r)
+	if len(startIDs) == 0 {
+		return nil
+	}
+
+	goals := HighValueTargets(g, r)
+	if len(goals) == 0 {
+		return nil
+	}
+
+	var findings []RiskFinding
+	// Track emitted-path fingerprints globally across all start nodes to avoid
+	// duplicating the same node sequence from different abstract start points.
+	emittedPaths := make(map[string]bool)
+
+	for _, goal := range goals {
+		emitted := 0
+
+		for _, startID := range startIDs {
+			if goal.NodeID == startID {
+				continue // start IS the goal
+			}
+
+			paths := g.FindPaths(startID, goal.NodeID, MaxAttackPathDepth)
+
+			for _, path := range paths {
+				if emitted >= MaxPathsPerGoal {
+					log.Info("multi-hop path cap reached",
+						zap.String("goal", goal.NodeID),
+						zap.Int("cap", MaxPathsPerGoal))
+					break
+				}
+				if isDuplicatePath(path, existing) {
+					continue
+				}
+				fingerprint := pathFingerprint(path)
+				if emittedPaths[fingerprint] {
+					continue
+				}
+				emittedPaths[fingerprint] = true
+
+				numHops := len(path) - 1
+				score := goal.BaseScore - (0.5 * float64(numHops-1))
+				if score < 1.0 {
+					score = 1.0
+				}
+
+				findings = append(findings, RiskFinding{
+					RuleID:   "MULTIHOP-ESCALATION",
+					Severity: severityFromScore(score),
+					Score:    score,
+					Title: fmt.Sprintf("Multi-hop escalation path to %s: %d hop(s)",
+						goal.GoalKind, numHops),
+					Description: fmt.Sprintf("%s\n\nTarget: %s — %s",
+						formatPathDescription(path), goal.GoalKind, goal.Description),
+					Evidence:      buildPathEvidence(path),
+					AffectedNodes: pathAffectedNodes(path),
+					MITREIDs:      goalKindMITRE(goal.GoalKind),
+					AttackPath:    path,
+					Mitigation: fmt.Sprintf("Break the attack path by removing at least one edge. "+
+						"Review permissions and workload configurations along: %s",
+						formatPathDescription(path)),
+				})
+				emitted++
+
+				log.Info("multi-hop finding",
+					zap.String("start", startID),
+					zap.String("goal_kind", string(goal.GoalKind)),
+					zap.String("goal_node", goal.NodeID),
+					zap.Int("hops", numHops),
+					zap.Float64("score", score))
+			}
+
+			if emitted >= MaxPathsPerGoal {
+				break
+			}
+		}
+	}
+
+	return findings
+}
+
+// pathFingerprint returns a stable string key for an attack path based on its
+// ordered node IDs. Used to deduplicate paths discovered from different start nodes.
+func pathFingerprint(path AttackPath) string {
+	ids := make([]string, len(path))
+	for i, step := range path {
+		ids[i] = step.Node.ID
+	}
+	return strings.Join(ids, "→")
+}
+
+// ── Reviewer multi-hop: workload-centric paths ────────────────────────────────
+
+// maxReviewerPathsPerWorkload caps the number of paths emitted per workload node.
+const maxReviewerPathsPerWorkload = 5
+
+// maxReviewerMultiHopTotal caps the total reviewer multi-hop findings across all workloads.
+const maxReviewerMultiHopTotal = 300
+
+// inferReviewerMultiHopFindings generates realistic attack chains starting from
+// every pod/workload in the cluster, tracing through their ServiceAccount and RBAC
+// bindings to reach high-value targets. This produces findings such as:
+//
+//	Pod X → SA Y → ClusterRoleBinding Z → cluster-admin
+//
+// Unlike inferMultiHopFindings (which starts from the current identity), this
+// function covers the full cluster attack surface regardless of who is running the scan.
+// It is intended for reviewer mode only.
+func inferReviewerMultiHopFindings(g *Graph, r *kube.EnumerationResult, existing []RiskFinding, log *zap.Logger) []RiskFinding {
+	goals := HighValueTargets(g, r)
+	if len(goals) == 0 {
+		return nil
+	}
+
+	var findings []RiskFinding
+	emittedPaths := make(map[string]bool)
+	total := 0
+
+	for i := range g.Nodes {
+		n := &g.Nodes[i]
+		if n.Kind != KindWorkload && n.Kind != KindPod {
+			continue
+		}
+		if total >= maxReviewerMultiHopTotal {
+			log.Info("reviewer multi-hop total cap reached", zap.Int("cap", maxReviewerMultiHopTotal))
+			break
+		}
+
+		workloadPaths := 0
+
+		for _, goal := range goals {
+			if goal.NodeID == n.ID {
+				continue // workload is the goal — not a useful attack path
+			}
+			if workloadPaths >= maxReviewerPathsPerWorkload {
+				break
+			}
+
+			paths := g.FindPaths(n.ID, goal.NodeID, MaxAttackPathDepth)
+			for _, path := range paths {
+				if total >= maxReviewerMultiHopTotal || workloadPaths >= maxReviewerPathsPerWorkload {
+					break
+				}
+				// Require at least 3 nodes: workload → SA → something.
+				// A direct 2-node path (workload → goal) without going through an SA is
+				// not the kind of RBAC-chain path we want to surface here.
+				if len(path) < 3 {
+					continue
+				}
+				if isDuplicatePath(path, existing) {
+					continue
+				}
+				fp := pathFingerprint(path)
+				if emittedPaths[fp] {
+					continue
+				}
+				emittedPaths[fp] = true
+
+				numHops := len(path) - 1
+				score := goal.BaseScore - (0.5 * float64(numHops-1))
+				if score < 1.0 {
+					score = 1.0
+				}
+
+				findings = append(findings, RiskFinding{
+					RuleID:   "MULTIHOP-ESCALATION",
+					Severity: severityFromScore(score),
+					Score:    score,
+					Title: fmt.Sprintf("Multi-hop escalation path to %s: %d hop(s)",
+						goal.GoalKind, numHops),
+					Description: fmt.Sprintf(
+						"Foothold: %s (%s/%s)\n\n%s\n\nTarget: %s — %s",
+						n.Kind, n.Namespace, n.Name,
+						formatPathDescription(path),
+						goal.GoalKind, goal.Description),
+					Evidence:      buildPathEvidence(path),
+					AffectedNodes: pathAffectedNodes(path),
+					MITREIDs:      goalKindMITRE(goal.GoalKind),
+					AttackPath:    path,
+					Mitigation: fmt.Sprintf(
+						"Break the attack path by removing at least one edge. "+
+							"Review permissions and workload configurations along: %s",
+						formatPathDescription(path)),
+				})
+				workloadPaths++
+				total++
+
+				log.Info("reviewer multi-hop finding",
+					zap.String("foothold", n.ID),
+					zap.String("goal_kind", string(goal.GoalKind)),
+					zap.String("goal_node", goal.NodeID),
+					zap.Int("hops", numHops),
+					zap.Float64("score", score))
+			}
+		}
+	}
+
+	return findings
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────
