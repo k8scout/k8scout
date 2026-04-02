@@ -3,6 +3,7 @@ k8scout
 k8scout-linux-amd64
 k8scout-darwin-*
 k8scout-windows-*
+k8scout-linux-arm64
 *.exe
 ANALYSIS.md
 
