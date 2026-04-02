@@ -2447,10 +2447,6 @@ func reviewerFindingNodeID(ip kube.IdentityPermissions) string {
 // one RiskFinding per check; multi-hop emits one finding per path.
 
 // currentIdentityNodeID returns the graph node ID for the current identity.
-func currentIdentityNodeID(r *kube.EnumerationResult) string {
-	return "identity:" + r.Identity.Username
-}
-
 // currentPodNodeID returns the graph node ID for the specific pod k8scout is
 // currently running inside, or "" when not running in-cluster or pod name is unknown.
 // This is the most concrete possible foothold — the exact execution context.

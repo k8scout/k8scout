@@ -15,16 +15,6 @@ func goalsByKind(goals []GoalNode) map[GoalKind][]GoalNode {
 	return m
 }
 
-// findGoalByNodeID returns the first GoalNode with the given NodeID, or zero value + false.
-func findGoalByNodeID(goals []GoalNode, nodeID string) (GoalNode, bool) {
-	for _, g := range goals {
-		if g.NodeID == nodeID {
-			return g, true
-		}
-	}
-	return GoalNode{}, false
-}
-
 // ── ClusterAdmin ─────────────────────────────────────────────────────────────
 
 func TestHighValueTargets_ClusterAdmin_detected(t *testing.T) {

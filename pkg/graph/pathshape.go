@@ -176,7 +176,7 @@ func ScoreByShape(shape PathShape, baseScore float64, numHops int) float64 {
 // Produces scores where a 2-hop privileged-pod-to-cluster-admin (weight ~0.3)
 // scores ~9.5, while a theoretical 6-hop RBAC chain (weight ~3.0) scores ~4.0.
 func ScoreByWeight(shape PathShape, baseScore, weight float64) float64 {
-	multiplier := 1.0
+	var multiplier float64
 	switch {
 	case shape.FullChain:
 		multiplier = 1.4
