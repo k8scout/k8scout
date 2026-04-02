@@ -6,6 +6,7 @@ k8scout-windows-*
 k8scout-linux-arm64
 *.exe
 ANALYSIS.md
+test-cluster.yaml
 
 # Build output
 dist/
