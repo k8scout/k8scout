@@ -3,7 +3,10 @@ k8scout
 k8scout-linux-amd64
 k8scout-darwin-*
 k8scout-windows-*
+k8scout-linux-arm64
 *.exe
+ANALYSIS.md
+test-cluster.yaml
 
 # Build output
 dist/
@@ -14,7 +17,7 @@ k8scout-result*.json
 
 # Kubernetes config / secrets
 kubeconfig
-*.kubeconfig
+.kubeconfig
 *.pem
 *.key
 
@@ -36,3 +39,4 @@ CLAUDE.md
 # Misc cluster YAML dumps
 misconfig*.yaml
 
+results.json

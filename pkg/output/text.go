@@ -76,18 +76,7 @@ func printText(r Report) error {
 	fmt.Printf("  %s\n", strings.Repeat("-", 68))
 
 	for _, f := range r.RiskFindings {
-		sev := severityColor(f.Severity)
-		fmt.Printf("\n  %s[%s]%s %s%s%s\n", sev, f.Severity, colorReset, colorBold, f.Title, colorReset)
-		fmt.Printf("  Rule: %-30s Score: %.1f/10\n", f.RuleID, f.Score)
-		fmt.Printf("  %s\n", wordWrap(f.Description, 68, "  "))
-		if len(f.Evidence) > 0 {
-			fmt.Printf("  Evidence:\n")
-			for _, e := range f.Evidence {
-				fmt.Printf("    • %s\n", e)
-			}
-		}
-		fmt.Printf("  %sMitigation:%s\n%s\n", colorGreen, colorReset,
-			indent(f.Mitigation, "    "))
+		printFinding(f)
 	}
 
 	// ── AI Narrative ──────────────────────────────────────────────────────────
@@ -153,22 +142,49 @@ func printReviewerText(r ReviewerReport) error {
 	fmt.Printf("  %s\n", strings.Repeat("-", 68))
 
 	for _, f := range r.RiskFindings {
-		sev := severityColor(f.Severity)
-		fmt.Printf("\n  %s[%s]%s %s%s%s\n", sev, f.Severity, colorReset, colorBold, f.Title, colorReset)
-		fmt.Printf("  Rule: %-38s Score: %.1f/10\n", f.RuleID, f.Score)
-		fmt.Printf("  %s\n", wordWrap(f.Description, 68, "  "))
-		if len(f.Evidence) > 0 {
-			fmt.Printf("  Evidence:\n")
-			for _, e := range f.Evidence {
-				fmt.Printf("    • %s\n", e)
-			}
-		}
-		fmt.Printf("  %sMitigation:%s\n%s\n", colorGreen, colorReset, indent(f.Mitigation, "    "))
+		printFinding(f)
 	}
 
 	fmt.Printf("\n%s%s%s\n", colorCyan, sep, colorReset)
 	fmt.Printf("Full JSON report saved to output file.\n\n")
 	return nil
+}
+
+// printFinding renders a single RiskFinding to stdout, including an optional
+// visual attack-path chain for multi-hop findings.
+func printFinding(f graph.RiskFinding) {
+	sev := severityColor(f.Severity)
+	fmt.Printf("\n  %s[%s]%s %s%s%s\n", sev, f.Severity, colorReset, colorBold, f.Title, colorReset)
+	fmt.Printf("  Rule: %-30s Score: %.1f/10\n", f.RuleID, f.Score)
+	fmt.Printf("  %s\n", wordWrap(f.Description, 68, "  "))
+	if len(f.AttackPath) > 1 {
+		printAttackPath(f.AttackPath)
+	} else if len(f.Evidence) > 0 {
+		fmt.Printf("  Evidence:\n")
+		for _, e := range f.Evidence {
+			fmt.Printf("    • %s\n", e)
+		}
+	}
+	fmt.Printf("  %sMitigation:%s\n%s\n", colorGreen, colorReset, indent(f.Mitigation, "    "))
+}
+
+// printAttackPath renders an ordered attack-path chain in a readable step-by-step format.
+func printAttackPath(path []graph.PathStep) {
+	fmt.Printf("  %sAttack Path:%s\n", colorBold, colorReset)
+	for i, step := range path {
+		n := step.Node
+		label := fmt.Sprintf("%s  (%s)", n.ID, n.Kind)
+		if i == 0 {
+			fmt.Printf("    %d. %s\n", i+1, label)
+		} else {
+			edgeKind := "?"
+			if step.Edge != nil {
+				edgeKind = string(step.Edge.Kind)
+			}
+			fmt.Printf("       %s└─[%s%s%s]──▶%s\n", colorCyan, colorReset, edgeKind, colorCyan, colorReset)
+			fmt.Printf("    %d. %s\n", i+1, label)
+		}
+	}
 }
 
 func countInferred(g *graph.Graph) int {

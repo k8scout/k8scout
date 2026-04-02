@@ -1,0 +1,755 @@
+# ============================================================================
+# k8scout test cluster — demonstrates diverse attack paths
+#
+# Attack chains this creates:
+#
+# 1. FOOTHOLD CHAIN: foothold-pod → foothold-sa → secret-reader → db-credentials
+#    (pod → SA → RBAC → secret exfil)
+#
+# 2. FOOTHOLD CHAIN: foothold-pod → foothold-sa → pod-exec-role → privileged-pod
+#    → privileged-sa → cluster-admin (pod exec → priv pod → node escape → cluster-admin)
+#
+# 3. NODE BREAKOUT: privileged-pod → node (container escape via hostPID+privileged)
+#
+# 4. CLOUD ESCALATION: cloud-app → cloud-sa → AWS IAM role
+#    (workload identity takeover via IRSA annotation)
+#
+# 5. WEBHOOK INJECTION: webhook-admin-sa → patch mutating webhook → intercept all pods
+#
+# 6. CRB ESCALATION: binding-creator-sa → create CRB → cluster-admin
+#
+# 7. SECRET TOKEN THEFT: leaked-token-secret → token-sa → sensitive permissions
+#
+# 8. CROSS-NAMESPACE LATERAL: dev-pod → dev-sa → list secrets (prod namespace)
+#
+# 9. WORKLOAD MUTATION: deployer-sa → patch deployments → inject backdoor image
+#
+# 10. HOSTPATH READ-ONLY vs WRITABLE contrast
+#
+# Usage:
+#   kind create cluster --name k8scout-lab
+#   kubectl apply -f test-cluster.yaml
+#   ./k8scout --reviewer-mode --out result.json
+#   open web/graph.html   # drag-drop result.json
+# ============================================================================
+
+# ── Namespaces ──────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: attack-lab
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prod
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# CHAIN 1 & 2: FOOTHOLD → SECRET EXFIL & CLUSTER-ADMIN
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── Secrets ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+  namespace: attack-lab
+type: Opaque
+stringData:
+  username: admin
+  password: "P@ssw0rd-super-secret-2024"
+  connection_string: "postgresql://admin:P@ssw0rd@db.internal:5432/production"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-keys
+  namespace: prod
+type: Opaque
+stringData:
+  stripe_key: "sk_live_fake_stripe_key_12345"
+  aws_access_key: "AKIAFAKEACCESSKEY1234"
+  aws_secret_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+---
+
+# ── ServiceAccounts ─────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: foothold-sa
+  namespace: attack-lab
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: privileged-sa
+  namespace: attack-lab
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-admin-sa
+  namespace: attack-lab
+---
+
+# ── RBAC: foothold-sa can read secrets + exec into pods ─────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secret-reader
+  namespace: attack-lab
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: foothold-secret-access
+  namespace: attack-lab
+subjects:
+  - kind: ServiceAccount
+    name: foothold-sa
+    namespace: attack-lab
+roleRef:
+  kind: Role
+  name: secret-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-exec-role
+  namespace: attack-lab
+rules:
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: foothold-pod-exec
+  namespace: attack-lab
+subjects:
+  - kind: ServiceAccount
+    name: foothold-sa
+    namespace: attack-lab
+roleRef:
+  kind: Role
+  name: pod-exec-role
+  apiGroup: rbac.authorization.k8s.io
+---
+
+# ── Cluster-admin target (privileged-sa is bound to cluster-admin) ──────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admin-binding
+subjects:
+  - kind: ServiceAccount
+    name: cluster-admin-sa
+    namespace: attack-lab
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+
+# ── Foothold Pod (attacker entry point — unprivileged) ──────────────────────
+apiVersion: v1
+kind: Pod
+metadata:
+  name: foothold-pod
+  namespace: attack-lab
+  labels:
+    app: foothold
+spec:
+  serviceAccountName: foothold-sa
+  containers:
+    - name: attacker
+      image: alpine
+      command: ["/bin/sh", "-c", "sleep 36000"]
+---
+
+# ── Privileged Pod (pivot target — container escape) ────────────────────────
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged-pod
+  namespace: attack-lab
+  labels:
+    app: privileged
+spec:
+  serviceAccountName: privileged-sa
+  hostPID: true
+  hostNetwork: true
+  containers:
+    - name: priv
+      image: alpine
+      command: ["/bin/sh", "-c", "sleep 36000"]
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: host-root
+          mountPath: /host
+  volumes:
+    - name: host-root
+      hostPath:
+        path: /
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# CHAIN 3: CLOUD ESCALATION (IRSA / Workload Identity)
+# ════════════════════════════════════════════════════════════════════════════
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloud-sa
+  namespace: prod
+  annotations:
+    # AWS IRSA annotation — maps to cloud IAM role
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/prod-s3-admin"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-app
+  namespace: prod
+  labels:
+    app: cloud-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloud-app
+  template:
+    metadata:
+      labels:
+        app: cloud-app
+    spec:
+      serviceAccountName: cloud-sa
+      containers:
+        - name: app
+          image: python:3.11-slim
+          command: ["sleep", "36000"]
+          env:
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
+      volumes:
+        - name: aws-iam-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sts.amazonaws.com
+                  expirationSeconds: 86400
+                  path: token
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# CHAIN 4: WEBHOOK INJECTION
+# ════════════════════════════════════════════════════════════════════════════
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: webhook-admin-sa
+  namespace: attack-lab
+---
+# This SA can patch mutating webhooks — cluster-wide pod injection
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: webhook-patcher
+rules:
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations"]
+    verbs: ["get", "list", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: webhook-admin-binding
+subjects:
+  - kind: ServiceAccount
+    name: webhook-admin-sa
+    namespace: attack-lab
+roleRef:
+  kind: ClusterRole
+  name: webhook-patcher
+  apiGroup: rbac.authorization.k8s.io
+---
+# Pod running as webhook-admin-sa
+apiVersion: v1
+kind: Pod
+metadata:
+  name: webhook-controller
+  namespace: attack-lab
+  labels:
+    app: webhook-controller
+spec:
+  serviceAccountName: webhook-admin-sa
+  containers:
+    - name: controller
+      image: alpine
+      command: ["/bin/sh", "-c", "sleep 36000"]
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# CHAIN 5: CRB ESCALATION (create bindings → cluster-admin)
+# ════════════════════════════════════════════════════════════════════════════
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: binding-creator-sa
+  namespace: attack-lab
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: binding-creator
+rules:
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterrolebindings"]
+    verbs: ["create", "patch"]
+  # Can also escalate roles (very dangerous)
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    verbs: ["escalate", "bind"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: binding-creator-crb
+subjects:
+  - kind: ServiceAccount
+    name: binding-creator-sa
+    namespace: attack-lab
+roleRef:
+  kind: ClusterRole
+  name: binding-creator
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rbac-manager
+  namespace: attack-lab
+  labels:
+    app: rbac-manager
+spec:
+  serviceAccountName: binding-creator-sa
+  containers:
+    - name: manager
+      image: alpine
+      command: ["/bin/sh", "-c", "sleep 36000"]
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# CHAIN 6: SA TOKEN THEFT (secret → SA → permissions)
+# ════════════════════════════════════════════════════════════════════════════
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: token-sa
+  namespace: attack-lab
+---
+# Give token-sa dangerous permissions (delete pods + list nodes)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: node-lister-pod-deleter
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete", "deletecollection"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: token-sa-node-access
+subjects:
+  - kind: ServiceAccount
+    name: token-sa
+    namespace: attack-lab
+roleRef:
+  kind: ClusterRole
+  name: node-lister-pod-deleter
+  apiGroup: rbac.authorization.k8s.io
+---
+# Legacy SA token secret (auto-generated style — represents leaked token)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: token-sa-leaked-token
+  namespace: attack-lab
+  annotations:
+    kubernetes.io/service-account.name: token-sa
+type: kubernetes.io/service-account-token
+data:
+  token: ZmFrZS10b2tlbi1kYXRh  # base64("fake-token-data")
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# CHAIN 7: CROSS-NAMESPACE SECRET EXFIL
+# ════════════════════════════════════════════════════════════════════════════
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dev-sa
+  namespace: attack-lab
+---
+# dev-sa can list secrets in prod namespace (cross-namespace access)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prod-secret-reader
+  namespace: prod
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dev-reads-prod-secrets
+  namespace: prod
+subjects:
+  - kind: ServiceAccount
+    name: dev-sa
+    namespace: attack-lab
+roleRef:
+  kind: Role
+  name: prod-secret-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dev-pod
+  namespace: attack-lab
+  labels:
+    app: dev
+spec:
+  serviceAccountName: dev-sa
+  containers:
+    - name: dev
+      image: node:18-slim
+      command: ["sleep", "36000"]
+      env:
+        - name: DATABASE_URL
+          value: "postgresql://dev:devpass@db.dev.internal:5432/devdb"
+        - name: GITHUB_TOKEN
+          value: "ghp_fake_github_personal_access_token_12345"
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# CHAIN 8: WORKLOAD MUTATION (deployer-sa can patch deployments)
+# ════════════════════════════════════════════════════════════════════════════
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployer-sa
+  namespace: prod
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployment-manager
+  namespace: prod
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets", "statefulsets"]
+    verbs: ["get", "list", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployer-deployment-access
+  namespace: prod
+subjects:
+  - kind: ServiceAccount
+    name: deployer-sa
+    namespace: prod
+roleRef:
+  kind: Role
+  name: deployment-manager
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ci-runner
+  namespace: prod
+  labels:
+    app: ci-runner
+spec:
+  serviceAccountName: deployer-sa
+  containers:
+    - name: runner
+      image: alpine
+      command: ["/bin/sh", "-c", "sleep 36000"]
+---
+# Target deployment that deployer-sa can mutate
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: prod
+  labels:
+    app: payment-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      serviceAccountName: cloud-sa
+      containers:
+        - name: payments
+          image: payments-service:v2.1.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-keys
+                  key: stripe_key
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# CHAIN 9: HOSTPATH CONTRAST (writable vs read-only)
+# ════════════════════════════════════════════════════════════════════════════
+
+# Writable hostPath — high risk (container escape to host filesystem)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: log-collector
+  namespace: monitoring
+  labels:
+    app: log-collector
+spec:
+  serviceAccountName: default
+  containers:
+    - name: collector
+      image: fluentd:latest
+      securityContext:
+        capabilities:
+          add: ["SYS_ADMIN", "DAC_READ_SEARCH"]
+      volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+  volumes:
+    - name: varlog
+      hostPath:
+        path: /var/log
+    - name: docker-sock
+      hostPath:
+        path: /var/run/docker.sock
+---
+# Read-only hostPath — lower risk
+apiVersion: v1
+kind: Pod
+metadata:
+  name: metrics-exporter
+  namespace: monitoring
+  labels:
+    app: metrics-exporter
+spec:
+  serviceAccountName: default
+  containers:
+    - name: exporter
+      image: prom/node-exporter:latest
+      volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+  volumes:
+    - name: proc
+      hostPath:
+        path: /proc
+    - name: sys
+      hostPath:
+        path: /sys
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# CHAIN 10: MONITORING SA WITH BROAD READ (info disclosure)
+# ════════════════════════════════════════════════════════════════════════════
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: monitor-sa
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-reader
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps", "pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets", "statefulsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: monitor-cluster-read
+subjects:
+  - kind: ServiceAccount
+    name: monitor-sa
+    namespace: monitoring
+roleRef:
+  kind: ClusterRole
+  name: cluster-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: monitor-sa
+      containers:
+        - name: prometheus
+          image: prom/prometheus:latest
+          ports:
+            - containerPort: 9090
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# EXTRA: ConfigMap with leaked kubeconfig
+# ════════════════════════════════════════════════════════════════════════════
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: debug-config
+  namespace: attack-lab
+data:
+  kubeconfig.yaml: |
+    apiVersion: v1
+    kind: Config
+    clusters:
+      - cluster:
+          server: https://kubernetes.default.svc
+          certificate-authority-data: LS0tLS1...
+        name: lab-cluster
+    users:
+      - name: admin
+        user:
+          token: eyJhbGciOiJSUzI1NiIsImtpZCI6IkZha2VLZXkifQ...
+    contexts:
+      - context:
+          cluster: lab-cluster
+          user: admin
+        name: admin@lab
+    current-context: admin@lab
+  app.conf: |
+    database_password=hunter2
+    redis_url=redis://:secretpass@redis.internal:6379
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# EXTRA: Impersonation chain
+# ════════════════════════════════════════════════════════════════════════════
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: impersonator-sa
+  namespace: attack-lab
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sa-impersonator
+rules:
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["impersonate"]
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: impersonator-binding
+subjects:
+  - kind: ServiceAccount
+    name: impersonator-sa
+    namespace: attack-lab
+roleRef:
+  kind: ClusterRole
+  name: sa-impersonator
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: proxy-pod
+  namespace: attack-lab
+  labels:
+    app: proxy
+spec:
+  serviceAccountName: impersonator-sa
+  containers:
+    - name: proxy
+      image: alpine
+      command: ["/bin/sh", "-c", "sleep 36000"]
