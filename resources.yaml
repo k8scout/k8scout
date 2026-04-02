@@ -1,89 +1,49 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: k8scout-test
+  name: attack-lab
 ---
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: k8scout-target
----
-# =======================
-# Secrets (Targets)
-# =======================
+# ======================
+# Secrets (target)
+# ======================
 apiVersion: v1
 kind: Secret
 metadata:
-  name: app-secret
-  namespace: k8scout-target
+  name: sensitive-secret
+  namespace: attack-lab
 type: Opaque
 stringData:
-  username: demo-user
-  password: demo-password
-  api-key: dummy-api-key
+  token: super-secret-token
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: cloud-creds
-  namespace: k8scout-target
-type: Opaque
-stringData:
-  aws_access_key_id: TESTACCESSKEY
-  aws_secret_access_key: TESTSECRETKEY
-  note: placeholder-only
----
-# =======================
-# Service Accounts
-# =======================
+# ======================
+# ServiceAccounts
+# ======================
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: attacker-sa
-  namespace: k8scout-test
+  name: foothold-sa
+  namespace: attack-lab
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: secret-reader-sa
-  namespace: k8scout-target
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: pod-exec-sa
-  namespace: k8scout-test
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: rbac-editor-sa
-  namespace: k8scout-test
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: cloud-identity-sa
-  namespace: k8scout-target
-  annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/k8scout-test-role
-    azure.workload.identity/client-id: "11111111-2222-3333-4444-555555555555"
-    iam.gke.io/gcp-service-account: k8scout-test@demo-project.iam.gserviceaccount.com
+  name: privileged-sa
+  namespace: attack-lab
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: cluster-admin-sa
-  namespace: k8scout-test
+  namespace: attack-lab
 ---
-# =======================
-# RBAC
-# =======================
+# ======================
+# RBAC - Secret access
+# ======================
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: secret-reader-role
-  namespace: k8scout-target
+  name: secret-reader
+  namespace: attack-lab
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -92,258 +52,98 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: secret-reader-rb
-  namespace: k8scout-target
+  name: foothold-secret-access
+  namespace: attack-lab
 subjects:
   - kind: ServiceAccount
-    name: secret-reader-sa
-    namespace: k8scout-target
+    name: foothold-sa
 roleRef:
-  apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: secret-reader-role
+  name: secret-reader
+  apiGroup: rbac.authorization.k8s.io
 ---
+# ======================
+# RBAC - Pod exec (pivot)
+# ======================
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
   name: pod-exec-role
+  namespace: attack-lab
 rules:
   - apiGroups: [""]
-    resources: ["pods", "pods/log"]
-    verbs: ["get", "list"]
-  - apiGroups: [""]
-    resources: ["pods/exec", "pods/attach"]
+    resources: ["pods/exec"]
     verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
-  name: pod-exec-crb
+  name: foothold-pod-exec
+  namespace: attack-lab
 subjects:
   - kind: ServiceAccount
-    name: pod-exec-sa
-    namespace: k8scout-test
+    name: foothold-sa
 roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
+  kind: Role
   name: pod-exec-role
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: rbac-editor-role
-rules:
-  - apiGroups: ["rbac.authorization.k8s.io"]
-    resources:
-      ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
-    verbs: ["get", "list", "create", "update", "patch", "bind", "escalate"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: rbac-editor-crb
-subjects:
-  - kind: ServiceAccount
-    name: rbac-editor-sa
-    namespace: k8scout-test
-roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: rbac-editor-role
 ---
+# ======================
+# Cluster-admin target
+# ======================
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: cluster-admin-test-binding
+  name: cluster-admin-binding
 subjects:
   - kind: ServiceAccount
     name: cluster-admin-sa
-    namespace: k8scout-test
+    namespace: attack-lab
 roleRef:
-  apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-admin
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: attacker-discovery-role
-rules:
-  - apiGroups: [""]
-    resources: ["serviceaccounts", "namespaces", "pods", "nodes", "secrets"]
-    verbs: ["get", "list"]
-  - apiGroups: ["rbac.authorization.k8s.io"]
-    resources:
-      ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
-    verbs: ["get", "list"]
-  - apiGroups: ["admissionregistration.k8s.io"]
-    resources:
-      ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
-    verbs: ["get", "list"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: attacker-discovery-crb
-subjects:
-  - kind: ServiceAccount
-    name: attacker-sa
-    namespace: k8scout-test
-roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: attacker-discovery-role
 ---
-# =======================
-# Workloads
-# =======================
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: normal-app
-  namespace: k8scout-target
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: normal-app
-  template:
-    metadata:
-      labels:
-        app: normal-app
-    spec:
-      serviceAccountName: secret-reader-sa
-      containers:
-        - name: app
-          image: nginx:1.25
-          ports:
-            - containerPort: 80
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: privileged-app
-  namespace: k8scout-target
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: privileged-app
-  template:
-    metadata:
-      labels:
-        app: privileged-app
-    spec:
-      serviceAccountName: pod-exec-sa
-      hostPID: true
-      hostNetwork: true
-      containers:
-        - name: priv-app
-          image: alpine:3.20
-          command: ["/bin/sh", "-c", "sleep 36000"]
-          securityContext:
-            privileged: true
-          volumeMounts:
-            - name: host-root
-              mountPath: /host
-      volumes:
-        - name: host-root
-          hostPath:
-            path: /
-            type: Directory
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: cloud-identity-app
-  namespace: k8scout-target
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: cloud-identity-app
-  template:
-    metadata:
-      labels:
-        app: cloud-identity-app
-    spec:
-      serviceAccountName: cloud-identity-sa
-      containers:
-        - name: app
-          image: alpine:3.20
-          command: ["/bin/sh", "-c", "sleep 36000"]
----
-# =======================
-# Webhook Test
-# =======================
-apiVersion: v1
-kind: Service
-metadata:
-  name: webhook-service
-  namespace: k8scout-test
-spec:
-  selector:
-    app: webhook-server
-  ports:
-    - port: 443
-      targetPort: 8443
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: webhook-server
-  namespace: k8scout-test
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: webhook-server
-  template:
-    metadata:
-      labels:
-        app: webhook-server
-    spec:
-      containers:
-        - name: webhook
-          image: nginx:1.25
-          ports:
-            - containerPort: 8443
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: MutatingWebhookConfiguration
-metadata:
-  name: k8scout-test-webhook
-webhooks:
-  - name: mutate.k8scout.local
-    admissionReviewVersions: ["v1"]
-    sideEffects: None
-    failurePolicy: Ignore
-    clientConfig:
-      service:
-        namespace: k8scout-test
-        name: webhook-service
-        path: /mutate
-        port: 443
-    rules:
-      - apiGroups: [""]
-        apiVersions: ["v1"]
-        operations: ["CREATE"]
-        resources: ["pods"]
-    namespaceSelector: {}
----
-# =======================
-# Pod for exec / secret test
-# =======================
+# ======================
+# Privileged Pod (pivot target)
+# ======================
 apiVersion: v1
 kind: Pod
 metadata:
-  name: exec-target
-  namespace: k8scout-target
-  labels:
-    app: exec-target
+  name: privileged-pod
+  namespace: attack-lab
 spec:
-  serviceAccountName: secret-reader-sa
+  serviceAccountName: privileged-sa
+  hostPID: true
+  hostNetwork: true
   containers:
-    - name: target
-      image: alpine:3.20
+    - name: priv
+      image: alpine
+      command: ["/bin/sh", "-c", "sleep 36000"]
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: host-root
+          mountPath: /host
+  volumes:
+    - name: host-root
+      hostPath:
+        path: /
+---
+# ======================
+# Foothold Pod (ENTRY POINT)
+# ======================
+apiVersion: v1
+kind: Pod
+metadata:
+  name: foothold-pod
+  namespace: attack-lab
+spec:
+  serviceAccountName: foothold-sa
+  containers:
+    - name: attacker
+      image: alpine
       command: ["/bin/sh", "-c", "sleep 36000"]

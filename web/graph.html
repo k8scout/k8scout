@@ -93,6 +93,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .path-sev-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 .path-title{font-size:12px;font-weight:500;flex:1;color:var(--text);line-height:1.3;}
 .path-meta{font-size:10px;color:var(--muted);margin-top:2px;}
+.effort-meter{height:3px;background:var(--surface);margin:0 11px;border-radius:2px;overflow:hidden;}
+.effort-bar{height:100%;border-radius:2px;transition:width .3s;}
 .path-steps{display:none;padding:0 11px 10px;}
 .path-card.active .path-steps{display:block;}
 .path-chain{display:flex;flex-wrap:wrap;align-items:center;gap:3px;margin-bottom:8px;}
@@ -189,6 +191,9 @@ svg#graph{width:100%;height:100%;display:block;}
 .node-circle{cursor:pointer;stroke-width:1.5;transition:filter .2s,opacity .2s;}
 .node-circle.dimmed{opacity:.1;}
 .node-circle.dimmed ~ text{opacity:.07;}
+.node-g.focus-dim{opacity:.15;pointer-events:none;}
+.node-g.focus-dim .node-circle{stroke-width:0.5;}
+.edge-path.focus-dim{opacity:.04 !important;pointer-events:none;}
 .node-circle.highlighted{stroke:#fff !important;stroke-width:2.5;}
 .node-circle.path-active{stroke:var(--path-glow) !important;stroke-width:4;filter:drop-shadow(0 0 14px var(--path-glow)) !important;}
 .node-circle.path-active ~ text.node-label{fill:#fff;font-weight:700;}
@@ -303,6 +308,7 @@ code{background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'C
 .phase-row{display:flex;gap:5px;flex-wrap:wrap;padding:7px 11px 6px;border-top:1px solid var(--border);}
 .phase-chip{display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:10px;font-size:10px;font-weight:600;border:1px solid;white-space:nowrap;}
 .phase-chip.initial {background:#0d1a2e;border-color:#4cc9f0;color:#4cc9f0;}
+.phase-chip.credtheft{background:#2e2000;border-color:#f1c40f;color:#f1c40f;}
 .phase-chip.privesc {background:#2e1a00;border-color:#ff9f43;color:#ff9f43;}
 .phase-chip.lateral {background:#1a002e;border-color:#a29bfe;color:#a29bfe;}
 .phase-chip.impact  {background:#2e0000;border-color:#ff4757;color:#ff4757;}
@@ -317,6 +323,7 @@ code{background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'C
 .impact-badge.LATERAL_MOVE   {background:#00182e;color:#4cc9f0;border:1px solid #4cc9f040;}
 .impact-badge.PRIVESC        {background:#2e1000;color:#ff9f43;border:1px solid #ff9f4340;}
 .impact-badge.CONFIG         {background:#002e18;color:#06d6a0;border:1px solid #06d6a040;}
+.impact-badge.CLOUD_ESCALATION{background:#1a002e;color:#e056fd;border:1px solid #e056fd40;}
 
 /* ─── Enhanced path card ─── */
 .path-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden;cursor:pointer;transition:border-color .15s;}
@@ -379,7 +386,9 @@ code{background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'C
 .target-ring{animation:targetPulse 2s ease-in-out infinite;}
 
 /* ─── Category-aware node styles ─── */
-.node-circle.cat-context{fill-opacity:.5;}
+.node-circle.cat-context{fill-opacity:.3;stroke-opacity:.3;}
+.node-circle.cat-context ~ text.node-label{opacity:.3;}
+.node-circle.cat-privilege{fill-opacity:.5;stroke-opacity:.6;}
 .node-circle.cat-context ~ text.node-label{opacity:0 !important;}
 .edge-path.tier-3{opacity:.25;}
 
@@ -486,9 +495,9 @@ code{background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'C
   <button class="tb-btn active" id="cluster-btn" title="Toggle namespace zones">⬡ Zones</button>
   <button class="tb-btn" id="crossns-btn" title="Toggle cross-namespace edge highlight">⟷ Cross-NS</button>
   <div class="toolbar-sep"></div>
-  <button class="tb-btn" id="diff-btn" title="Load second scan for diff comparison">⊕ Diff</button>
+  <button class="tb-btn" id="rbac-btn" title="Toggle RBAC nodes (Roles, Bindings)">👁 RBAC</button>
+  <button class="tb-btn" id="focus-btn" title="Focus mode: dim low-risk noise, emphasize attack surfaces">🎯 Focus</button>
   <button class="tb-btn" id="export-btn" title="Export pentest report">⬇ Export</button>
-  <input id="diff-file-input" type="file" accept=".json,application/json" style="display:none">
   <div class="toolbar-sep"></div>
   <button class="tb-btn danger" id="god-btn" title="Attack Chain Analyzer: full-cluster attack chain per SA">⛓ Attack Chain Analyzer</button>
   <span id="stats">No data loaded</span>
@@ -504,7 +513,6 @@ code{background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'C
       <div class="tab active" data-tab="paths">Attack Paths</div>
       <div class="tab" data-tab="findings">Findings</div>
       <div class="tab" data-tab="legend">Legend</div>
-      <div class="tab" data-tab="diff">Diff</div>
       <div class="tab" data-tab="queries">Queries</div>
     </div>
 
@@ -520,11 +528,6 @@ code{background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'C
       <div id="findings-list"><div style="padding:16px;color:var(--muted);font-size:12px;line-height:1.6;text-align:center;">Drop a k8scout JSON file<br>to view findings.</div></div>
     </div>
 
-    <!-- Diff tab -->
-    <div class="tab-panel" id="tab-diff">
-      <div id="diff-list"><div style="padding:16px;color:var(--muted);font-size:12px;line-height:1.6;text-align:center;">Load a second JSON file using<br>"Diff" button to compare scans.</div></div>
-    </div>
-
     <!-- Legend tab -->
     <div class="tab-panel" id="tab-legend">
       <div id="legend-panel">
@@ -537,6 +540,7 @@ code{background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'C
           <div class="legend-row"><div class="legend-dot" style="background:#9b59b6"></div><span><b style="color:#9b59b6">Privilege</b> — role / binding</span></div>
           <div class="legend-row"><div class="legend-dot" style="background:#ff9f43"></div><span><b style="color:#ff9f43">Hook</b> — admission webhook</span></div>
           <div class="legend-row"><div style="width:11px;height:11px;transform:rotate(45deg);background:#c0392b;flex-shrink:0"></div><span><b style="color:#ff8080">Host Node</b> — Linux machine (diamond)</span></div>
+          <div class="legend-row"><div class="legend-dot" style="background:#e056fd"></div><span><b style="color:#e056fd">Cloud Identity</b> — AWS IAM role, GCP SA, Azure identity</span></div>
         </div>
         <div class="legend-section">
           <h4>Namespace Zones</h4>
@@ -790,6 +794,7 @@ const NODE_COLORS = {
   Namespace:          '#3a3d4a',  // context
   Webhook:            '#ff9f43',  // hook
   CRD:                '#9b59b6',  // privilege
+  CloudIdentity:      '#e056fd',  // cloud IAM identity
 };
 const DEFAULT_NODE_COLOR = '#555';
 
@@ -808,6 +813,7 @@ const NODE_ICONS = {
   Namespace:          'NS',
   Webhook:            'WH',
   CRD:                'CRD',
+  CloudIdentity:      '☁',
 };
 
 const EDGE_COLORS = {
@@ -824,6 +830,13 @@ const EDGE_COLORS = {
   grants:          '#888',
   member_of:       '#444',
   mounts:          '#a29bfe',
+  runs_on:         '#ff4757',
+  authenticates_as:'#f1c40f',
+  assumes_cloud_role:'#e056fd',
+  can_escalate:    '#ff4757',
+  can_bind:        '#ff7f50',
+  inferred:        '#ff6b81',
+  granted_by:      '#888',
 };
 const DEFAULT_EDGE_COLOR = '#444';
 
@@ -841,9 +854,20 @@ const CATEGORY_COLORS = {
 /* Edge exploitation tier: 1=direct exploitation, 2=privilege chain, 3=structural */
 const EDGE_TIER = {
   can_exec:1, can_impersonate:1, can_create:1, can_patch:1,
-  can_delete:1, can_escalate:1, can_bind:1, inferred:1,
+  can_delete:1, can_escalate:1, can_bind:1, inferred:1, runs_on:1,
   grants:2, bound_to:2, granted_by:2, can_get:2, can_portforward:2, can_list:2,
+  authenticates_as:2, assumes_cloud_role:2,
   runs_as:3, mounts:3, member_of:3,
+};
+
+/* Edge weights — mirrors Go EdgeWeightOf() for effort visualization */
+const EDGE_WEIGHT = {
+  granted_by:0.1, bound_to:0.1, grants:0.1, runs_as:0.1, member_of:100,
+  assumes_cloud_role:0.2, mounts:0.3, authenticates_as:0.5,
+  can_exec:1.0, runs_on:1.0, can_impersonate:1.5,
+  can_get:1.0, can_list:1.0, can_portforward:2.0,
+  can_create:2.0, can_patch:2.0, can_delete:3.0,
+  can_escalate:1.0, can_bind:1.0, inferred:2.0,
 };
 
 /* Goal node IDs (populated from findings before renderGraph) */
@@ -988,6 +1012,48 @@ const ATTACK_CMD = {
   member_of: (s, t) => ({
     action: `"${s.name}" is an identity for "${t.name}"`,
     cmds: [`kubectl get sa ${t.name} -n ${t.namespace||'default'} -o yaml`]
+  }),
+  runs_on: (s, t) => ({
+    action: `Container escape from pod "${s.name}" to node "${t.name}"`,
+    cmds: [
+      `# Pod is privileged/hostPID — escape to node`,
+      `kubectl exec -it ${s.name} -n ${s.namespace||'default'} -- \\`,
+      `  nsenter -t 1 -m -u -i -n -- /bin/bash`
+    ]
+  }),
+  authenticates_as: (s, t) => ({
+    action: `Token theft: secret "${s.name}" authenticates as SA "${t.name}"`,
+    cmds: [
+      `# Read the SA token from the secret`,
+      `kubectl get secret ${s.name} -n ${s.namespace||'default'} \\`,
+      `  -o jsonpath='{.data.token}' | base64 -d`
+    ]
+  }),
+  assumes_cloud_role: (s, t) => ({
+    action: `Cloud role assumption: "${s.name}" → cloud identity "${t.name}"`,
+    cmds: [
+      `# SA is annotated with cloud IAM role — exec into a pod running as this SA`,
+      `# to obtain cloud credentials via metadata endpoint or projected token`
+    ]
+  }),
+  can_escalate: (s, t) => ({
+    action: `Escalate role "${t.name}" — add permissions beyond own level`,
+    cmds: [
+      `# This SA can escalate ClusterRole/Role "${t.name}"`,
+      `kubectl edit ${(t.kind||'clusterrole').toLowerCase()} ${t.name}`
+    ]
+  }),
+  can_bind: (s, t) => ({
+    action: `Bind role "${t.name}" — create new role bindings`,
+    cmds: [
+      `kubectl create clusterrolebinding pwn-bind \\`,
+      `  --clusterrole=${t.name} \\`,
+      `  --serviceaccount=${s.namespace||'default'}:${s.name}`
+    ]
+  }),
+  granted_by: (s, t) => ({
+    action: `"${s.name}" is granted permissions by ${t.kind||'binding'} "${t.name}"`,
+    cmds: [`kubectl get ${(t.kind||'clusterrolebinding').toLowerCase()} ${t.name} -o yaml`]
   }),
 };
 
@@ -2490,7 +2556,7 @@ let activePathIdx   = null;
 let computedPaths   = [];
 let showClusters    = true;
 let showCrossNS     = false;
-let rawGraphData2   = null; // second scan for diff
+let showRbac        = true;  // RBAC node visibility toggle
 let playbackTimer   = null; // attack playback timer
 let blueTeamMode    = false; // blue team detection mode
 let nodePosMap      = {}; // id -> {x,y} for minimap
@@ -2508,70 +2574,110 @@ const progressFill = document.getElementById('progress-fill');
 document.getElementById('open-file-btn').addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
 
-document.getElementById('diff-btn').addEventListener('click', () => document.getElementById('diff-file-input').click());
-document.getElementById('diff-file-input').addEventListener('change', async e => {
-  if (!e.target.files[0]) return;
-  const text = await e.target.files[0].text();
-  try { rawGraphData2 = JSON.parse(text); computeDiff(); }
-  catch(err) { alert('Failed to parse diff file: ' + err.message); }
-  e.target.value = '';
+const RBAC_KINDS = new Set(['ClusterRole','Role','ClusterRoleBinding','RoleBinding']);
+let activePathNodeIds = new Set(); // RBAC nodes to keep visible during path highlight
+let focusMode = false;
+
+const rbacBtn = document.getElementById('rbac-btn');
+rbacBtn.classList.add('active');
+rbacBtn.addEventListener('click', () => {
+  showRbac = !showRbac;
+  rbacBtn.classList.toggle('active', showRbac);
+  applyRbacVisibility();
 });
 
-function computeDiff() {
-  if (!rawGraphData || !rawGraphData2) return;
-  document.querySelector('.tab[data-tab="diff"]').click();
-  const list = document.getElementById('diff-list');
+const focusBtn = document.getElementById('focus-btn');
+focusBtn.addEventListener('click', () => {
+  focusMode = !focusMode;
+  focusBtn.classList.toggle('active', focusMode);
+  applyFocusMode();
+});
 
-  const findings1 = rawGraphData.findings || [];
-  const findings2 = rawGraphData2.findings || [];
-  const rids1 = new Map(findings1.map(f => [f.rule_id + '::' + f.title, f]));
-  const rids2 = new Map(findings2.map(f => [f.rule_id + '::' + f.title, f]));
+// applyRbacVisibility hides RBAC nodes UNLESS they are in the active attack path
+function applyRbacVisibility() {
+  if (!nodeSel || !linkSel) return;
+  const hide = !showRbac;
+  const hiddenIds = new Set();
 
-  const newFindings  = [...rids2.entries()].filter(([k]) => !rids1.has(k)).map(([,f]) => f);
-  const goneFindings = [...rids1.entries()].filter(([k]) => !rids2.has(k)).map(([,f]) => f);
+  nodeSel.each(function(d) {
+    const isRbac = RBAC_KINDS.has(d.kind);
+    // Keep RBAC nodes visible if they're part of the active attack path
+    const exempt = activePathNodeIds.has(d.id);
+    const shouldHide = hide && isRbac && !exempt;
+    d3.select(this).style('display', shouldHide ? 'none' : null);
+    if (shouldHide) hiddenIds.add(d.id);
+  });
 
-  const nodes1 = new Set((rawGraphData.graph?.nodes || rawGraphData.nodes || []).map(n => n.id));
-  const nodes2 = new Set((rawGraphData2.graph?.nodes || rawGraphData2.nodes || []).map(n => n.id));
-  const newNodes  = [...nodes2].filter(id => !nodes1.has(id));
-  const goneNodes = [...nodes1].filter(id => !nodes2.has(id));
+  linkSel.style('display', d => {
+    const sid = (typeof d.source === 'object' ? d.source : {}).id || d.source;
+    const tid = (typeof d.target === 'object' ? d.target : {}).id || d.target;
+    return (hiddenIds.has(sid) || hiddenIds.has(tid)) ? 'none' : null;
+  });
 
-  // Highlight new nodes in graph
-  if (nodesLayer) nodesLayer.selectAll('circle.node-circle').classed('dimmed', d => newNodes.length > 0 && !newNodes.includes(d.id));
-
-  let html = `<div style="padding:10px 12px;font-size:12px;color:var(--text)">`;
-  html += `<div style="margin-bottom:8px;font-weight:700;color:var(--accent)">Diff Summary</div>`;
-  html += `<div class="detail-row"><span>New findings</span><span style="color:var(--crit)">${newFindings.length}</span></div>`;
-  html += `<div class="detail-row"><span>Resolved findings</span><span style="color:var(--low)">${goneFindings.length}</span></div>`;
-  html += `<div class="detail-row"><span>New nodes</span><span style="color:var(--crit)">${newNodes.length}</span></div>`;
-  html += `<div class="detail-row"><span>Removed nodes</span><span style="color:var(--muted)">${goneNodes.length}</span></div>`;
-
-  if (newFindings.length) {
-    html += `<div style="margin-top:10px;font-weight:700;color:var(--crit);font-size:11px">+ NEW FINDINGS</div>`;
-    newFindings.forEach(f => {
-      html += `<div class="mini-finding" data-sev="${f.severity}" style="border-left:3px solid var(--crit);margin-top:4px">
-        <div class="mini-finding-title">${escHtml(f.title||f.rule_id)}</div>
-        <div class="mini-finding-sev">${f.severity} · score ${f.score||0}</div>
-      </div>`;
+  if (simulation) {
+    nodeSel.each(function(d) {
+      const isRbac = RBAC_KINDS.has(d.kind);
+      const exempt = activePathNodeIds.has(d.id);
+      if (hide && isRbac && !exempt) {
+        d.fx = d.x; d.fy = d.y;
+      } else if (!d._userPinned) {
+        d.fx = null; d.fy = null;
+      }
     });
+    simulation.alpha(0.3).restart();
   }
-  if (goneFindings.length) {
-    html += `<div style="margin-top:10px;font-weight:700;color:var(--low);font-size:11px">- RESOLVED FINDINGS</div>`;
-    goneFindings.forEach(f => {
-      html += `<div class="mini-finding" data-sev="${f.severity}" style="border-left:3px solid var(--low);opacity:0.6;margin-top:4px">
-        <div class="mini-finding-title">${escHtml(f.title||f.rule_id)}</div>
-        <div class="mini-finding-sev">${f.severity} · score ${f.score||0}</div>
-      </div>`;
-    });
+}
+
+// Focus mode: dim nodes/edges that aren't attack-relevant
+// Attack-relevant = targets, actors with workloads, workloads, secrets, and their connecting edges
+function applyFocusMode() {
+  if (!nodeSel || !linkSel) return;
+
+  if (!focusMode) {
+    // Remove focus dimming
+    nodeSel.classed('focus-dim', false);
+    linkSel.classed('focus-dim', false);
+    return;
   }
-  if (newNodes.length) {
-    html += `<div style="margin-top:10px;font-weight:700;color:#ff7f50;font-size:11px">+ NEW NODES (${newNodes.length})</div>`;
-    newNodes.slice(0,20).forEach(id => {
-      html += `<div style="font-size:11px;padding:2px 4px;color:var(--text)">${escHtml(id)}</div>`;
-    });
-    if (newNodes.length > 20) html += `<div style="font-size:10px;color:var(--muted)">…and ${newNodes.length-20} more</div>`;
-  }
-  html += `</div>`;
-  list.innerHTML = html;
+
+  // Nodes that matter: targets, actors, workloads, secrets, hooks, cloud identities
+  // Nodes to dim: context category nodes, orphan RBAC with no attack edges
+  const relevantNodes = new Set();
+  const attackEdgeNodes = new Set(); // nodes that have at least one tier 1-2 edge
+
+  linkSel.each(function(d) {
+    const tier = EDGE_TIER[d.kind] || 3;
+    if (tier <= 2) {
+      const sid = (typeof d.source === 'object' ? d.source : {}).id || d.source;
+      const tid = (typeof d.target === 'object' ? d.target : {}).id || d.target;
+      attackEdgeNodes.add(sid);
+      attackEdgeNodes.add(tid);
+    }
+  });
+
+  nodeSel.each(function(d) {
+    const cat = securityCategory(d);
+    // Always show targets, workloads, secrets, actors, hooks, cloud identities
+    if (cat === 'target' || cat === 'workload' || cat === 'secret' ||
+        cat === 'actor' || cat === 'hook') {
+      relevantNodes.add(d.id);
+    }
+    // Show RBAC/context nodes only if they have attack edges
+    else if (attackEdgeNodes.has(d.id)) {
+      relevantNodes.add(d.id);
+    }
+  });
+
+  nodeSel.classed('focus-dim', d => !relevantNodes.has(d.id));
+
+  linkSel.classed('focus-dim', d => {
+    const sid = (typeof d.source === 'object' ? d.source : {}).id || d.source;
+    const tid = (typeof d.target === 'object' ? d.target : {}).id || d.target;
+    // Dim edges where BOTH endpoints are irrelevant, or tier 3 structural edges to irrelevant nodes
+    const tier = EDGE_TIER[d.kind] || 3;
+    if (tier === 3 && (!relevantNodes.has(sid) || !relevantNodes.has(tid))) return true;
+    return !relevantNodes.has(sid) && !relevantNodes.has(tid);
+  });
 }
 
 document.getElementById('export-btn').addEventListener('click', exportReport);
@@ -2960,6 +3066,7 @@ function ingestData(raw, nodes, edges) {
   dropOverlay.classList.add('hidden');
   renderSidebar();
   renderGraph();
+  applyRbacVisibility();
   computeAttackPaths();
   importFindingPaths();
   // Refresh after path computation adds more goal info
@@ -2982,8 +3089,11 @@ const ATTACK_EDGE_KINDS = new Set([
   'can_exec','can_impersonate','can_create','can_patch',
   'can_delete','can_get','can_list','can_portforward','member_of',
   'can_escalate','can_bind',
-  'inferred',   // backend-emitted inferred escalation edges (e.g. create bindings → cluster-admin)
-  'granted_by', // SA → binding reverse edge enabling workload→SA→binding→role traversal
+  'inferred',           // backend-emitted inferred escalation edges (e.g. create bindings → cluster-admin)
+  'granted_by',         // SA → binding reverse edge enabling workload→SA→binding→role traversal
+  'runs_on',            // pod → node (container escape)
+  'authenticates_as',   // secret → SA (token theft)
+  'assumes_cloud_role', // SA → cloud identity (cloud role assumption)
 ]);
 
 function edgeNodeId(val) {
@@ -3055,9 +3165,12 @@ function computeAttackPaths() {
     function dfs(nodeId, pathNodes, pathEdges, visited) {
       if (localPaths.length >= MAX_LOCAL || paths.length + localPaths.length >= MAX_PATHS) return;
       const node = nodeById[nodeId];
-      if (pathNodes.length > 1 && isTarget(node)) {
+      const hitTarget = pathNodes.length > 1 && isTarget(node);
+      if (hitTarget) {
         localPaths.push({ nodes: [...pathNodes], edges: [...pathEdges] });
-        return; // don't go deeper from a target
+        // Continue exploring past low-value targets to find higher-value ones behind them
+        // (e.g., Secret → SA → ClusterRole). Stop only at terminal targets or depth limit.
+        if ((node.risk_score||0) >= 9 || node.kind === 'Node' || node.kind === 'ClusterRoleBinding') return;
       }
       if (pathNodes.length >= MAX_DEPTH) return;
       for (const step of (adj[nodeId] || [])) {
@@ -3125,7 +3238,7 @@ function importFindingPaths() {
     existingSigs.add(sig);
 
     // Tag with the source finding so UI can cross-reference.
-    computedPaths.push({ nodes, edges, _findingId: f.id, _score: f.score });
+    computedPaths.push({ nodes, edges, _findingId: f.id, _score: f.score, _title: f.title, _weight: f.path_weight });
   });
 
   // Re-sort so newly imported high-score paths surface at the top.
@@ -3142,15 +3255,20 @@ function importFindingPaths() {
 function classifyPathPhases(path) {
   const phases = {
     initialAccess:   { nodeId: path.nodes[0],                     label: 'Initial Access',        present: true },
+    credTheft:       { nodeId: null, edgeKind: null, stepIdx: -1,  label: 'Credential Theft',      present: false },
     privEsc:         { nodeId: null, edgeKind: null, stepIdx: -1,  label: 'Privilege Escalation',  present: false },
     lateralMovement: { nodeId: null, edgeKind: null, stepIdx: -1,  label: 'Lateral Movement',      present: false },
     impact:          { nodeId: path.nodes[path.nodes.length - 1], label: 'Impact',                present: true },
   };
 
-  const PRIVESC_EDGES   = new Set(['grants','bound_to','can_create','can_patch','can_impersonate','can_bind']);
-  const LATERAL_EDGES   = new Set(['can_exec','runs_as','mounts','can_portforward','member_of']);
+  const PRIVESC_EDGES   = new Set(['grants','bound_to','can_bind','can_escalate','inferred']);
+  const LATERAL_EDGES   = new Set(['can_exec','runs_as','can_portforward','runs_on','can_create','can_patch','can_impersonate']);
+  const CRED_EDGES      = new Set(['mounts','authenticates_as','assumes_cloud_role']);
 
   path.edges.forEach((ek, i) => {
+    if (CRED_EDGES.has(ek) && !phases.credTheft.present) {
+      phases.credTheft = { nodeId: path.nodes[i+1], edgeKind: ek, stepIdx: i, label: 'Credential Theft', present: true };
+    }
     if (PRIVESC_EDGES.has(ek) && !phases.privEsc.present) {
       phases.privEsc = { nodeId: path.nodes[i+1], edgeKind: ek, stepIdx: i, label: 'Privilege Escalation', present: true };
     }
@@ -3174,15 +3292,21 @@ function pathImpactType(path) {
     return { type: 'PRIVESC', score: 8, label: 'ClusterRole PrivEsc' };
   }
   if (target.kind === 'Secret') {
+    const meta = target.metadata || {};
     const crossNs = path.nodes.some(id => {
       const n = nodeById[id];
       return n && n.namespace && n.namespace !== target.namespace;
     });
-    // Identify high-value secrets by name/type
-    const nm = (target.name||'').toLowerCase();
-    if (nm.includes('token') || nm.includes('admin') || nm.includes('kubeconfig'))
+    // SA tokens are always critical (usable for impersonation)
+    if (meta.type === 'kubernetes.io/service-account-token')
+      return { type: 'SECRET_EXFIL', score: 9.5, label: 'SA Token Theft' };
+    // Secrets with captured values are high-value
+    if (meta.has_captured_values === 'true')
       return { type: 'SECRET_EXFIL', score: 9, label: 'Critical Secret Exfil' };
     return { type: 'SECRET_EXFIL', score: crossNs ? 8 : 7, label: crossNs ? 'Cross-NS Secret Exfil' : 'Secret Exfil' };
+  }
+  if (target.kind === 'CloudIdentity') {
+    return { type: 'CLOUD_ESCALATION', score: 9.5, label: 'Cloud IAM Takeover' };
   }
   if (target.kind === 'RoleBinding') return { type: 'PRIVESC', score: 7.5, label: 'RoleBinding PrivEsc' };
   // Resource node representing exec/create on pods
@@ -3372,9 +3496,19 @@ function renderAttackPaths() {
   const annotated = computedPaths.map((path, idx) => {
     const impact = pathImpactType(path);
     const sev    = pathSeverity(path);
-    return { path, idx, impact, sev };
+    // Compute path weight from edge weights
+    let weight = path._weight;
+    if (weight == null) {
+      weight = 0;
+      (path.edges || []).forEach(ek => { weight += (EDGE_WEIGHT[ek] || 5.0); });
+    }
+    return { path, idx, impact, sev, weight };
   });
-  annotated.sort((a, b) => b.impact.score - a.impact.score || sevOrder(a.sev) - sevOrder(b.sev));
+  annotated.sort((a, b) => {
+    // Primary: impact score desc; Secondary: weight asc (easier paths first)
+    if (b.impact.score !== a.impact.score) return b.impact.score - a.impact.score;
+    return a.weight - b.weight;
+  });
 
   // Group by severity
   const SEV_ORDER = ['CRITICAL','HIGH','MEDIUM','LOW'];
@@ -3399,7 +3533,7 @@ function renderAttackPaths() {
     const itemsEl = document.createElement('div');
     itemsEl.className = 'sev-group-items';
 
-    items.forEach(({ path, idx, impact }) => {
+    items.forEach(({ path, idx, impact, weight }) => {
       const target = nodeById[path.nodes[path.nodes.length-1]];
       const source = nodeById[path.nodes[0]];
       const col    = pathColor(sev);
@@ -3469,6 +3603,7 @@ function renderAttackPaths() {
         // Determine phase label for this step
         let stepPhaseLabel = '';
         if (phases.initialAccess.nodeId === path.nodes[i]) stepPhaseLabel = 'Initial Access';
+        else if (phases.credTheft.present && phases.credTheft.stepIdx === i) stepPhaseLabel = '🔑 Cred Theft';
         else if (phases.privEsc.present && phases.privEsc.stepIdx === i) stepPhaseLabel = '⬆ Priv Esc';
         else if (phases.lateralMovement.present && phases.lateralMovement.stepIdx === i) stepPhaseLabel = '↔ Lateral Move';
         if (i === path.edges.length - 1) stepPhaseLabel = (stepPhaseLabel || '') + (stepPhaseLabel ? ' + ' : '') + '💀 Impact';
@@ -3484,15 +3619,26 @@ function renderAttackPaths() {
         `;
       });
 
+      // Exploitability meter: lower weight = easier to exploit = higher bar
+      const maxWeight = 15; // weight at which exploitability is near-zero
+      const exploitPct = Math.max(5, Math.min(100, (1 - weight / maxWeight) * 100));
+      const exploitColor = exploitPct > 70 ? 'var(--crit)' : exploitPct > 40 ? 'var(--high)' : exploitPct > 20 ? 'var(--med)' : 'var(--low)';
+      const exploitLabel = weight < 1 ? 'Trivial' : weight < 3 ? 'Easy' : weight < 6 ? 'Moderate' : weight < 10 ? 'Hard' : 'Very Hard';
+
+      // Use backend title if available, otherwise generate from source→target
+      const displayTitle = path._title || `${escHtml(source?.name||'?')} → ${escHtml(target?.name||'?')}`;
+      const riskScore = path._score || ((target?.risk_score||0) > 0 ? target.risk_score : impact.score);
+
       card.innerHTML = `
         <div class="path-header">
           <div class="path-sev-dot" style="background:${col}"></div>
           <div style="flex:1;min-width:0;">
-            <div class="path-title">${escHtml(source?.name||'?')} → ${escHtml(target?.name||'?')}</div>
-            <div class="path-meta">${steps} step${steps!==1?'s':''} · risk ${((target?.risk_score||0) > 0 ? target.risk_score : impact.score).toFixed(1)}</div>
+            <div class="path-title">${path._title ? escHtml(displayTitle) : displayTitle}</div>
+            <div class="path-meta">${steps} step${steps!==1?'s':''} · risk ${Number(riskScore).toFixed(1)} · exploitability: ${exploitLabel}</div>
           </div>
           <span class="impact-badge ${impact.type}">${escHtml(impact.label)}</span>
         </div>
+        <div class="effort-meter" title="Exploitability: ${exploitLabel} (weight ${weight.toFixed(1)})"><div class="effort-bar" style="width:${exploitPct}%;background:${exploitColor}"></div></div>
         <div class="path-label">${escHtml(narrative)}</div>
         ${phaseHtml}
         <div class="path-steps">
@@ -3535,6 +3681,8 @@ function buildPhaseRow(phases) {
   return `
     <div class="phase-row">
       ${make(phases.initialAccess,   'initial')}
+      <span class="phase-arrow">→</span>
+      ${make(phases.credTheft,       'credtheft')}
       <span class="phase-arrow">→</span>
       ${make(phases.privEsc,         'privesc')}
       <span class="phase-arrow">→</span>
@@ -3664,6 +3812,7 @@ function securityCategory(d) {
   if (d.kind === 'Secret') return 'secret';
   if (['ClusterRole','Role','ClusterRoleBinding','RoleBinding'].includes(d.kind)) return 'privilege';
   if (d.kind === 'Webhook') return 'hook';
+  if (d.kind === 'CloudIdentity') return 'target';
   return 'context';
 }
 
@@ -3795,8 +3944,8 @@ function renderGraph() {
       if (isSecretExfil) return { stroke: '#ffd166', width: '1.5', dash: '6,3', opacity: 0.75 };
       return { stroke: EDGE_COLORS[d.kind] || '#7b6fff', width: '1.5', dash: null, opacity: 0.65 };
     }
-    // Tier 3: structural — low opacity, thin
-    return { stroke: '#555', width: '1', dash: null, opacity: 0.25 };
+    // Tier 3: structural — very subtle, thin
+    return { stroke: '#444', width: '0.8', dash: null, opacity: 0.12 };
   }
 
   // Links (paths for curves)
@@ -3997,6 +4146,7 @@ function renderGraph() {
   const yLayerTarget = d => {
     if (d.kind === 'Pod' || d.kind === 'Workload') return H * 0.15;
     if (d.kind === 'Node') return H * 0.85;
+    if (d.kind === 'CloudIdentity') return H * 0.75;
     if (d.kind === 'ClusterRole' || d.kind === 'Role' ||
         d.kind === 'ClusterRoleBinding' || d.kind === 'RoleBinding') return H * 0.55;
     return H * 0.4;
@@ -4008,7 +4158,7 @@ function renderGraph() {
       .strength(d => (EDGE_TIER[d.kind]||2) === 3 ? 0.15 : 0.4))
     .force('charge',  d3.forceManyBody().strength(chargeStr))
     .force('center',  d3.forceCenter(W/2, H/2))
-    .force('y',       d3.forceY().y(yLayerTarget).strength(0.06))
+    .force('y',       d3.forceY().y(yLayerTarget).strength(nodeCount > 200 ? 0.15 : 0.12))
     .force('collide', d3.forceCollide().radius(d => nodeRadius(d) + 5))
     .alphaDecay(alphaDecay)
     .on('tick', ticked);
@@ -4230,6 +4380,16 @@ function highlightPath(path) {
   const startId = path.nodes[0];
   const endId   = path.nodes[path.nodes.length - 1];
 
+  // Force-show RBAC nodes in this path even if RBAC is hidden
+  activePathNodeIds = pathNodeSet;
+  if (!showRbac) applyRbacVisibility();
+
+  // Remove focus-dim during path highlight (path highlighting does its own dimming)
+  if (focusMode) {
+    nodeSel.classed('focus-dim', false);
+    linkSel.classed('focus-dim', false);
+  }
+
   // Dim/highlight circles
   nodesLayer.selectAll('circle.node-circle')
     .classed('dimmed',      d => !pathNodeSet.has(d.id))
@@ -4298,14 +4458,16 @@ function highlightPath(path) {
     const g = nodesLayer.append('g')
       .attr('class', 'path-edge-label')
       .attr('transform', `translate(${mx},${my})`);
+    const labelText = edgeKind.replace('can_','').replace('_',' ');
+    const labelWidth = Math.max(44, labelText.length * 6 + 12);
     g.append('rect')
-      .attr('x', -22).attr('y', -7).attr('width', 44).attr('height', 13)
-      .attr('rx', 4).attr('fill', '#0d0f1a').attr('fill-opacity', 0.85)
-      .attr('stroke', '#a29bfe30');
+      .attr('x', -labelWidth/2).attr('y', -7).attr('width', labelWidth).attr('height', 14)
+      .attr('rx', 4).attr('fill', '#0d0f1a').attr('fill-opacity', 0.9)
+      .attr('stroke', '#a29bfe40');
     g.append('text')
       .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
       .attr('font-size', '8px').attr('fill', '#a29bfe').attr('font-weight', '700')
-      .text(edgeKind.replace('can_','').replace('_',' '));
+      .text(labelText);
   });
 
   hideDetailPanel();
@@ -4326,6 +4488,13 @@ function clearPathHighlight() {
   nodesLayer.selectAll('g.path-edge-label').remove();
   hideChainStrip();
   document.querySelectorAll('.path-card').forEach(c => c.classList.remove('active'));
+
+  // Re-hide RBAC nodes that were temporarily shown for the path
+  activePathNodeIds = new Set();
+  if (!showRbac) applyRbacVisibility();
+
+  // Re-apply focus mode if active
+  if (focusMode) applyFocusMode();
 }
 
 /* ================================================================

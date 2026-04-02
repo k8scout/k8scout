@@ -10,7 +10,7 @@ import (
 // MaxAttackPathDepth is the maximum number of hops FindPaths will explore when
 // searching for attack paths. Configurable here so A1-3 and future callers share
 // the same default without re-defining it.
-const MaxAttackPathDepth = 5
+const MaxAttackPathDepth = 8
 
 // MaxPathsPerGoal caps the number of paths emitted per goal node to prevent
 // report flooding on densely connected graphs.
@@ -156,6 +156,21 @@ func HighValueTargets(g *Graph, r *kube.EnumerationResult) []GoalNode {
 				BaseScore: 9.5,
 			})
 
+		// ── CloudIdentity ───────────────────────────────────────────────────
+		// Cloud IAM identity nodes are always high-value targets.
+		case n.Kind == KindCloudIdentity:
+			provider := n.Metadata["cloud_provider"]
+			cloudRole := n.Metadata["cloud_role"]
+			goals = append(goals, GoalNode{
+				NodeID:   n.ID,
+				GoalKind: IdentityTakeover,
+				Description: fmt.Sprintf(
+					"Cloud IAM identity (%s) %q — cloud-plane access",
+					provider, cloudRole,
+				),
+				BaseScore: 9.5,
+			})
+
 		// ── WorkloadTakeover + CloudEscalation ───────────────────────────────
 		// Workload nodes are checked for both conditions in one map lookup.
 		case n.Kind == KindWorkload:
@@ -165,12 +180,14 @@ func HighValueTargets(g *Graph, r *kube.EnumerationResult) []GoalNode {
 			}
 
 			// WorkloadTakeover: weakened isolation allows container escape.
-			if len(wl.PrivilegedContainers) > 0 || wl.HostPID || wl.HostNetwork {
+			// Triggers on: privileged containers, hostPID/hostNetwork, dangerous Linux
+			// capabilities (SYS_ADMIN etc.), or sensitive hostPath mounts.
+			if workloadIsTakeoverTarget(wl) {
 				goals = append(goals, GoalNode{
 					NodeID:      n.ID,
 					GoalKind:    WorkloadTakeover,
 					Description: fmt.Sprintf("Workload %s/%s: %s", n.Namespace, n.Name, workloadTakeoverReason(wl)),
-					BaseScore:   8.5,
+					BaseScore:   workloadTakeoverScore(wl),
 				})
 			}
 
@@ -195,6 +212,52 @@ func HighValueTargets(g *Graph, r *kube.EnumerationResult) []GoalNode {
 	return goals
 }
 
+// workloadIsTakeoverTarget returns true if the workload has any property that
+// makes it a high-value target for container escape or host compromise.
+func workloadIsTakeoverTarget(wl kube.WorkloadInfo) bool {
+	return len(wl.PrivilegedContainers) > 0 ||
+		wl.HostPID || wl.HostNetwork || wl.HostIPC ||
+		len(wl.DangerousCapabilities) > 0 ||
+		hasWritableHostPaths(wl)
+}
+
+// hasWritableHostPaths returns true if any hostPath mount is NOT in ReadOnlyHostPaths.
+func hasWritableHostPaths(wl kube.WorkloadInfo) bool {
+	if len(wl.HostPathMounts) == 0 {
+		return false
+	}
+	roSet := make(map[string]bool, len(wl.ReadOnlyHostPaths))
+	for _, p := range wl.ReadOnlyHostPaths {
+		roSet[p] = true
+	}
+	for _, p := range wl.HostPathMounts {
+		if !roSet[p] {
+			return true
+		}
+	}
+	return false
+}
+
+// workloadTakeoverScore returns the base risk score for a WorkloadTakeover goal.
+// Privileged containers and hostPID/hostNetwork score highest (direct escape);
+// dangerous capabilities and hostPath mounts are slightly lower.
+func workloadTakeoverScore(wl kube.WorkloadInfo) float64 {
+	if len(wl.PrivilegedContainers) > 0 {
+		return 9.0
+	}
+	if wl.HostPID || wl.HostNetwork || wl.HostIPC {
+		return 8.5
+	}
+	if len(wl.DangerousCapabilities) > 0 {
+		return 8.0
+	}
+	// hostPath mount — writable is high-risk, read-only is lower
+	if hasWritableHostPaths(wl) {
+		return 7.5
+	}
+	return 5.0 // read-only hostPath only
+}
+
 // workloadTakeoverReason builds a short summary of why a workload qualifies as
 // a WorkloadTakeover target.
 func workloadTakeoverReason(wl kube.WorkloadInfo) string {
@@ -207,6 +270,15 @@ func workloadTakeoverReason(wl kube.WorkloadInfo) string {
 	}
 	if wl.HostNetwork {
 		parts = append(parts, "hostNetwork=true")
+	}
+	if wl.HostIPC {
+		parts = append(parts, "hostIPC=true")
+	}
+	if len(wl.DangerousCapabilities) > 0 {
+		parts = append(parts, fmt.Sprintf("dangerous caps: [%s]", strings.Join(wl.DangerousCapabilities, ", ")))
+	}
+	if len(wl.HostPathMounts) > 0 {
+		parts = append(parts, fmt.Sprintf("hostPath mounts: [%s]", strings.Join(wl.HostPathMounts, ", ")))
 	}
 	return strings.Join(parts, "; ")
 }

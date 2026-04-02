@@ -13,6 +13,9 @@ var sensitiveEnvPatterns = []string{
 	"password", "passwd", "pwd", "secret", "token", "api_key", "apikey",
 	"apitoken", "access_key", "secret_key", "aws_access", "aws_secret",
 	"private_key", "auth_token", "bearer", "credential", "client_secret",
+	"database_url", "jdbc_url", "mongo_uri", "redis_url", "connection_string",
+	"ssh_private", "github_token", "slack_token", "slack_webhook",
+	"encryption_key", "signing_key", "master_key",
 }
 
 // collectWorkloads gathers Deployments, DaemonSets, StatefulSets, Jobs, and CronJobs.
@@ -89,16 +92,34 @@ func collectPods(ctx context.Context, c *Client, ns string, log *zap.Logger) ([]
 	pods := make([]PodInfo, 0, len(list.Items))
 	for _, p := range list.Items {
 		pi := PodInfo{
-			Name:           p.Name,
-			Namespace:      ns,
-			Node:           p.Spec.NodeName,
-			ServiceAccount: p.Spec.ServiceAccountName,
-			Phase:          string(p.Status.Phase),
-			HostPID:        p.Spec.HostPID,
-			HostNetwork:    p.Spec.HostNetwork,
-			HostIPC:        p.Spec.HostIPC,
-			Labels:         redactLabels(p.Labels),
+			Name:             p.Name,
+			Namespace:        ns,
+			Node:             p.Spec.NodeName,
+			ServiceAccount:   p.Spec.ServiceAccountName,
+			Phase:            string(p.Status.Phase),
+			HostPID:          p.Spec.HostPID,
+			HostNetwork:      p.Spec.HostNetwork,
+			HostIPC:          p.Spec.HostIPC,
+			Labels:           redactLabels(p.Labels),
 			AutomountSAToken: p.Spec.AutomountServiceAccountToken,
+		}
+
+		// Resolve controlling workload from owner references.
+		// ReplicaSet pods strip the RS hash to recover the Deployment name.
+		for _, ref := range p.OwnerReferences {
+			if ref.Controller != nil && !*ref.Controller {
+				continue
+			}
+			kind, name := ref.Kind, ref.Name
+			if kind == "ReplicaSet" {
+				kind = "Deployment"
+				if idx := lastNthIndex(name, '-', 2); idx > 0 {
+					name = name[:idx]
+				}
+			}
+			pi.OwnerKind = kind
+			pi.OwnerName = name
+			break
 		}
 
 		// Container security contexts.
@@ -144,11 +165,23 @@ func collectPods(ctx context.Context, c *Client, ns string, log *zap.Logger) ([]
 		}
 
 		// Volumes (metadata only).
+		// Build a set of volume names mounted read-only in all containers.
+		roVolumes := make(map[string]bool)
+		for _, ctr := range append(p.Spec.InitContainers, p.Spec.Containers...) {
+			for _, vm := range ctr.VolumeMounts {
+				if vm.ReadOnly {
+					roVolumes[vm.Name] = true
+				}
+			}
+		}
 		for _, v := range p.Spec.Volumes {
 			vr := extractVolumeRef(v)
 			pi.Volumes = append(pi.Volumes, vr)
 			if vr.SourceKind == "HostPath" {
 				pi.HostPathMounts = append(pi.HostPathMounts, vr.HostPath)
+				if roVolumes[v.Name] {
+					pi.ReadOnlyHostPaths = append(pi.ReadOnlyHostPaths, vr.HostPath)
+				}
 			}
 		}
 
@@ -189,6 +222,12 @@ func collectSecretsMeta(ctx context.Context, c *Client, ns string, captureValues
 			Namespace: ns,
 			Type:      string(s.Type),
 			Labels:    redactLabels(s.Labels),
+		}
+		// For SA token secrets, capture the owning SA name from the annotation.
+		if s.Type == corev1.SecretTypeServiceAccountToken {
+			if saName, ok := s.Annotations["kubernetes.io/service-account.name"]; ok {
+				sm.SAName = saName
+			}
 		}
 		for k := range s.Data {
 			sm.DataKeys = append(sm.DataKeys, k)
@@ -335,11 +374,23 @@ func podSpecToWorkloadInfo(kind, name, ns string, labels map[string]string, repl
 		}
 	}
 
+	// Build a set of volume names mounted read-only in all containers.
+	roVols := make(map[string]bool)
+	for _, ctr := range append(spec.InitContainers, spec.Containers...) {
+		for _, vm := range ctr.VolumeMounts {
+			if vm.ReadOnly {
+				roVols[vm.Name] = true
+			}
+		}
+	}
 	for _, v := range spec.Volumes {
 		vr := extractVolumeRef(v)
 		wi.Volumes = append(wi.Volumes, vr)
 		if vr.SourceKind == "HostPath" {
 			wi.HostPathMounts = append(wi.HostPathMounts, vr.HostPath)
+			if roVols[v.Name] {
+				wi.ReadOnlyHostPaths = append(wi.ReadOnlyHostPaths, vr.HostPath)
+			}
 		}
 	}
 
@@ -380,4 +431,18 @@ func extractVolumeRef(v corev1.Volume) VolumeRef {
 		vr.SourceKind = "Other"
 	}
 	return vr
+}
+
+// lastNthIndex returns the index of the nth-from-last occurrence of sep in s,
+// or -1 if there are fewer than n occurrences. Used to strip ReplicaSet hash suffixes.
+func lastNthIndex(s string, sep byte, n int) int {
+	idx := len(s)
+	for i := 0; i < n; i++ {
+		found := strings.LastIndexByte(s[:idx], sep)
+		if found < 0 {
+			return -1
+		}
+		idx = found
+	}
+	return idx
 }

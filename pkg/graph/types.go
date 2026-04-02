@@ -19,6 +19,8 @@ const (
 	KindNode                NodeKind = "Node"
 	KindWebhook             NodeKind = "Webhook"
 	KindCRD                 NodeKind = "CRD"
+	// KindCloudIdentity represents a cloud IAM identity (AWS IRSA role, GCP WI, Azure WI).
+	KindCloudIdentity NodeKind = "CloudIdentity"
 )
 
 // EdgeKind enumerates directed edge relationship types.
@@ -31,6 +33,7 @@ const (
 	EdgeCanPatch       EdgeKind = "can_patch"
 	EdgeCanDelete      EdgeKind = "can_delete"
 	EdgeCanExec        EdgeKind = "can_exec"
+	EdgeCanPortForward EdgeKind = "can_portforward"
 	EdgeCanImpersonate EdgeKind = "can_impersonate"
 	// EdgeCanEscalate — can create/update roles with permissions the identity doesn't hold.
 	EdgeCanEscalate EdgeKind = "can_escalate"
@@ -38,6 +41,10 @@ const (
 	EdgeCanBind    EdgeKind = "can_bind"
 	EdgeMounts     EdgeKind = "mounts"
 	EdgeRunsAs     EdgeKind = "runs_as"
+	// EdgeRunsOn — pod is scheduled on this node.
+	// For pods with dangerous security configs (privileged, hostPID, hostPath, etc.)
+	// this edge represents a container-escape path to the host.
+	EdgeRunsOn EdgeKind = "runs_on"
 	EdgeBoundTo    EdgeKind = "bound_to"
 	EdgeGrants     EdgeKind = "grants"
 	// EdgeGrantedBy is the reverse of EdgeGrants: SA → binding that grants it permissions.
@@ -45,6 +52,12 @@ const (
 	EdgeGrantedBy EdgeKind = "granted_by"
 	EdgeMemberOf  EdgeKind = "member_of"
 	EdgeInferred  EdgeKind = "inferred"
+	// EdgeAuthenticatesAs — SA token secret → SA it authenticates as.
+	// Enables paths: pod → [mounts] → secret → [authenticates_as] → SA → ...
+	EdgeAuthenticatesAs EdgeKind = "authenticates_as"
+	// EdgeAssumesCloudRole — SA → cloud IAM identity (IRSA, Azure WI, GKE WI).
+	// Enables paths: pod → [runs_as] → SA → [assumes_cloud_role] → cloud:aws:arn:...
+	EdgeAssumesCloudRole EdgeKind = "assumes_cloud_role"
 )
 
 // Node represents a vertex in the permission graph.
@@ -73,6 +86,9 @@ type Edge struct {
 type Graph struct {
 	Nodes []Node `json:"nodes"`
 	Edges []Edge `json:"edges"`
+
+	// idx is built post-construction by BuildIndex for O(1) lookups during traversal.
+	idx *graphIndex `json:"-"`
 }
 
 // nodeMap is an internal structure for deduplication and lookups.
