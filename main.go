@@ -92,7 +92,7 @@ func run(cfg *Config) error {
 	}
 
 	timeout := time.Duration(cfg.TimeoutSecs) * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), timeout*100) // outer ctx
+	ctx, cancel := context.WithTimeout(context.Background(), timeout*10) // outer ctx: 10× per-request timeout
 	defer cancel()
 
 	// ── 1. Build Kubernetes client ─────────────────────────────────────────────
@@ -102,6 +102,7 @@ func run(cfg *Config) error {
 	}
 
 	// ── 2. Determine namespaces to enumerate ──────────────────────────────────
+	log.Info("resolving target namespaces")
 	namespaces, err := resolveNamespaces(ctx, cfg, client, log)
 	if err != nil {
 		return err
@@ -193,7 +194,7 @@ func runReviewer(cfg *Config) error {
 	}
 
 	timeout := time.Duration(cfg.TimeoutSecs) * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), timeout*100)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout*10)
 	defer cancel()
 
 	// ── 1. Build Kubernetes client ─────────────────────────────────────────────
@@ -297,20 +298,29 @@ func resolveNamespaces(ctx context.Context, cfg *Config, client *kube.Client, lo
 	if cfg.Namespace != "" {
 		return []string{cfg.Namespace}, nil
 	}
+
+	// Detect current namespace from in-cluster token or kubeconfig.
+	currentNS := client.CurrentNamespace()
+	if currentNS == "" {
+		currentNS = "default"
+	}
+
 	if cfg.AllNamespaces {
-		nsList, err := client.ListNamespaces(ctx)
+		// Use a short timeout — if the SA can't list namespaces, fail fast
+		// and fall back to the current namespace rather than hanging.
+		nsCtx, nsCancel := context.WithTimeout(ctx, 10*time.Second)
+		defer nsCancel()
+
+		nsList, err := client.ListNamespaces(nsCtx)
 		if err != nil {
-			log.Warn("cannot list all namespaces, falling back to 'default'", zap.Error(err))
-			return []string{"default"}, nil
+			log.Warn("cannot list namespaces, falling back to current namespace",
+				zap.String("namespace", currentNS), zap.Error(err))
+			return []string{currentNS}, nil
 		}
 		return nsList, nil
 	}
-	// Detect current namespace from in-cluster token.
-	ns := client.CurrentNamespace()
-	if ns == "" {
-		ns = "default"
-	}
-	return []string{ns}, nil
+
+	return []string{currentNS}, nil
 }
 
 func buildLogger(level string) *zap.Logger {

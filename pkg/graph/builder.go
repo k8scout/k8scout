@@ -97,45 +97,117 @@ func Build(result *kube.EnumerationResult, log *zap.Logger) *Graph {
 	edges = append(edges, objEdges...)
 
 	// ── Pass 5: foothold anchoring and concrete lateral-movement edges ────────
-	// These passes run after buildObjectGraph so all pod nodes exist in nm.
 	//
-	// 5a. Mark the current pod as the execution foothold when running in-cluster.
-	//     This drives "YOU ARE HERE" visualization and prioritizes this pod as the
-	//     first BFS start node in attack path generation.
+	// 5a. Synthesize the foothold subgraph when running in-cluster.
+	//     Even when the SA lacks list-pods permission, we know our own pod name
+	//     (HOSTNAME), SA (TokenReview), and node (downward API). Create these
+	//     nodes if they don't already exist so attack paths always start from
+	//     a concrete foothold: pod → SA → identity → SSRR capabilities.
 	if result.Identity.InCluster && result.Identity.PodName != "" {
 		podID := "pod:" + result.Identity.Namespace + ":" + result.Identity.PodName
-		if n, ok := nm[podID]; ok {
-			if n.Metadata == nil {
-				n.Metadata = map[string]string{}
+
+		// Create or update the foothold pod node.
+		if _, ok := nm[podID]; !ok {
+			nm[podID] = &Node{
+				ID:        podID,
+				Kind:      KindPod,
+				Name:      result.Identity.PodName,
+				Namespace: result.Identity.Namespace,
+				Metadata:  map[string]string{},
 			}
-			n.Metadata["is_foothold"] = "true"
-			if result.Identity.OwnerWorkload != "" {
-				n.Metadata["owner_workload"] = result.Identity.OwnerWorkload
-				n.Metadata["owner_workload_kind"] = result.Identity.OwnerWorkloadKind
-			}
-			// Elevate the risk score so the foothold node is visually prominent.
-			if n.RiskScore < 5.0 {
-				n.RiskScore = 5.0
-			}
-			log.Info("foothold node anchored", zap.String("pod", podID))
+			log.Info("synthesized foothold pod node (SA cannot list pods)", zap.String("pod", podID))
 		}
-		// Also mark the node (Linux host) we're running on, if known.
+		n := nm[podID]
+		if n.Metadata == nil {
+			n.Metadata = map[string]string{}
+		}
+		n.Metadata["is_foothold"] = "true"
+		if result.Identity.OwnerWorkload != "" {
+			n.Metadata["owner_workload"] = result.Identity.OwnerWorkload
+			n.Metadata["owner_workload_kind"] = result.Identity.OwnerWorkloadKind
+		}
+		if n.RiskScore < 5.0 {
+			n.RiskScore = 5.0
+		}
+		log.Info("foothold node anchored", zap.String("pod", podID))
+
+		// Synthesize the SA node and pod→SA edge if the SA is known.
+		if result.Identity.SAName != "" {
+			saID := "sa:" + result.Identity.Namespace + ":" + result.Identity.SAName
+			if _, ok := nm[saID]; !ok {
+				nm[saID] = &Node{
+					ID:        saID,
+					Kind:      KindServiceAccount,
+					Name:      result.Identity.SAName,
+					Namespace: result.Identity.Namespace,
+					Metadata:  map[string]string{},
+				}
+				log.Info("synthesized SA node for foothold", zap.String("sa", saID))
+			}
+			// pod → runs_as → SA (if not already present).
+			if !hasEdge(edges, podID, saID, EdgeRunsAs) {
+				edges = append(edges, Edge{
+					From:   podID,
+					To:     saID,
+					Kind:   EdgeRunsAs,
+					Reason: "foothold pod runs as this SA",
+				})
+			}
+			// SA → identity (so paths can flow: pod → SA → identity → SSRR targets).
+			if !hasEdge(edges, saID, identityID, EdgeRunsAs) {
+				edges = append(edges, Edge{
+					From:   saID,
+					To:     identityID,
+					Kind:   EdgeRunsAs,
+					Reason: "SA authenticates as this API identity",
+				})
+			}
+		}
+
+		// Synthesize the host node if known (informational — no runs_on edge
+		// unless the pod is actually escapable; runs_on implies container escape).
 		if result.Identity.NodeName != "" {
 			nodeID := "node:" + result.Identity.NodeName
-			if n, ok := nm[nodeID]; ok {
-				if n.Metadata == nil {
-					n.Metadata = map[string]string{}
+			if _, ok := nm[nodeID]; !ok {
+				nm[nodeID] = &Node{
+					ID:       nodeID,
+					Kind:     KindNode,
+					Name:     result.Identity.NodeName,
+					Metadata: map[string]string{},
 				}
-				n.Metadata["is_foothold_node"] = "true"
+				log.Info("synthesized node for foothold host", zap.String("node", nodeID))
+			}
+			nn := nm[nodeID]
+			if nn.Metadata == nil {
+				nn.Metadata = map[string]string{}
+			}
+			nn.Metadata["is_foothold_node"] = "true"
+		}
+	}
+
+	// 5b. Bridge SA → identity for ALL modes (in-cluster and out-of-cluster).
+	//     This ensures paths can flow: SA → identity → SSRR/SSAR targets.
+	//     Weight is 0.1 (EdgeRunsAs) — a zero-effort transition since the SA IS the identity.
+	//     Replaces the old EdgeInferred shortcut (weight 2.0) that hid the real chain.
+	if result.Identity.SAName != "" {
+		saID := saNodeID(result.Identity.Namespace, result.Identity.SAName)
+		if nm[saID] != nil {
+			if !hasEdge(edges, saID, identityID, EdgeRunsAs) {
+				edges = append(edges, Edge{
+					From:   saID,
+					To:     identityID,
+					Kind:   EdgeRunsAs,
+					Reason: "SA authenticates as this API identity",
+				})
 			}
 		}
 	}
 
-	// 5b. Emit concrete per-pod exec and portforward edges from SSAR checks.
+	// 5c. Emit concrete per-pod exec and portforward edges from SSAR checks.
 	edges = append(edges, buildConcreteReachabilityEdges(nm, result, identityID)...)
 
-	// 5c. Emit concrete identity → resource edges for all SSAR-confirmed permissions.
-	//     This bridges the abstract/concrete gap (B1): the identity gets edges to
+	// 5d. Emit concrete identity → resource edges for all SSAR-confirmed permissions.
+	//     This bridges the abstract/concrete gap: the identity gets edges to
 	//     actual workloads, secrets, and SAs — not just abstract resource type nodes.
 	edges = append(edges, buildConcreteIdentityEdges(nm, result, identityID)...)
 
@@ -515,12 +587,19 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 			}
 		}
 		for _, vol := range pod.Volumes {
-			if vol.SourceKind == "Secret" && vol.SourceName != "" {
+			switch {
+			case vol.SourceKind == "Secret" && vol.SourceName != "":
 				secID := "secret:" + pod.Namespace + ":" + vol.SourceName
 				if _, ok := nm[secID]; !ok {
 					nm[secID] = &Node{ID: secID, Kind: KindSecret, Name: vol.SourceName, Namespace: pod.Namespace}
 				}
 				edges = append(edges, Edge{From: podID, To: secID, Kind: EdgeMounts, Reason: "pod volume"})
+			case vol.SourceKind == "ConfigMap" && vol.SourceName != "":
+				cmID := "configmap:" + pod.Namespace + ":" + vol.SourceName
+				if _, ok := nm[cmID]; !ok {
+					nm[cmID] = &Node{ID: cmID, Kind: KindConfigMap, Name: vol.SourceName, Namespace: pod.Namespace}
+				}
+				edges = append(edges, Edge{From: podID, To: cmID, Kind: EdgeMounts, Reason: "pod volume"})
 			}
 		}
 	}
@@ -744,6 +823,21 @@ func buildRoleCapabilityEdges(nm nodeMap, result *kube.EnumerationResult) []Edge
 				}
 			}
 
+			// configmaps: get — may contain leaked kubeconfigs or credentials
+			if allows(rule, "get", "configmaps") || allows(rule, "list", "configmaps") {
+				ek := EdgeCanList
+				if allows(rule, "get", "configmaps") {
+					ek = EdgeCanGet
+				}
+				for _, cm := range result.ClusterObjects.ConfigMapsMeta {
+					if !clusterScoped && cm.Namespace != roleNS {
+						continue
+					}
+					cmID := "configmap:" + cm.Namespace + ":" + cm.Name
+					addE(roleID, cmID, ek, roleID+" grants configmap access")
+				}
+			}
+
 			// pods/exec: create — enables lateral movement into pods
 			if allows(rule, "create", "pods/exec") {
 				for _, pod := range result.ClusterObjects.Pods {
@@ -752,6 +846,25 @@ func buildRoleCapabilityEdges(nm nodeMap, result *kube.EnumerationResult) []Edge
 					}
 					addE(roleID, "pod:"+pod.Namespace+":"+pod.Name, EdgeCanExec,
 						roleID+" grants pods/exec")
+				}
+			}
+
+			// create pods (bare) — attacker can create pods running as any SA in
+			// the allowed namespace(s), and schedule them on any node. This is a
+			// critical escalation vector: create privileged pod → SA takeover + node escape.
+			if allows(rule, "create", "pods") && !allows(rule, "create", "pods/exec") {
+				// → SA edges: can launch pod as any SA in scope
+				for _, sa := range result.ClusterObjects.ServiceAccounts {
+					if !clusterScoped && sa.Namespace != roleNS {
+						continue
+					}
+					addE(roleID, saNodeID(sa.Namespace, sa.Name), EdgeCanCreate,
+						roleID+" grants create pods — can run pod as this SA")
+				}
+				// → Node edges: can schedule on any node
+				for _, n := range result.ClusterObjects.Nodes {
+					addE(roleID, "node:"+n.Name, EdgeCanCreate,
+						roleID+" grants create pods — can schedule on node")
 				}
 			}
 
@@ -810,10 +923,15 @@ func buildRoleCapabilityEdges(nm nodeMap, result *kube.EnumerationResult) []Edge
 				}
 			}
 
-			// clusterrolebinding create/patch → can self-escalate to cluster-admin
+			// clusterrolebinding / rolebinding create/patch → can self-escalate to cluster-admin
+			// A CRB grants cluster-wide, a RB can bind a ClusterRole within a namespace.
 			if allows(rule, "create", "clusterrolebindings") || allows(rule, "patch", "clusterrolebindings") {
 				addE(roleID, "clusterrole:cluster-admin", EdgeCanCreate,
 					roleID+" can create/patch CRBs — cluster-admin escalation path")
+			}
+			if allows(rule, "create", "rolebindings") || allows(rule, "patch", "rolebindings") {
+				addE(roleID, "clusterrole:cluster-admin", EdgeCanBind,
+					roleID+" can create/patch RoleBindings — can bind ClusterRole within namespace")
 			}
 
 			// mutating webhook patch → can inject into all future workloads
@@ -824,6 +942,38 @@ func buildRoleCapabilityEdges(nm nodeMap, result *kube.EnumerationResult) []Edge
 							roleID+" can patch mutating webhook "+wh.Name)
 					}
 				}
+			}
+
+			// impersonate serviceaccounts → identity takeover of any SA in scope
+			if allows(rule, "impersonate", "serviceaccounts") || allows(rule, "impersonate", "users") {
+				for _, sa := range result.ClusterObjects.ServiceAccounts {
+					if !clusterScoped && sa.Namespace != roleNS {
+						continue
+					}
+					addE(roleID, saNodeID(sa.Namespace, sa.Name), EdgeCanImpersonate,
+						roleID+" grants impersonation of SA "+sa.Namespace+"/"+sa.Name)
+				}
+			}
+
+			// create serviceaccounts/token → mint tokens for any SA, equivalent to identity takeover
+			if allows(rule, "create", "serviceaccounts/token") {
+				for _, sa := range result.ClusterObjects.ServiceAccounts {
+					if !clusterScoped && sa.Namespace != roleNS {
+						continue
+					}
+					addE(roleID, saNodeID(sa.Namespace, sa.Name), EdgeCanCreate,
+						roleID+" grants create SA tokens — identity takeover of "+sa.Namespace+"/"+sa.Name)
+				}
+			}
+
+			// escalate / bind clusterroles → can self-assign cluster-admin
+			if allows(rule, "escalate", "clusterroles") || allows(rule, "bind", "clusterroles") {
+				addE(roleID, "clusterrole:cluster-admin", EdgeCanEscalate,
+					roleID+" grants escalate/bind on clusterroles — cluster-admin path")
+			}
+			if allows(rule, "escalate", "roles") || allows(rule, "bind", "roles") {
+				addE(roleID, "clusterrole:cluster-admin", EdgeCanEscalate,
+					roleID+" grants escalate/bind on roles — privilege escalation path")
 			}
 		}
 	}
@@ -973,11 +1123,10 @@ func buildConcreteReachabilityEdges(nm nodeMap, result *kube.EnumerationResult, 
 		if !seen[key] {
 			seen[key] = true
 			edges = append(edges, Edge{
-				From:     from,
-				To:       to,
-				Kind:     kind,
-				Reason:   reason,
-				Inferred: true,
+				From:   from,
+				To:     to,
+				Kind:   kind,
+				Reason: reason,
 			})
 		}
 	}
@@ -990,11 +1139,11 @@ func buildConcreteReachabilityEdges(nm nodeMap, result *kube.EnumerationResult, 
 		for _, src := range sources {
 			if execNS[pod.Namespace] {
 				addEdge(src, podID, EdgeCanExec,
-					fmt.Sprintf("inferred: pods/exec create allowed in namespace %q", pod.Namespace))
+					fmt.Sprintf("SSAR confirmed: pods/exec create in namespace %q", pod.Namespace))
 			}
 			if pfNS[pod.Namespace] {
 				addEdge(src, podID, EdgeCanPortForward,
-					fmt.Sprintf("inferred: pods/portforward create allowed in namespace %q", pod.Namespace))
+					fmt.Sprintf("SSAR confirmed: pods/portforward create in namespace %q", pod.Namespace))
 			}
 		}
 	}
@@ -1032,11 +1181,10 @@ func buildConcreteIdentityEdges(nm nodeMap, result *kube.EnumerationResult, iden
 		}
 		seen[key] = true
 		edges = append(edges, Edge{
-			From:     from,
-			To:       to,
-			Kind:     kind,
-			Reason:   reason,
-			Inferred: true,
+			From:   from,
+			To:     to,
+			Kind:   kind,
+			Reason: reason,
 		})
 	}
 
@@ -1144,4 +1292,14 @@ func resolveRoleRefID(ref kube.RoleRef, ns string) string {
 		return "clusterrole:" + ref.Name
 	}
 	return "role:" + ns + ":" + ref.Name
+}
+
+// hasEdge returns true if edges already contains an edge from→to with the given kind.
+func hasEdge(edges []Edge, from, to string, kind EdgeKind) bool {
+	for i := range edges {
+		if edges[i].From == from && edges[i].To == to && edges[i].Kind == kind {
+			return true
+		}
+	}
+	return false
 }

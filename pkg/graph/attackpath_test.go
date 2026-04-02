@@ -327,6 +327,158 @@ func TestAttackPath_QueueBound(t *testing.T) {
 	}
 }
 
+// TestAttackPath_RoleImpersonationChain validates that a role granting impersonation
+// creates a traversable path: SA → CRB → role → [can_impersonate] → target-SA → CRB → cluster-admin
+func TestAttackPath_RoleImpersonationChain(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{
+			{ID: "pod:default:foothold", Kind: KindPod, Name: "foothold"},
+			{ID: "sa:default:weak-sa", Kind: KindServiceAccount, Name: "weak-sa"},
+			{ID: "crb:impersonator-binding", Kind: KindClusterRoleBinding, Name: "impersonator-binding"},
+			{ID: "clusterrole:impersonator", Kind: KindClusterRole, Name: "impersonator"},
+			{ID: "sa:kube-system:admin-sa", Kind: KindServiceAccount, Name: "admin-sa"},
+			{ID: "crb:admin-binding", Kind: KindClusterRoleBinding, Name: "admin-binding"},
+			{ID: "clusterrole:cluster-admin", Kind: KindClusterRole, Name: "cluster-admin"},
+		},
+		Edges: []Edge{
+			{From: "pod:default:foothold", To: "sa:default:weak-sa", Kind: EdgeRunsAs},
+			{From: "sa:default:weak-sa", To: "crb:impersonator-binding", Kind: EdgeGrantedBy},
+			{From: "crb:impersonator-binding", To: "clusterrole:impersonator", Kind: EdgeBoundTo},
+			// Role grants impersonation of admin-sa
+			{From: "clusterrole:impersonator", To: "sa:kube-system:admin-sa", Kind: EdgeCanImpersonate},
+			// admin-sa has cluster-admin
+			{From: "sa:kube-system:admin-sa", To: "crb:admin-binding", Kind: EdgeGrantedBy},
+			{From: "crb:admin-binding", To: "clusterrole:cluster-admin", Kind: EdgeBoundTo},
+		},
+	}
+	g.BuildIndex()
+
+	paths := g.FindWeightedPaths("pod:default:foothold", "clusterrole:cluster-admin", 8, 10)
+	if len(paths) == 0 {
+		t.Fatal("expected path: pod → SA → CRB → role → impersonate → SA → CRB → cluster-admin")
+	}
+	p := paths[0]
+	if len(p.Path) != 7 {
+		t.Fatalf("expected 7-step path, got %d: %v", len(p.Path), pathNodeIDs(p.Path))
+	}
+	// Weight: runs_as(0.1) + granted_by(0.1) + bound_to(0.1) + can_impersonate(1.5) + granted_by(0.1) + bound_to(0.1) = 2.0
+	if p.Weight < 1.99 || p.Weight > 2.01 {
+		t.Fatalf("expected weight ~2.0, got %f", p.Weight)
+	}
+}
+
+// TestAttackPath_SATokenCreateChain validates that a role granting create serviceaccounts/token
+// creates a traversable path through SA token creation.
+func TestAttackPath_SATokenCreateChain(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{
+			{ID: "pod:default:foothold", Kind: KindPod, Name: "foothold"},
+			{ID: "sa:default:my-sa", Kind: KindServiceAccount, Name: "my-sa"},
+			{ID: "rb:token-creator-binding", Kind: KindRoleBinding, Name: "token-creator-binding"},
+			{ID: "role:default:token-creator", Kind: KindRole, Name: "token-creator"},
+			{ID: "sa:kube-system:admin-sa", Kind: KindServiceAccount, Name: "admin-sa"},
+			{ID: "crb:admin-binding", Kind: KindClusterRoleBinding, Name: "admin-binding"},
+			{ID: "clusterrole:cluster-admin", Kind: KindClusterRole, Name: "cluster-admin"},
+		},
+		Edges: []Edge{
+			{From: "pod:default:foothold", To: "sa:default:my-sa", Kind: EdgeRunsAs},
+			{From: "sa:default:my-sa", To: "rb:token-creator-binding", Kind: EdgeGrantedBy},
+			{From: "rb:token-creator-binding", To: "role:default:token-creator", Kind: EdgeBoundTo},
+			// Role grants create SA tokens → can mint tokens for admin-sa
+			{From: "role:default:token-creator", To: "sa:kube-system:admin-sa", Kind: EdgeCanCreate,
+				Reason: "create serviceaccounts/token"},
+			{From: "sa:kube-system:admin-sa", To: "crb:admin-binding", Kind: EdgeGrantedBy},
+			{From: "crb:admin-binding", To: "clusterrole:cluster-admin", Kind: EdgeBoundTo},
+		},
+	}
+	g.BuildIndex()
+
+	paths := g.FindWeightedPaths("pod:default:foothold", "clusterrole:cluster-admin", 8, 10)
+	if len(paths) == 0 {
+		t.Fatal("expected path through SA token creation")
+	}
+	p := paths[0]
+	if len(p.Path) != 7 {
+		t.Fatalf("expected 7-step path, got %d: %v", len(p.Path), pathNodeIDs(p.Path))
+	}
+}
+
+// TestAttackPath_FullFootholdChain validates the complete realistic chain from
+// a compromised pod foothold through SSRR-based permissions to cluster-admin.
+// This is the primary offensive workflow: RCE in pod → SA → identity → capabilities → target.
+func TestAttackPath_FullFootholdChain(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{
+			{ID: "pod:default:foothold", Kind: KindPod, Name: "foothold",
+				Metadata: map[string]string{"is_foothold": "true"}},
+			{ID: "sa:default:app-sa", Kind: KindServiceAccount, Name: "app-sa"},
+			{ID: "identity:system:serviceaccount:default:app-sa", Kind: KindIdentity, Name: "system:serviceaccount:default:app-sa"},
+			{ID: "workload:kube-system:privileged-deploy", Kind: KindWorkload, Name: "privileged-deploy"},
+			{ID: "sa:kube-system:admin-sa", Kind: KindServiceAccount, Name: "admin-sa"},
+			{ID: "crb:admin-binding", Kind: KindClusterRoleBinding, Name: "admin-binding"},
+			{ID: "clusterrole:cluster-admin", Kind: KindClusterRole, Name: "cluster-admin"},
+		},
+		Edges: []Edge{
+			// pod → SA → identity (foothold synthesis)
+			{From: "pod:default:foothold", To: "sa:default:app-sa", Kind: EdgeRunsAs},
+			{From: "sa:default:app-sa", To: "identity:system:serviceaccount:default:app-sa", Kind: EdgeRunsAs},
+			// identity can patch workloads (SSAR confirmed)
+			{From: "identity:system:serviceaccount:default:app-sa", To: "workload:kube-system:privileged-deploy", Kind: EdgeCanPatch},
+			// patched workload runs as admin SA
+			{From: "workload:kube-system:privileged-deploy", To: "sa:kube-system:admin-sa", Kind: EdgeRunsAs},
+			// admin SA has cluster-admin
+			{From: "sa:kube-system:admin-sa", To: "crb:admin-binding", Kind: EdgeGrantedBy},
+			{From: "crb:admin-binding", To: "clusterrole:cluster-admin", Kind: EdgeBoundTo},
+		},
+	}
+	g.BuildIndex()
+
+	paths := g.FindWeightedPaths("pod:default:foothold", "clusterrole:cluster-admin", 8, 10)
+	if len(paths) == 0 {
+		t.Fatal("expected full foothold chain: pod → SA → identity → patch workload → SA → CRB → cluster-admin")
+	}
+	p := paths[0]
+	want := []string{
+		"pod:default:foothold",
+		"sa:default:app-sa",
+		"identity:system:serviceaccount:default:app-sa",
+		"workload:kube-system:privileged-deploy",
+		"sa:kube-system:admin-sa",
+		"crb:admin-binding",
+		"clusterrole:cluster-admin",
+	}
+	got := pathNodeIDs(p.Path)
+	if !equalSlices(got, want) {
+		t.Fatalf("path mismatch:\n  want: %v\n  got:  %v", want, got)
+	}
+	// Weight: runs_as(0.1) + runs_as(0.1) + can_patch(2.0) + runs_as(0.1) + granted_by(0.1) + bound_to(0.1) = 2.5
+	if p.Weight < 2.49 || p.Weight > 2.51 {
+		t.Fatalf("expected weight ~2.5, got %f", p.Weight)
+	}
+}
+
+// TestAttackPath_WeakFoothold verifies that when a pod has a weak SA with minimal
+// permissions, the system correctly shows limited movement only.
+func TestAttackPath_WeakFoothold(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{
+			{ID: "pod:default:weak-pod", Kind: KindPod, Name: "weak-pod"},
+			{ID: "sa:default:default", Kind: KindServiceAccount, Name: "default"},
+			{ID: "clusterrole:cluster-admin", Kind: KindClusterRole, Name: "cluster-admin"},
+		},
+		Edges: []Edge{
+			{From: "pod:default:weak-pod", To: "sa:default:default", Kind: EdgeRunsAs},
+			// default SA has no bindings, no capabilities — dead end
+		},
+	}
+	g.BuildIndex()
+
+	paths := g.FindWeightedPaths("pod:default:weak-pod", "clusterrole:cluster-admin", 8, 10)
+	if len(paths) != 0 {
+		t.Fatalf("expected no paths from weak foothold, got %d", len(paths))
+	}
+}
+
 // TestPathShape_FullChainWithNewEdges validates that new edge kinds produce
 // correct PathShape classification.
 func TestPathShape_FullChainWithNewEdges(t *testing.T) {

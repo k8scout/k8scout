@@ -2019,44 +2019,14 @@ func emitInferredEdges(g *Graph, r *kube.EnumerationResult) {
 
 	identityID := "identity:" + r.Identity.Username
 
-	// Bridge the current pod foothold to the identity node so BFS starting from
-	// the pod can traverse inferred edges (which originate from identityID).
-	// Without this bridge the path "pod → inferred → cluster-admin" is invisible
-	// to FindPaths even though the pod IS the identity.
-	if r.Identity.InCluster && r.Identity.PodName != "" {
-		podID := "pod:" + r.Identity.Namespace + ":" + r.Identity.PodName
-		if g.nodeByID(podID) != nil && g.nodeByID(identityID) != nil {
-			g.Edges = append(g.Edges, Edge{
-				From:     podID,
-				To:       identityID,
-				Kind:     EdgeInferred,
-				Reason:   "inferred: current pod is this identity — inherits all inferred permission edges",
-				Inferred: true,
-			})
-		}
-	}
-
-	// Bridge SA node → identity node so BFS paths starting from the SA can reach
-	// inferred targets (cluster-admin etc.) that originate from the identity node.
-	// Without this, "sa:ns:name → [granted_by] → crb → cluster-admin" is the only
-	// RBAC chain available; "sa → [inferred] → cluster-admin" would be invisible.
-	if r.Identity.SAName != "" && r.Identity.Namespace != "" {
-		saID := "sa:" + r.Identity.Namespace + ":" + r.Identity.SAName
-		if g.nodeByID(saID) != nil && g.nodeByID(identityID) != nil {
-			g.Edges = append(g.Edges, Edge{
-				From:     saID,
-				To:       identityID,
-				Kind:     EdgeInferred,
-				Reason:   "inferred: SA is this identity — inherits all inferred permission edges",
-				Inferred: true,
-			})
-		}
-	}
-
-	// NOTE: Concrete identity → resource edges (patch workloads, get secrets,
-	// impersonate SAs) are now created by buildConcreteIdentityEdges in builder.go,
-	// replacing the shortcut hacks that previously lived here.
-	// Only true inferred escalations remain: create bindings → cluster-admin,
+	// NOTE: Pod→SA and SA→identity bridges are now created by Build() in builder.go
+	// using EdgeRunsAs (weight 0.1) — the realistic chain. The old EdgeInferred
+	// shortcuts (weight 2.0) that bypassed intermediate nodes have been removed.
+	//
+	// Concrete identity → resource edges (patch workloads, get secrets,
+	// impersonate SAs) are created by buildConcreteIdentityEdges in builder.go.
+	//
+	// Only true inferred escalations remain below: create bindings → cluster-admin,
 	// escalate/bind → cluster-admin, create pods → node scheduling.
 	for _, c := range r.Permissions.SSARChecks {
 		if !c.Allowed {
