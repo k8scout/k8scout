@@ -27,6 +27,15 @@ type IdentityInfo struct {
 	Namespace string              `json:"namespace,omitempty"`
 	SAName    string              `json:"sa_name,omitempty"`
 	Extra     map[string][]string `json:"extra,omitempty"`
+
+	// In-pod execution context — populated when k8scout runs inside a Kubernetes pod.
+	// These fields anchor foothold-first attack path generation to the specific pod
+	// and enable the "drop binary into a compromised pod and map outward" mode.
+	InCluster        bool   `json:"in_cluster,omitempty"`         // true when using in-cluster SA token
+	PodName          string `json:"pod_name,omitempty"`           // pod k8scout is running in
+	NodeName         string `json:"node_name,omitempty"`          // Kubernetes node hosting this pod
+	OwnerWorkload    string `json:"owner_workload,omitempty"`     // controlling workload name (Deployment, DaemonSet, etc.)
+	OwnerWorkloadKind string `json:"owner_workload_kind,omitempty"` // kind of the controlling workload
 }
 
 // PermissionsInfo holds SSRR results and SSAR spot-checks.
@@ -161,6 +170,7 @@ type WorkloadInfo struct {
 	HostNetwork           bool              `json:"host_network,omitempty"`
 	PrivilegedContainers  []string          `json:"privileged_containers,omitempty"`
 	HostPathMounts        []string          `json:"host_path_mounts,omitempty"`
+	ReadOnlyHostPaths     []string          `json:"read_only_host_paths,omitempty"`
 	AutomountSAToken      *bool             `json:"automount_sa_token,omitempty"`
 	ImageNames            []string          `json:"image_names,omitempty"`
 	// DangerousCapabilities lists container names that have one or more of
@@ -212,11 +222,17 @@ type PodInfo struct {
 	Node              string            `json:"node,omitempty"`
 	ServiceAccount    string            `json:"service_account,omitempty"`
 	Phase             string            `json:"phase,omitempty"`
+	// OwnerKind / OwnerName identify the controller that manages this pod
+	// (e.g., ReplicaSet, DaemonSet, StatefulSet, Job). For pods owned by a
+	// ReplicaSet the top-level workload name is stored (Deployment name).
+	OwnerKind         string            `json:"owner_kind,omitempty"`
+	OwnerName         string            `json:"owner_name,omitempty"`
 	HostPID           bool              `json:"host_pid,omitempty"`
 	HostNetwork       bool              `json:"host_network,omitempty"`
 	HostIPC           bool              `json:"host_ipc,omitempty"`
 	PrivilegedContainers []string       `json:"privileged_containers,omitempty"`
 	HostPathMounts    []string          `json:"host_path_mounts,omitempty"`
+	ReadOnlyHostPaths []string          `json:"read_only_host_paths,omitempty"`
 	Volumes           []VolumeRef       `json:"volumes,omitempty"`
 	AutomountSAToken  *bool             `json:"automount_sa_token,omitempty"`
 	ImageNames        []string          `json:"image_names,omitempty"`
@@ -237,6 +253,9 @@ type SecretMeta struct {
 	DataKeys []string `json:"data_keys,omitempty"`
 	// Values contains decoded secret data when GET access was confirmed during authorized assessment.
 	Values map[string]string `json:"values,omitempty"`
+	// SAName is the owning ServiceAccount name for kubernetes.io/service-account-token secrets.
+	// Populated from the kubernetes.io/service-account.name annotation.
+	SAName string `json:"sa_name,omitempty"`
 }
 
 // CMeta — ConfigMap metadata. When GET permission is confirmed, Data is populated.
