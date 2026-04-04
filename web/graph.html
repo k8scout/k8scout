@@ -458,15 +458,28 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
 .tb-btn.danger{border-color:rgba(255,71,87,.5);color:#ff4757;background:linear-gradient(135deg,rgba(255,71,87,.08),rgba(255,71,87,.04));}
 .tb-btn.danger:hover,.tb-btn.danger.active{background:linear-gradient(135deg,rgba(255,71,87,.14),rgba(255,71,87,.07));border-color:var(--crit);color:var(--crit);box-shadow:0 0 16px rgba(255,71,87,.2),0 2px 8px rgba(0,0,0,.4);transform:translateY(-1px);}
 
+/* ─── Attack Path Mini Graph ─── */
+.path-mini-graph-wrap{margin:16px 0 6px;border-top:1px solid rgba(169,227,75,.1);padding-top:14px;opacity:0;transform:translateY(10px);transition:opacity .45s ease,transform .45s ease;}
+.path-mini-graph-wrap.visible{opacity:1;transform:translateY(0);}
+.path-mini-graph-header{display:flex;align-items:center;gap:7px;padding:0 16px 10px;font-size:10px;font-weight:800;color:var(--path-glow);text-transform:uppercase;letter-spacing:.08em;flex-wrap:wrap;}
+.path-mini-graph-svg-wrap{overflow-x:auto;overflow-y:hidden;padding:4px 0 12px;background:rgba(0,0,0,.18);border-radius:8px;margin:0 12px;}
+.path-mini-graph-svg-wrap::-webkit-scrollbar{height:3px;}
+.path-mini-graph-svg-wrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px;}
+@keyframes miniDash{to{stroke-dashoffset:-20;}}
+@keyframes miniHalo{0%,100%{opacity:.15;}50%{opacity:.45;}}
+
 /* ─── Attack Chain Analyzer — AI section ─── */
 #god-ai-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 #god-ai-toggle{background:none;border:1px solid #a29bfe50;color:#a29bfe;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit;}
 #god-ai-toggle:hover,#god-ai-toggle.active{background:#140f2a;border-color:#a29bfe;color:#d8b4fe;}
 #god-ai-settings{display:none;align-items:center;gap:6px;flex-wrap:wrap;}
 #god-ai-settings.visible{display:flex;}
-#god-ai-key{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 9px;font-size:11px;width:210px;outline:none;font-family:'Cascadia Code','Fira Code',monospace;}
+#god-ai-provider{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:11px;outline:none;cursor:pointer;transition:border-color .2s;}
+#god-ai-provider:focus{border-color:#a29bfe;}
+#god-ai-key{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 9px;font-size:11px;width:210px;outline:none;font-family:var(--mono);transition:border-color .2s;}
 #god-ai-key:focus{border-color:#a29bfe;}
-#god-ai-model{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:11px;outline:none;cursor:pointer;}
+#god-ai-model{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:11px;outline:none;cursor:pointer;transition:border-color .2s;}
+#god-ai-model:focus{border-color:#a29bfe;}
 #god-ai-generate{background:#140f2a;border:1px solid #a29bfe;color:#d8b4fe;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit;}
 #god-ai-generate:hover{background:#1e1540;border-color:#d8b4fe;}
 #god-ai-generate:disabled{opacity:.45;cursor:not-allowed;}
@@ -703,9 +716,13 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
         </div>
         <span id="god-chains-count"></span>
         <div id="god-ai-wrap">
-          <button id="god-ai-toggle" title="AI-powered attack chain generation using OpenAI">🤖 AI Mode</button>
+          <button id="god-ai-toggle" title="AI-powered attack chain generation">🤖 AI Mode</button>
           <div id="god-ai-settings">
-            <input type="password" id="god-ai-key" placeholder="sk-…  OpenAI API key" autocomplete="off" spellcheck="false">
+            <select id="god-ai-provider">
+              <option value="openai">OpenAI</option>
+              <option value="openrouter">OpenRouter</option>
+            </select>
+            <input type="password" id="god-ai-key" placeholder="sk-…  API key" autocomplete="off" spellcheck="false">
             <select id="god-ai-model">
               <option value="gpt-4o">GPT-4o</option>
               <option value="gpt-4-turbo">GPT-4 Turbo</option>
@@ -1682,93 +1699,45 @@ function populateGodSASelector() {
 }
 
 function renderGodPanel() {
-  const body   = document.getElementById('god-body');
-  const saId   = document.getElementById('god-sa-select').value;
-  const chains = buildGodChains(saId);
+  const body  = document.getElementById('god-body');
+  const saId  = document.getElementById('god-sa-select').value;
   body.innerHTML = '';
+  document.getElementById('god-chains-count').textContent = '';
 
-  if (!chains.length) {
-    body.innerHTML = '<div class="god-empty">No attack chains found.<br>Load a k8scout JSON file first.</div>';
-    document.getElementById('god-chains-count').textContent = '';
+  if (!graphData) {
+    body.innerHTML = '<div class="god-empty">Load a k8scout JSON file to begin.</div>';
     return;
   }
 
-  document.getElementById('god-chains-count').textContent = `${chains.length} chain${chains.length!==1?'s':''}`;
-
   const subtitle = document.getElementById('god-subtitle');
   if (saId === '__all__') {
-    subtitle.textContent = `Top chain per identity · ${chains.length} total`;
+    subtitle.textContent = 'Select an identity, then click ⚡ Generate';
   } else {
     const n = nodeById[saId];
-    subtitle.textContent = `${chains.length} path${chains.length!==1?'s':''} from ${n?.name||saId}`;
+    subtitle.textContent = n ? `${n.namespace ? n.namespace+'/' : ''}${n.name||saId}` : saId;
   }
 
-  chains.forEach((chain, chainIdx) => {
-    const impact = chain.path ? pathImpactType(chain.path) : {type:'CONFIG', score:0, label:'Manual'};
-    const sev    = chain.path ? pathSeverity(chain.path) : 'LOW';
-    const col    = pathColor(sev);
-    const srcNode = chain.sourceNode;
+  const aiOn = document.getElementById('god-ai-toggle').classList.contains('active');
+  if (!aiOn) {
+    body.innerHTML = '<div class="god-empty">Enable 🤖 AI Mode and enter an API key,<br>then select an identity and click ⚡ Generate.</div>';
+    return;
+  }
 
-    const block = document.createElement('div');
-    block.className = 'god-chain-block' + (chainIdx === 0 ? ' expanded' : '');
+  if (saId === '__all__') {
+    body.innerHTML = '<div class="god-empty">Select a specific identity from the dropdown<br>to generate an AI-powered attack chain.</div>';
+    return;
+  }
 
-    const impactColors = {
-      NODE_BREAKOUT:'#ff4757', CLUSTER_ADMIN:'#ff79c6', SECRET_EXFIL:'#ffd166',
-      LATERAL_MOVE:'#4cc9f0', PRIVESC:'#ff9f43', CONFIG:'#06d6a0'
-    };
-    const impactBg = { NODE_BREAKOUT:'#3a0000', CLUSTER_ADMIN:'#2a0033', SECRET_EXFIL:'#2e2000',
-      LATERAL_MOVE:'#00182e', PRIVESC:'#2e1000', CONFIG:'#002e18' };
-
-    block.innerHTML = `
-      <div class="god-chain-header" onclick="this.closest('.god-chain-block').classList.toggle('expanded')">
-        <div class="path-sev-dot" style="background:${col}"></div>
-        <div class="god-chain-title">${escHtml(srcNode?.name||srcNode?.id||'?')} <span style="color:var(--muted);font-weight:400">→</span> ${escHtml((chain.path ? nodeById[chain.path.nodes[chain.path.nodes.length-1]]?.name : '?')||'?')}</div>
-        ${chain.path ? `<span class="god-chain-impact" style="background:${impactBg[impact.type]||'#111'};color:${impactColors[impact.type]||'#fff'};border:1px solid ${impactColors[impact.type]||'#fff'}40">${escHtml(impact.label)}</span>` : ''}
-        <span style="font-size:11px;color:var(--muted);margin-left:4px">${chain.steps.length} steps</span>
-        <span class="god-chain-toggle">▾</span>
-      </div>
-      <div class="god-chain-body"></div>
-    `;
-
-    const bodyEl = block.querySelector('.god-chain-body');
-
-    // Render steps
-    chain.steps.forEach((step, i) => {
-      const isTemplate = Array.isArray(step.cmd) ? false : true;
-      const cmdText = Array.isArray(step.cmd) ? step.cmd.join('\n') : (step.cmd || '');
-      const col2 = PHASE_COLORS[step.phase] || 'var(--muted)';
-      const cmdEncoded = encodeURIComponent(cmdText);
-
-      const stepEl = document.createElement('div');
-      stepEl.className = 'god-step' + (i === 0 || i === chain.steps.length - 1 ? ' active-step' : '');
-      stepEl.innerHTML = `
-        <div class="god-step-num" style="border-color:${col2};color:${col2}">${i+1}</div>
-        <div class="god-step-body">
-          <div class="god-step-phase" style="color:${col2}">${escHtml(step.phase)}</div>
-          <div class="god-step-action">${escHtml(step.action)}</div>
-          <div class="god-step-desc">${escHtml(step.desc||'')}</div>
-          <div class="god-step-cmd">${escHtml(cmdText)}<button class="god-copy" onclick="copyCmd(this)" data-cmd="${cmdEncoded}">⧉</button></div>
-        </div>
-      `;
-      bodyEl.appendChild(stepEl);
-
-      if (i < chain.steps.length - 1) {
-        const div = document.createElement('div');
-        div.className = 'god-divider';
-        bodyEl.appendChild(div);
-      }
-    });
-
-    body.appendChild(block);
-  });
+  body.innerHTML = '<div class="god-empty" style="color:var(--accent2);opacity:.8">Ready — click ⚡ Generate to analyze this identity.</div>';
 }
 
 document.getElementById('god-btn').addEventListener('click', () => {
   const panel = document.getElementById('god-panel');
   const isVisible = panel.classList.contains('visible');
   if (!isVisible) {
-    // Restore saved API key
-    const saved = localStorage.getItem('k8scout-openai-key');
+    // Restore saved API key for the active provider
+    const provider = getActiveProvider();
+    const saved = localStorage.getItem(PROVIDER_KEY_STORAGE[provider] || PROVIDER_KEY_STORAGE.openai);
     if (saved) document.getElementById('god-ai-key').value = saved;
     populateGodSASelector();
     renderGodPanel();
@@ -1786,10 +1755,11 @@ document.getElementById('god-close').addEventListener('click', () => {
 });
 
 document.getElementById('god-sa-select').addEventListener('change', () => {
-  renderGodPanel();
   const saId = document.getElementById('god-sa-select').value;
   const aiOn = document.getElementById('god-ai-toggle').classList.contains('active');
   document.getElementById('god-ai-generate').disabled = !aiOn || saId === '__all__';
+  // Clear any previous AI result and show fresh ready state
+  renderGodPanel();
   if (saId !== '__all__' && aiOn) {
     document.getElementById('god-ai-status').textContent = 'Ready';
   } else if (saId === '__all__' && aiOn) {
@@ -1800,6 +1770,85 @@ document.getElementById('god-sa-select').addEventListener('change', () => {
 /* ================================================================
    ATTACK CHAIN ANALYZER — AI-POWERED CHAIN GENERATION
    ================================================================ */
+
+const PROVIDER_MODELS = {
+  openai: [
+    { value: 'gpt-4o',           label: 'GPT-4o' },
+    { value: 'gpt-4-turbo',      label: 'GPT-4 Turbo' },
+    { value: 'gpt-3.5-turbo',    label: 'GPT-3.5 Turbo' },
+  ],
+  openrouter: [
+    { value: 'anthropic/claude-opus-4-5',          label: 'Claude Opus 4.5' },
+    { value: 'anthropic/claude-sonnet-4-5',        label: 'Claude Sonnet 4.5' },
+    { value: 'anthropic/claude-3-7-sonnet',        label: 'Claude 3.7 Sonnet' },
+    { value: 'google/gemini-2.5-pro',              label: 'Gemini 2.5 Pro' },
+    { value: 'google/gemini-flash-1.5',            label: 'Gemini Flash 1.5' },
+    { value: 'openai/gpt-4o',                      label: 'GPT-4o (via OR)' },
+    { value: 'openai/o3-mini',                     label: 'o3-mini (via OR)' },
+    { value: 'deepseek/deepseek-r1',               label: 'DeepSeek R1' },
+    { value: 'meta-llama/llama-3.3-70b-instruct',  label: 'Llama 3.3 70B' },
+    { value: 'mistralai/mistral-large',            label: 'Mistral Large' },
+  ],
+};
+
+const PROVIDER_ENDPOINTS = {
+  openai:      'https://api.openai.com/v1/chat/completions',
+  openrouter:  'https://openrouter.ai/api/v1/chat/completions',
+};
+
+const PROVIDER_KEY_STORAGE = {
+  openai:     'k8scout-openai-key',
+  openrouter: 'k8scout-openrouter-key',
+};
+
+function getActiveProvider() {
+  return document.getElementById('god-ai-provider')?.value || 'openai';
+}
+
+function updateModelDropdown(provider) {
+  const sel = document.getElementById('god-ai-model');
+  if (!sel) return;
+  sel.innerHTML = '';
+  (PROVIDER_MODELS[provider] || PROVIDER_MODELS.openai).forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.value;
+    opt.textContent = m.label;
+    sel.appendChild(opt);
+  });
+}
+
+function updateKeyPlaceholder(provider) {
+  const input = document.getElementById('god-ai-key');
+  if (!input) return;
+  input.placeholder = provider === 'openrouter' ? 'sk-or-v1-…  OpenRouter key' : 'sk-…  OpenAI key';
+  // Restore saved key for this provider
+  const saved = localStorage.getItem(PROVIDER_KEY_STORAGE[provider] || PROVIDER_KEY_STORAGE.openai);
+  if (saved) input.value = saved;
+  else input.value = '';
+}
+
+document.getElementById('god-ai-provider').addEventListener('change', function() {
+  const provider = this.value;
+  updateModelDropdown(provider);
+  updateKeyPlaceholder(provider);
+});
+
+function buildAIFetchOptions(apiKey, model, messages) {
+  const provider = getActiveProvider();
+  const endpoint = PROVIDER_ENDPOINTS[provider];
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`,
+  };
+  if (provider === 'openrouter') {
+    headers['HTTP-Referer'] = 'https://github.com/k8scout/k8scout';
+    headers['X-Title'] = 'k8scout';
+  }
+  // response_format json_object is only reliable on OpenAI and some OR models;
+  // include it anyway — models that don't support it ignore it gracefully.
+  const body = { model, messages, temperature: 0.15, max_tokens: 6000, response_format: { type: 'json_object' } };
+  return { endpoint, headers, body };
+}
 
 function buildAIPromptData(saId) {
   const sa = nodeById[saId];
@@ -2262,23 +2311,13 @@ Return ONLY valid JSON:
 5-10 steps for exploitable chains. 2-3 steps for LIMITED. escalation_chains may be empty array.`;
 
   try {
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user',   content: userPrompt },
-        ],
-        temperature: 0.15,
-        max_tokens: 6000,
-        response_format: { type: 'json_object' },
-      }),
-    });
+    const provider = getActiveProvider();
+    const { endpoint, headers, body } = buildAIFetchOptions(apiKey, model, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user',   content: userPrompt },
+    ]);
+
+    const resp = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(body) });
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -2286,14 +2325,17 @@ Return ONLY valid JSON:
       throw new Error(msg);
     }
 
-    const json  = await resp.json();
-    const raw   = json.choices?.[0]?.message?.content || '';
-    const chain = JSON.parse(raw);
+    const json = await resp.json();
+    const raw  = json.choices?.[0]?.message?.content || '';
+
+    // Some models wrap JSON in markdown fences — strip them
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    const chain = JSON.parse(cleaned);
 
     if (!chain.steps || !Array.isArray(chain.steps)) throw new Error('Invalid response format from AI');
 
-    // Save key on success
-    localStorage.setItem('k8scout-openai-key', apiKey);
+    // Save key on success for this provider
+    localStorage.setItem(PROVIDER_KEY_STORAGE[provider], apiKey);
 
     placeholder.remove();
     renderAIChainBlock(chain, data.sa, model, data.pivotChains.length);
@@ -2319,6 +2361,380 @@ function setAIStatus(html, color, isHtml) {
   el.style.color = color || 'var(--muted)';
   if (isHtml) el.innerHTML = html;
   else el.textContent = html;
+}
+
+function renderAttackPathMiniGraph(saNode, containerEl) {
+  const saId = saNode?.id;
+  if (!saId || !graphData) return;
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+  function isMiniTarget(n) {
+    if (!n) return false;
+    if (n.kind === 'ClusterRole' || n.kind === 'ClusterRoleBinding' || n.kind === 'Node' || n.kind === 'Secret') return true;
+    if ((n.risk_score || 0) >= 6) return true;
+    const id = n.id || '';
+    return id.includes('secrets') || id.includes('clusterrole') || id.includes('pods/exec');
+  }
+
+  // ── collect up to 3 distinct paths (different end targets) ───────────────
+  const candidatePaths = [];
+
+  // 1. Pre-computed paths starting directly from SA
+  (computedPaths || [])
+    .filter(p => p.nodes[0] === saId)
+    .sort((a, b) => pathImpactType(b).score - pathImpactType(a).score)
+    .forEach(p => candidatePaths.push(p));
+
+  // 2. Pre-computed paths containing SA (trim to SA start)
+  (computedPaths || [])
+    .filter(p => p.nodes.includes(saId) && p.nodes[0] !== saId)
+    .sort((a, b) => pathImpactType(b).score - pathImpactType(a).score)
+    .forEach(p => {
+      const idx = p.nodes.indexOf(saId);
+      const trimmed = { nodes: p.nodes.slice(idx), edges: p.edges.slice(idx) };
+      if (trimmed.nodes.length >= 2) candidatePaths.push(trimmed);
+    });
+
+  // 3. BFS from SA if still no paths at all
+  if (!candidatePaths.length) {
+    const adj = {};
+    graphData.edges.forEach(e => {
+      const s = edgeNodeId(e.source || e.from), t = edgeNodeId(e.target || e.to);
+      if (!s || !t || !ATTACK_EDGE_KINDS.has(e.kind)) return;
+      if (!adj[s]) adj[s] = [];
+      adj[s].push({ to: t, kind: e.kind });
+    });
+    const found = [];
+    const queue = [{ nodes: [saId], edges: [], visited: new Set([saId]) }];
+    while (queue.length && found.length < 6) {
+      const cur = queue.shift();
+      const last = cur.nodes[cur.nodes.length - 1];
+      if (cur.nodes.length > 1 && isMiniTarget(nodeById[last])) { found.push(cur); continue; }
+      if (cur.nodes.length >= 8) continue;
+      for (const step of (adj[last] || [])) {
+        if (!cur.visited.has(step.to)) {
+          queue.push({ nodes: [...cur.nodes, step.to], edges: [...cur.edges, step.kind], visited: new Set([...cur.visited, step.to]) });
+        }
+      }
+    }
+    found.forEach(p => candidatePaths.push(p));
+  }
+
+  if (!candidatePaths.length) return;
+
+  // Deduplicate: keep only one path per unique end-target, pick highest score
+  const byTarget = {};
+  candidatePaths.forEach(p => {
+    const target = p.nodes[p.nodes.length - 1];
+    if (!byTarget[target] || pathImpactType(p).score > pathImpactType(byTarget[target]).score) {
+      byTarget[target] = p;
+    }
+  });
+  const paths = Object.values(byTarget)
+    .sort((a, b) => pathImpactType(b).score - pathImpactType(a).score)
+    .slice(0, 3);
+
+  // ── layout constants ─────────────────────────────────────────────────────
+  const NS      = 'http://www.w3.org/2000/svg';
+  const nodeR   = 18;
+  const spacing = 108;
+  const labelW  = 68;   // left lane-label column
+  const padX    = 26;
+  const laneH   = 108;  // vertical space per lane
+  const topPad  = 12;
+
+  const maxNodes = Math.max(...paths.map(p => p.nodes.length));
+  const W = labelW + padX * 2 + spacing * (maxNodes - 1);
+  const H = topPad + paths.length * laneH + 8;
+
+  const sevColors = { CRITICAL:'#ff4757', HIGH:'#ff9f43', MEDIUM:'#ffd166', LOW:'#06d6a0' };
+  const sevBgs    = { CRITICAL:'rgba(56,9,9,.9)', HIGH:'rgba(54,21,0,.9)', MEDIUM:'rgba(44,34,0,.9)', LOW:'rgba(0,32,24,.9)' };
+
+  // ── wrapper & header ─────────────────────────────────────────────────────
+  const wrap = document.createElement('div');
+  wrap.className = 'path-mini-graph-wrap';
+
+  const bestPath   = paths[0];
+  const bestImpact = pathImpactType(bestPath);
+  const bestSev    = pathSeverity(bestPath);
+  window._k8s_miniPath = bestPath;
+
+  const header = document.createElement('div');
+  header.className = 'path-mini-graph-header';
+  header.innerHTML = `
+    <span style="width:7px;height:7px;border-radius:50%;background:var(--path-glow);flex-shrink:0;box-shadow:0 0 8px var(--path-glow)"></span>
+    Attack Path Graph
+    <span style="font-size:9px;padding:1px 7px;border-radius:4px;background:${sevBgs[bestSev]||'#111'};color:${sevColors[bestSev]||'#fff'};border:1px solid ${sevColors[bestSev]||'#fff'}60">${bestImpact.label}</span>
+    <span style="margin-left:auto;font-size:10px;color:var(--muted);font-weight:400">${paths.length} chain${paths.length > 1 ? 's' : ''}</span>
+    <button style="background:none;border:1px solid rgba(169,227,75,.3);color:var(--path-glow);border-radius:5px;padding:2px 9px;font-size:10px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .2s;"
+      onmouseenter="this.style.background='rgba(169,227,75,.08)'"
+      onmouseleave="this.style.background='none'"
+      onclick="
+        document.getElementById('god-panel').classList.remove('visible');
+        document.getElementById('god-btn').classList.remove('active');
+        highlightPath(window._k8s_miniPath);
+        setTimeout(()=>{ const fb=document.getElementById('fit-btn'); if(fb)fb.click(); },80);
+      ">↗ View in graph</button>`;
+
+  // ── SVG ──────────────────────────────────────────────────────────────────
+  const svgWrap = document.createElement('div');
+  svgWrap.className = 'path-mini-graph-svg-wrap';
+
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.style.cssText = 'display:block;margin:0 auto;';
+
+  // Arrow markers — one per severity colour + default
+  const defs = document.createElementNS(NS, 'defs');
+  [
+    ['mg-arr-default', 'rgba(169,227,75,.65)'],
+    ['mg-arr-crit',    'rgba(255,71,87,.65)'],
+    ['mg-arr-high',    'rgba(255,159,67,.65)'],
+    ['mg-arr-med',     'rgba(255,209,102,.65)'],
+    ['mg-arr-low',     'rgba(6,214,160,.65)'],
+  ].forEach(([id, fill]) => {
+    const mk = document.createElementNS(NS, 'marker');
+    mk.setAttribute('id', id);
+    mk.setAttribute('viewBox', '0 -4 8 8');
+    mk.setAttribute('refX', '7'); mk.setAttribute('refY', '0');
+    mk.setAttribute('markerWidth', '5'); mk.setAttribute('markerHeight', '5');
+    mk.setAttribute('orient', 'auto');
+    const ap = document.createElementNS(NS, 'path');
+    ap.setAttribute('d', 'M0,-4L8,0L0,4');
+    ap.setAttribute('fill', fill);
+    mk.appendChild(ap); defs.appendChild(mk);
+  });
+  svg.appendChild(defs);
+
+  // Track node positions across lanes for shared-node connectors
+  // nodeId → [{laneIdx, x, cy}]
+  const nodePositions = {};
+
+  const laneColors = {
+    CRITICAL: { edge:'rgba(255,71,87,.55)', dash:'rgba(255,71,87,.85)', arr:'mg-arr-crit',  label:'var(--crit)' },
+    HIGH:     { edge:'rgba(255,159,67,.5)', dash:'rgba(255,159,67,.8)', arr:'mg-arr-high', label:'var(--high)' },
+    MEDIUM:   { edge:'rgba(255,209,102,.4)',dash:'rgba(255,209,102,.7)',arr:'mg-arr-med',  label:'var(--med)'  },
+    LOW:      { edge:'rgba(6,214,160,.4)',  dash:'rgba(6,214,160,.7)', arr:'mg-arr-low',  label:'var(--low)'  },
+  };
+
+  // ── draw each lane ────────────────────────────────────────────────────────
+  paths.forEach((path, laneIdx) => {
+    const pNodes = path.nodes.map(id => nodeById[id]).filter(Boolean);
+    if (pNodes.length < 2) return;
+
+    const sev   = pathSeverity(path);
+    const lc    = laneColors[sev] || laneColors.LOW;
+    const cy    = topPad + laneIdx * laneH + 46;
+    const xBase = labelW + padX;
+
+    // ── lane divider (except first) ─────────────────────────────────────
+    if (laneIdx > 0) {
+      const div = document.createElementNS(NS, 'line');
+      div.setAttribute('x1', labelW); div.setAttribute('x2', W);
+      div.setAttribute('y1', topPad + laneIdx * laneH - 2);
+      div.setAttribute('y2', topPad + laneIdx * laneH - 2);
+      div.setAttribute('stroke', 'rgba(255,255,255,.06)');
+      div.setAttribute('stroke-width', '1');
+      svg.appendChild(div);
+    }
+
+    // ── lane label (left column) ─────────────────────────────────────────
+    const impact = pathImpactType(path);
+
+    const sevBadge = document.createElementNS(NS, 'rect');
+    sevBadge.setAttribute('x', '4'); sevBadge.setAttribute('y', cy - 10);
+    sevBadge.setAttribute('width', labelW - 8); sevBadge.setAttribute('height', '13');
+    sevBadge.setAttribute('rx', '3');
+    sevBadge.setAttribute('fill', sevBgs[sev] || '#111');
+    svg.appendChild(sevBadge);
+
+    const sevTxt = document.createElementNS(NS, 'text');
+    sevTxt.setAttribute('x', labelW / 2 - 2); sevTxt.setAttribute('y', cy - 1);
+    sevTxt.setAttribute('text-anchor', 'middle');
+    sevTxt.setAttribute('font-size', '8'); sevTxt.setAttribute('font-weight', '700');
+    sevTxt.setAttribute('fill', sevColors[sev] || '#aaa');
+    sevTxt.setAttribute('font-family', 'system-ui,sans-serif');
+    sevTxt.textContent = sev;
+    svg.appendChild(sevTxt);
+
+    const impTxt = document.createElementNS(NS, 'text');
+    impTxt.setAttribute('x', labelW / 2 - 2); impTxt.setAttribute('y', cy + 10);
+    impTxt.setAttribute('text-anchor', 'middle');
+    impTxt.setAttribute('font-size', '7'); impTxt.setAttribute('fill', 'rgba(255,255,255,.4)');
+    impTxt.setAttribute('font-family', 'system-ui,sans-serif');
+    // Two-word wrap via tspan
+    const words = impact.label.split(' ');
+    if (words.length <= 2) {
+      impTxt.textContent = impact.label;
+    } else {
+      const ts1 = document.createElementNS(NS, 'tspan');
+      ts1.setAttribute('x', labelW / 2 - 2); ts1.setAttribute('dy', '0');
+      ts1.textContent = words.slice(0, 2).join(' ');
+      const ts2 = document.createElementNS(NS, 'tspan');
+      ts2.setAttribute('x', labelW / 2 - 2); ts2.setAttribute('dy', '9');
+      ts2.textContent = words.slice(2).join(' ');
+      impTxt.appendChild(ts1); impTxt.appendChild(ts2);
+    }
+    svg.appendChild(impTxt);
+
+    // Chain index badge (top-left of label)
+    const idxTxt = document.createElementNS(NS, 'text');
+    idxTxt.setAttribute('x', '8'); idxTxt.setAttribute('y', cy - 16);
+    idxTxt.setAttribute('font-size', '8'); idxTxt.setAttribute('fill', lc.label);
+    idxTxt.setAttribute('font-weight', '700'); idxTxt.setAttribute('font-family', 'system-ui,sans-serif');
+    idxTxt.textContent = laneIdx === 0 ? '● PRIMARY' : `◦ ALT ${laneIdx}`;
+    svg.appendChild(idxTxt);
+
+    // Separator line between label and graph area
+    const sep = document.createElementNS(NS, 'line');
+    sep.setAttribute('x1', labelW); sep.setAttribute('x2', labelW);
+    sep.setAttribute('y1', cy - 26); sep.setAttribute('y2', cy + 38);
+    sep.setAttribute('stroke', 'rgba(255,255,255,.07)');
+    sep.setAttribute('stroke-width', '1');
+    svg.appendChild(sep);
+
+    // Node x positions
+    pNodes.forEach((n, i) => { n._lx = xBase + i * spacing; });
+
+    // ── edges ─────────────────────────────────────────────────────────────
+    path.edges.forEach((ek, i) => {
+      const s = pNodes[i], t = pNodes[i + 1];
+      if (!s || !t) return;
+      const x1 = s._lx + nodeR, x2 = t._lx - nodeR - 6;
+      const mx  = (x1 + x2) / 2, my = cy - 28;
+      const d   = `M${x1},${cy} Q${mx},${my} ${x2},${cy}`;
+
+      const base = document.createElementNS(NS, 'path');
+      base.setAttribute('d', d); base.setAttribute('fill', 'none');
+      base.setAttribute('stroke', lc.edge); base.setAttribute('stroke-width', '1.5');
+      base.setAttribute('marker-end', `url(#${lc.arr})`);
+      svg.appendChild(base);
+
+      const anim = document.createElementNS(NS, 'path');
+      anim.setAttribute('d', d); anim.setAttribute('fill', 'none');
+      anim.setAttribute('stroke', lc.dash); anim.setAttribute('stroke-width', '1.5');
+      anim.setAttribute('stroke-dasharray', '5 8');
+      anim.style.animation = `miniDash ${1.2 + laneIdx * 0.15}s linear infinite ${(i * 0.2).toFixed(2)}s`;
+      svg.appendChild(anim);
+
+      const lbl = document.createElementNS(NS, 'text');
+      lbl.setAttribute('x', mx); lbl.setAttribute('y', my - 4);
+      lbl.setAttribute('text-anchor', 'middle'); lbl.setAttribute('font-size', '7');
+      lbl.setAttribute('fill', 'rgba(162,155,254,.7)');
+      lbl.setAttribute('font-family', 'system-ui,sans-serif');
+      lbl.textContent = ek;
+      svg.appendChild(lbl);
+    });
+
+    // ── nodes ─────────────────────────────────────────────────────────────
+    pNodes.forEach((n, i) => {
+      const isFirst = i === 0, isLast = i === pNodes.length - 1;
+      const isPivotSA = !isFirst && (n.kind === 'ServiceAccount' || n.kind === 'Identity');
+      const cat    = securityCategory(n);
+      const fill   = CATEGORY_COLORS[cat] || DEFAULT_NODE_COLOR;
+      const stroke = isFirst ? '#4cc9f0' : isLast ? sevColors[sev] || '#ff4757' : isPivotSA ? '#ff79c6' : lc.label;
+      const sw     = (isFirst || isLast) ? 2.5 : isPivotSA ? 2 : 1.5;
+
+      // Track position for cross-lane connectors
+      if (!nodePositions[n.id]) nodePositions[n.id] = [];
+      nodePositions[n.id].push({ laneIdx, x: n._lx, cy });
+
+      const g = document.createElementNS(NS, 'g');
+      g.setAttribute('transform', `translate(${n._lx},${cy})`);
+      g.style.cursor = 'pointer';
+      g.addEventListener('click', () => {
+        document.getElementById('god-panel').classList.remove('visible');
+        document.getElementById('god-btn').classList.remove('active');
+        selectNode(n.id);
+      });
+
+      // Pulsing halo
+      if (isFirst || isLast || isPivotSA) {
+        const halo = document.createElementNS(NS, 'circle');
+        halo.setAttribute('r', nodeR + 6);
+        halo.setAttribute('fill', 'none');
+        halo.setAttribute('stroke', stroke);
+        halo.setAttribute('stroke-width', '1');
+        halo.style.animation = `miniHalo 2s ease-in-out infinite ${(laneIdx * 0.4 + (isLast ? .6 : 0)).toFixed(1)}s`;
+        g.appendChild(halo);
+      }
+
+      const circle = document.createElementNS(NS, 'circle');
+      circle.setAttribute('r', nodeR);
+      circle.setAttribute('fill', fill); circle.setAttribute('fill-opacity', '0.85');
+      circle.setAttribute('stroke', stroke); circle.setAttribute('stroke-width', sw);
+      g.appendChild(circle);
+
+      // Pivot SA gets a small chain icon overlay
+      if (isPivotSA) {
+        const badge = document.createElementNS(NS, 'circle');
+        badge.setAttribute('cx', nodeR - 5); badge.setAttribute('cy', -nodeR + 5);
+        badge.setAttribute('r', '5'); badge.setAttribute('fill', '#2a0033');
+        badge.setAttribute('stroke', '#ff79c6'); badge.setAttribute('stroke-width', '1');
+        g.appendChild(badge);
+        const badgeTxt = document.createElementNS(NS, 'text');
+        badgeTxt.setAttribute('x', nodeR - 5); badgeTxt.setAttribute('y', -nodeR + 9);
+        badgeTxt.setAttribute('text-anchor', 'middle'); badgeTxt.setAttribute('font-size', '6');
+        badgeTxt.setAttribute('fill', '#ff79c6'); badgeTxt.setAttribute('font-family', 'system-ui,sans-serif');
+        badgeTxt.textContent = '⛓';
+        g.appendChild(badgeTxt);
+      }
+
+      const icon = document.createElementNS(NS, 'text');
+      icon.setAttribute('text-anchor', 'middle'); icon.setAttribute('dominant-baseline', 'middle');
+      icon.setAttribute('font-size', '10'); icon.setAttribute('fill', '#fff');
+      icon.setAttribute('font-family', 'system-ui,sans-serif');
+      icon.textContent = NODE_ICONS[n.kind] || '?';
+      g.appendChild(icon);
+
+      const nm  = (n.name || n.id || '');
+      const nlbl = document.createElementNS(NS, 'text');
+      nlbl.setAttribute('text-anchor', 'middle'); nlbl.setAttribute('y', nodeR + 12);
+      nlbl.setAttribute('font-size', '8'); nlbl.setAttribute('fill', stroke);
+      nlbl.setAttribute('font-weight', (isFirst || isLast) ? '600' : '400');
+      nlbl.setAttribute('font-family', 'system-ui,sans-serif');
+      nlbl.textContent = nm.length > 13 ? nm.slice(0, 11) + '…' : nm;
+      g.appendChild(nlbl);
+
+      if (isFirst || isLast) {
+        const tag = document.createElementNS(NS, 'text');
+        tag.setAttribute('text-anchor', 'middle'); tag.setAttribute('y', nodeR + 22);
+        tag.setAttribute('font-size', '7'); tag.setAttribute('fill', stroke);
+        tag.setAttribute('opacity', '.55'); tag.setAttribute('font-family', 'system-ui,sans-serif');
+        tag.textContent = isFirst ? 'START' : 'TARGET';
+        g.appendChild(tag);
+      }
+
+      svg.appendChild(g);
+    });
+  });
+
+  // ── shared-node cross-lane connectors ─────────────────────────────────────
+  // For nodes that appear in multiple lanes, draw a faint dashed vertical line
+  Object.values(nodePositions).forEach(positions => {
+    if (positions.length < 2) return;
+    for (let i = 0; i < positions.length - 1; i++) {
+      const a = positions[i], b = positions[i + 1];
+      // Only connect vertically if x positions are close (same logical column)
+      if (Math.abs(a.x - b.x) > spacing * 0.6) continue;
+      const cx = (a.x + b.x) / 2;
+      const conn = document.createElementNS(NS, 'line');
+      conn.setAttribute('x1', cx); conn.setAttribute('x2', cx);
+      conn.setAttribute('y1', a.cy + nodeR + 1); conn.setAttribute('y2', b.cy - nodeR - 1);
+      conn.setAttribute('stroke', 'rgba(162,155,254,.35)');
+      conn.setAttribute('stroke-width', '1.5');
+      conn.setAttribute('stroke-dasharray', '3 4');
+      svg.insertBefore(conn, svg.firstChild); // render behind nodes
+    }
+  });
+
+  svgWrap.appendChild(svg);
+  wrap.appendChild(header);
+  wrap.appendChild(svgWrap);
+  containerEl.appendChild(wrap);
+
+  requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add('visible')));
 }
 
 function renderAIChainBlock(chain, saNode, model, hasPivotData) {
@@ -2445,6 +2861,9 @@ function renderAIChainBlock(chain, saNode, model, hasPivotData) {
     ).join('');
     bodyEl.appendChild(detEl);
   }
+
+  // Render attack path mini graph below AI steps
+  renderAttackPathMiniGraph(saNode, bodyEl);
 
   // Insert AI block at top, before existing graph chains
   body.insertBefore(block, body.firstChild);
@@ -2796,14 +3215,14 @@ Respond with valid JSON only:
 }`;
 
   try {
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey},
-      body: JSON.stringify({ model, messages:[{role:'user',content:prompt}], temperature:0.3, max_tokens:1200, response_format:{type:'json_object'} })
-    });
+    const provider = getActiveProvider();
+    const { endpoint, headers, body } = buildAIFetchOptions(apiKey, model, [{role:'user',content:prompt}]);
+    body.temperature = 0.3; body.max_tokens = 1200;
+    const resp = await fetch(endpoint, { method:'POST', headers, body: JSON.stringify(body) });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error?.message || resp.status);
-    const result = JSON.parse(data.choices[0].message.content);
+    const raw = data.choices[0].message.content;
+    const result = JSON.parse(raw.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/i,'').trim());
     renderMultiSABlock(result, model);
     setAIStatus('done','');
   } catch(err) {
