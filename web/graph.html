@@ -10,14 +10,14 @@
    DESIGN TOKENS
 ───────────────────────────────────────────────────────── */
 :root {
-  --bg:        #0d0e14;
-  --surface:   #161820;
-  --surface2:  #1e2028;
-  --surface3:  #272930;
-  --border:    #2c2f3a;
+  --bg:        #0a0b12;
+  --surface:   #13141e;
+  --surface2:  #1a1c28;
+  --surface3:  #22243a;
+  --border:    #282c3e;
   --border2:   rgba(255,255,255,.06);
-  --text:      #d4d8e2;
-  --muted:     #7c8394;
+  --text:      #d8dce8;
+  --muted:     #7a8499;
   --accent:    #4cc9f0;
   --accent2:   #7b6fff;
   --crit:      #ff4757;
@@ -28,18 +28,18 @@
   --sidebar-w: 380px;
   --detail-w:  360px;
   --mono:      'Cascadia Code','Fira Code','Consolas',monospace;
-  --shadow-sm: 0 2px 8px rgba(0,0,0,.5);
-  --shadow-md: 0 4px 24px rgba(0,0,0,.6);
-  --shadow-lg: 0 8px 48px rgba(0,0,0,.75);
+  --shadow-sm: 0 2px 10px rgba(0,0,0,.55);
+  --shadow-md: 0 4px 28px rgba(0,0,0,.65);
+  --shadow-lg: 0 8px 56px rgba(0,0,0,.8);
   --radius:    8px;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;display:flex;flex-direction:column;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased;}
 
 /* ─── Toolbar ─── */
-#toolbar{height:48px;background:rgba(13,14,20,.88);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border-bottom:1px solid rgba(255,255,255,.06);box-shadow:0 1px 0 rgba(76,201,240,.06),var(--shadow-sm);display:flex;align-items:center;gap:8px;padding:0 16px;flex-shrink:0;z-index:20;}
-#toolbar-logo{font-size:15px;font-weight:800;background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;letter-spacing:-.4px;margin-right:4px;display:flex;align-items:center;gap:7px;}
-#toolbar-logo svg{width:20px;height:20px;fill:none;stroke:var(--accent);stroke-width:2;flex-shrink:0;filter:drop-shadow(0 0 6px rgba(76,201,240,.5));}
+#toolbar{height:50px;background:rgba(11,12,18,.92);backdrop-filter:blur(28px) saturate(200%);-webkit-backdrop-filter:blur(28px) saturate(200%);border-bottom:1px solid rgba(255,255,255,.07);box-shadow:0 1px 0 rgba(76,201,240,.08),0 2px 16px rgba(0,0,0,.4);display:flex;align-items:center;gap:8px;padding:0 16px;flex-shrink:0;z-index:20;}
+#toolbar-logo{font-size:15px;font-weight:900;background:linear-gradient(135deg,var(--accent) 0%,#82e8ff 40%,var(--accent2) 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;letter-spacing:-.5px;margin-right:6px;display:flex;align-items:center;gap:8px;}
+#toolbar-logo svg{width:22px;height:22px;fill:none;stroke:var(--accent);stroke-width:2;flex-shrink:0;filter:drop-shadow(0 0 8px rgba(76,201,240,.65));}
 #search{background:rgba(30,32,40,.75);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:5px 12px;font-size:12px;width:190px;outline:none;transition:border-color .2s,box-shadow .2s;box-shadow:inset 0 1px 3px rgba(0,0,0,.4);}
 #search:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(76,201,240,.12),inset 0 1px 3px rgba(0,0,0,.3);}
 #search::placeholder{color:var(--muted);}
@@ -60,11 +60,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 #main{display:flex;flex:1;overflow:hidden;}
 
 /* ─── Sidebar ─── */
-#sidebar{width:var(--sidebar-w);background:linear-gradient(180deg,var(--surface) 0%,rgba(14,15,20,.98) 100%);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;box-shadow:2px 0 28px rgba(0,0,0,.5);}
-.tab-bar{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;background:rgba(9,10,14,.4);}
-.tab{flex:1;padding:9px 4px;text-align:center;cursor:pointer;font-size:11px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s;letter-spacing:.04em;text-transform:uppercase;}
-.tab:hover{color:var(--text);background:rgba(255,255,255,.02);}
-.tab.active{color:var(--accent);border-bottom-color:var(--accent);text-shadow:0 0 20px rgba(76,201,240,.4);background:rgba(76,201,240,.04);}
+#sidebar{width:var(--sidebar-w);background:linear-gradient(180deg,rgba(14,15,22,.99) 0%,rgba(11,12,18,.99) 100%);border-right:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;box-shadow:3px 0 32px rgba(0,0,0,.55);}
+.tab-bar{display:flex;border-bottom:1px solid rgba(255,255,255,.06);flex-shrink:0;background:rgba(8,9,14,.6);}
+.tab{flex:1;padding:10px 4px;text-align:center;cursor:pointer;font-size:10.5px;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s;letter-spacing:.05em;text-transform:uppercase;}
+.tab:hover{color:var(--text);background:rgba(255,255,255,.025);}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);text-shadow:0 0 24px rgba(76,201,240,.5);background:rgba(76,201,240,.05);}
 .tab-panel{display:none;flex:1;flex-direction:column;overflow:hidden;}
 .tab-panel.active{display:flex;}
 
@@ -73,9 +73,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 #findings-list::-webkit-scrollbar{width:4px;}
 #findings-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px;}
 #findings-list::-webkit-scrollbar-track{background:transparent;}
-.finding-card{padding:10px 14px;cursor:pointer;border-left:3px solid transparent;transition:background .15s,transform .12s;}
-.finding-card:hover{background:rgba(255,255,255,.03);transform:translateX(2px);}
-.finding-card.active{background:rgba(255,255,255,.04);}
+.finding-card{padding:10px 14px;cursor:pointer;border-left:3px solid transparent;transition:background .15s,transform .12s,box-shadow .15s;}
+.finding-card:hover{background:rgba(255,255,255,.035);transform:translateX(3px);}
+.finding-card.active{background:rgba(255,255,255,.05);box-shadow:inset 0 0 12px rgba(76,201,240,.04);}
 .finding-card[data-sev="CRITICAL"]{border-color:var(--crit);}
 .finding-card[data-sev="HIGH"]    {border-color:var(--high);}
 .finding-card[data-sev="MEDIUM"]  {border-color:var(--med);}
@@ -91,12 +91,12 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 /* Attack paths */
 #paths-container{flex:1;overflow-y:auto;padding:6px 8px;}
-#paths-container::-webkit-scrollbar{width:4px;}
-#paths-container::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px;}
+#paths-container::-webkit-scrollbar{width:3px;}
+#paths-container::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px;}
 #paths-container::-webkit-scrollbar-track{background:transparent;}
-.path-card{background:linear-gradient(135deg,rgba(30,32,40,.9),rgba(22,24,32,.8));border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;cursor:pointer;transition:border-color .2s,box-shadow .2s,transform .15s;box-shadow:0 2px 12px rgba(0,0,0,.4);}
-.path-card:hover{border-color:rgba(76,201,240,.4);box-shadow:0 4px 20px rgba(76,201,240,.07),0 2px 12px rgba(0,0,0,.45);transform:translateY(-1px);}
-.path-card.active{border-color:var(--path-glow);background:linear-gradient(135deg,#1c2210,#141b0c);box-shadow:0 0 24px rgba(169,227,75,.1),0 4px 16px rgba(0,0,0,.5);}
+.path-card{background:linear-gradient(145deg,rgba(22,24,34,.95),rgba(16,18,26,.9));border:1px solid rgba(255,255,255,.07);border-radius:11px;margin-bottom:7px;overflow:hidden;cursor:pointer;transition:border-color .2s,box-shadow .2s,transform .15s,background .2s;box-shadow:0 2px 16px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04);}
+.path-card:hover{border-color:rgba(76,201,240,.35);box-shadow:0 6px 24px rgba(76,201,240,.08),0 2px 16px rgba(0,0,0,.5);transform:translateY(-2px);background:linear-gradient(145deg,rgba(26,28,40,.95),rgba(18,20,30,.9));}
+.path-card.active{border-color:var(--path-glow);background:linear-gradient(145deg,rgba(22,32,10,.98),rgba(14,22,6,.98));box-shadow:0 0 28px rgba(169,227,75,.12),0 4px 20px rgba(0,0,0,.55),inset 0 1px 0 rgba(169,227,75,.08);}
 .path-header{padding:10px 12px;display:flex;align-items:center;gap:8px;}
 .path-sev-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;box-shadow:0 0 6px currentColor;}
 .path-title{font-size:12px;font-weight:500;flex:1;color:var(--text);line-height:1.3;}
@@ -168,64 +168,78 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .query-empty{padding:14px 4px;color:var(--muted);font-size:11px;text-align:center;line-height:1.6;}
 
 /* ─── Canvas ─── */
-#canvas-wrap{flex:1;position:relative;overflow:hidden;background:radial-gradient(ellipse at 25% 45%,rgba(76,201,240,.025) 0%,transparent 55%),radial-gradient(ellipse at 75% 20%,rgba(123,111,255,.025) 0%,transparent 55%),var(--bg);}
+#canvas-wrap{flex:1;position:relative;overflow:hidden;
+  background-color:var(--bg);
+  background-image:
+    radial-gradient(ellipse at 25% 45%,rgba(76,201,240,.055) 0%,transparent 50%),
+    radial-gradient(ellipse at 75% 20%,rgba(123,111,255,.05) 0%,transparent 50%),
+    radial-gradient(ellipse at 60% 80%,rgba(255,71,87,.025) 0%,transparent 40%),
+    radial-gradient(circle,rgba(255,255,255,.018) 1px,transparent 1px);
+  background-size:auto,auto,auto,28px 28px;}
 svg#graph{width:100%;height:100%;display:block;}
 #canvas-controls{position:absolute;bottom:12px;right:12px;display:flex;flex-direction:column;gap:5px;z-index:10;}
-.canvas-btn{width:32px;height:32px;background:rgba(22,24,32,.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:14px;transition:all .2s;box-shadow:var(--shadow-sm);}
-.canvas-btn:hover{border-color:rgba(76,201,240,.5);color:var(--accent);box-shadow:0 0 14px rgba(76,201,240,.18),var(--shadow-sm);transform:scale(1.07);}
+.canvas-btn{width:34px;height:34px;background:rgba(16,18,26,.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:15px;font-weight:700;transition:all .2s;box-shadow:0 2px 12px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.04);}
+.canvas-btn:hover{border-color:rgba(76,201,240,.55);color:var(--accent);background:rgba(76,201,240,.07);box-shadow:0 0 18px rgba(76,201,240,.2),0 2px 12px rgba(0,0,0,.5);transform:scale(1.08);}
 
 /* Drop overlay */
-#drop-overlay{position:absolute;inset:0;background:linear-gradient(145deg,rgba(13,14,20,.97),rgba(9,10,15,.98));display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:30;gap:16px;}
+#drop-overlay{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,rgba(20,22,32,.98) 0%,rgba(9,10,15,.99) 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:30;gap:20px;}
 #drop-overlay.hidden{display:none;}
-#drop-overlay.drag-active{background:linear-gradient(145deg,rgba(76,201,240,.05),rgba(123,111,255,.04));outline:2px dashed rgba(76,201,240,.3);outline-offset:-20px;}
-.drop-icon{font-size:56px;line-height:1;filter:drop-shadow(0 0 24px rgba(76,201,240,.35));}
-.drop-title{font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.4px;}
-.drop-sub{font-size:13px;color:var(--muted);}
+#drop-overlay.drag-active{background:radial-gradient(ellipse at 50% 45%,rgba(76,201,240,.08) 0%,rgba(9,10,15,.98) 70%);outline:2px dashed rgba(76,201,240,.4);outline-offset:-24px;}
+.drop-icon{font-size:64px;line-height:1;filter:drop-shadow(0 0 32px rgba(76,201,240,.5));animation:dropBounce 2s ease-in-out infinite;}
+@keyframes dropBounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-8px);}}
+.drop-title{font-size:24px;font-weight:800;color:var(--text);letter-spacing:-.5px;background:linear-gradient(135deg,#fff 0%,var(--accent) 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.drop-sub{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px;}
+.drop-sub::before{content:'';display:inline-block;width:24px;height:1px;background:linear-gradient(90deg,transparent,var(--muted));}
+.drop-sub::after{content:'';display:inline-block;width:24px;height:1px;background:linear-gradient(90deg,var(--muted),transparent);}
 
 /* Loading overlay */
-#loading-overlay{position:absolute;inset:0;background:rgba(13,14,20,.94);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:40;gap:16px;}
+#loading-overlay{position:absolute;inset:0;background:rgba(10,11,18,.96);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:40;gap:18px;}
 #loading-overlay.visible{display:flex;}
-.spinner{width:40px;height:40px;border:3px solid rgba(76,201,240,.12);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite;box-shadow:0 0 20px rgba(76,201,240,.15);}
+.spinner{width:44px;height:44px;border:3px solid rgba(76,201,240,.1);border-top-color:var(--accent);border-right-color:rgba(76,201,240,.4);border-radius:50%;animation:spin .7s linear infinite;box-shadow:0 0 24px rgba(76,201,240,.18);}
 @keyframes spin{to{transform:rotate(360deg);}}
 .loading-text{font-size:13px;color:var(--muted);letter-spacing:.03em;}
 .progress-bar-wrap{width:240px;height:3px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden;}
 .progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent),var(--path-glow));border-radius:2px;transition:width .2s ease;box-shadow:0 0 8px rgba(76,201,240,.4);}
 
 /* ─── Minimap ─── */
-#minimap{position:absolute;bottom:52px;right:12px;width:140px;height:90px;background:rgba(22,24,32,.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:8px;overflow:hidden;z-index:9;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.55);}
+#minimap{position:absolute;bottom:52px;right:12px;width:150px;height:96px;background:rgba(14,15,22,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(76,201,240,.15);border-radius:10px;overflow:hidden;z-index:9;cursor:pointer;box-shadow:0 8px 32px rgba(0,0,0,.7),0 0 0 1px rgba(76,201,240,.06),inset 0 1px 0 rgba(255,255,255,.04);}
+#minimap::before{content:'MINIMAP';position:absolute;top:4px;left:8px;font-size:7px;font-weight:800;letter-spacing:.1em;color:rgba(76,201,240,.4);pointer-events:none;z-index:1;}
 #minimap-svg{width:100%;height:100%;}
-#minimap-vp{fill:rgba(76,201,240,.1);stroke:var(--accent);stroke-width:1;}
+#minimap-vp{fill:rgba(76,201,240,.08);stroke:var(--accent);stroke-width:1.5;rx:2;}
 
 /* ─── SVG graph styles ─── */
-.node-circle{cursor:pointer;stroke-width:1.5;transition:filter .2s,opacity .2s;}
-.node-circle.dimmed{opacity:.1;}
-.node-circle.dimmed ~ text{opacity:.07;}
-.node-g.focus-dim{opacity:.15;pointer-events:none;}
+.node-circle{cursor:pointer;stroke-width:1.5;transition:filter .25s,opacity .25s,stroke .15s;}
+.node-circle.dimmed{opacity:.08;}
+.node-circle.dimmed ~ text{opacity:.05;}
+.node-g.focus-dim{opacity:.12;pointer-events:none;}
 .node-g.focus-dim .node-circle{stroke-width:0.5;}
-.edge-path.focus-dim{opacity:.04 !important;pointer-events:none;}
-.node-circle.highlighted{stroke:#fff !important;stroke-width:2.5;}
-.node-circle.path-active{stroke:var(--path-glow) !important;stroke-width:4;filter:drop-shadow(0 0 14px var(--path-glow)) !important;}
+.edge-path.focus-dim{opacity:.03 !important;pointer-events:none;}
+.node-circle.highlighted{stroke:#fff !important;stroke-width:3;filter:drop-shadow(0 0 10px rgba(255,255,255,.5)) !important;}
+.node-circle.path-active{stroke:var(--path-glow) !important;stroke-width:4.5;filter:drop-shadow(0 0 16px var(--path-glow)) drop-shadow(0 0 6px var(--path-glow)) !important;}
 .node-circle.path-active ~ text.node-label{fill:#fff;font-weight:700;}
-.node-icon{pointer-events:none;user-select:none;dominant-baseline:middle;text-anchor:middle;}
-.node-label{pointer-events:none;user-select:none;transition:opacity .2s;}
-.edge-path{fill:none;stroke-width:1.5;transition:opacity .2s;cursor:pointer;}
-.edge-path:hover{stroke-width:2.5;opacity:1 !important;}
+.node-icon{pointer-events:none;user-select:none;dominant-baseline:middle;text-anchor:middle;letter-spacing:-.5px;}
+.node-label{pointer-events:none;user-select:none;transition:opacity .2s;paint-order:stroke fill;letter-spacing:.01em;}
+/* ─── Always-on edge mid-labels ─── */
+.edge-mid-label{pointer-events:none;transition:opacity .2s;}
+.edge-mid-label text{dominant-baseline:middle;text-anchor:middle;}
+.edge-path{fill:none;stroke-width:1.5;transition:opacity .2s,stroke-width .15s;cursor:pointer;}
+.edge-path:hover{stroke-width:3;opacity:1 !important;filter:drop-shadow(0 0 4px currentColor);}
 .show-more-btn{background:none;border:1px solid var(--border);border-radius:4px;color:var(--accent);cursor:pointer;font-size:10px;padding:3px 8px;margin-top:4px;width:100%;text-align:center;transition:border-color .1s;}
 .show-more-btn:hover{border-color:var(--accent);background:rgba(76,201,240,.06);}
 .edge-detail-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:#fff;margin-bottom:4px;}
 .edge-path.dimmed{opacity:.03;}
-.edge-path.highlighted{stroke-width:2.5;opacity:1 !important;}
-.edge-path.path-active{stroke:var(--path-glow) !important;stroke-width:5;opacity:1 !important;animation:edgePulse 1.5s ease-in-out infinite;}
-@keyframes edgePulse{0%,100%{opacity:.7;}50%{opacity:1;}}
+.edge-path.highlighted{stroke-width:3;opacity:1 !important;filter:drop-shadow(0 0 3px currentColor);}
+.edge-path.path-active{stroke:var(--path-glow) !important;stroke-width:5.5;opacity:1 !important;filter:drop-shadow(0 0 6px var(--path-glow)) !important;animation:edgePulse 1.8s ease-in-out infinite;}
+@keyframes edgePulse{0%,100%{opacity:.75;filter:drop-shadow(0 0 4px var(--path-glow));}50%{opacity:1;filter:drop-shadow(0 0 10px var(--path-glow));}}
 .crit-glow{filter:drop-shadow(0 0 5px rgba(255,71,87,.5));}
 .high-glow{filter:drop-shadow(0 0 4px rgba(255,127,80,.4));}
 
 /* ─── Detail panel ─── */
-#detail-panel{width:var(--detail-w);background:linear-gradient(180deg,var(--surface),rgba(14,15,20,.98));border-left:1px solid var(--border);display:none;flex-direction:column;overflow:hidden;flex-shrink:0;box-shadow:-2px 0 28px rgba(0,0,0,.5);}
+#detail-panel{width:var(--detail-w);background:linear-gradient(180deg,rgba(16,18,28,.98) 0%,rgba(12,13,20,.99) 100%);border-left:1px solid rgba(255,255,255,.07);display:none;flex-direction:column;overflow:hidden;flex-shrink:0;box-shadow:-4px 0 32px rgba(0,0,0,.6);}
 #detail-panel.visible{display:flex;}
-#detail-header{padding:14px 16px 12px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:8px;background:linear-gradient(135deg,rgba(76,201,240,.04),transparent 60%);}
-#detail-close{margin-left:auto;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;flex-shrink:0;transition:color .15s,transform .15s;}
-#detail-close:hover{color:var(--text);transform:scale(1.15);}
+#detail-header{padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:flex-start;gap:8px;background:linear-gradient(135deg,rgba(76,201,240,.06),transparent 60%);}
+#detail-close{margin-left:auto;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;flex-shrink:0;transition:color .15s,transform .2s;}
+#detail-close:hover{color:var(--text);transform:scale(1.2) rotate(90deg);}
 #detail-kind-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:#fff;margin-bottom:5px;}
 #detail-name{font-size:13px;font-weight:600;word-break:break-all;line-height:1.4;}
 #detail-ns{font-size:11px;color:var(--muted);margin-top:3px;}
@@ -254,10 +268,11 @@ svg#graph{width:100%;height:100%;display:block;}
 .mini-finding-sev{font-size:10px;color:var(--muted);margin-top:2px;}
 
 /* ─── Tooltip ─── */
-#tooltip{position:fixed;background:rgba(30,32,40,.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:9px 13px;font-size:11px;pointer-events:none;z-index:200;display:none;max-width:240px;box-shadow:0 8px 32px rgba(0,0,0,.65),0 0 0 1px rgba(76,201,240,.06);}
+#tooltip{position:fixed;background:rgba(14,15,22,.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.1);border-top:1px solid rgba(255,255,255,.16);border-radius:12px;padding:10px 14px;font-size:11px;pointer-events:none;z-index:200;display:none;max-width:260px;box-shadow:0 12px 48px rgba(0,0,0,.8),0 0 0 1px rgba(76,201,240,.07),inset 0 1px 0 rgba(255,255,255,.05);}
 #tooltip.visible{display:block;}
-#tooltip-title{font-weight:700;color:var(--text);margin-bottom:4px;font-size:12px;}
-#tooltip-body{color:var(--muted);line-height:1.55;white-space:pre-line;}
+#tooltip-title{font-weight:700;color:var(--text);margin-bottom:5px;font-size:12.5px;display:flex;align-items:center;gap:6px;}
+#tooltip-title::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);flex-shrink:0;}
+#tooltip-body{color:var(--muted);line-height:1.6;white-space:pre-line;font-size:10.5px;}
 
 /* ─── Finding modal ─── */
 #modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:100;align-items:center;justify-content:center;}
@@ -388,14 +403,14 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
 
 /* ─── Score ring / badge on nodes ─── */
 .score-ring{pointer-events:none;}
-.score-badge-text{pointer-events:none;font-weight:800;paint-order:stroke fill;}
-@keyframes critPulse{0%,100%{opacity:.5;r:var(--pr);}50%{opacity:1;r:calc(var(--pr) + 3px);}}
-@keyframes nodeGlow{0%,100%{filter:drop-shadow(0 0 4px rgba(255,71,87,.4));}50%{filter:drop-shadow(0 0 10px rgba(255,71,87,.9));}}
+.score-badge-text{pointer-events:none;font-weight:800;paint-order:stroke fill;letter-spacing:-.3px;}
+@keyframes critPulse{0%,100%{opacity:.5;}50%{opacity:1;}}
+@keyframes nodeGlow{0%,100%{filter:drop-shadow(0 0 5px rgba(255,71,87,.5));}50%{filter:drop-shadow(0 0 14px rgba(255,71,87,1));}}
 
 /* ─── Target ring (goal node halo) ─── */
-.target-ring{pointer-events:none;fill:none;stroke:#ff4757;stroke-width:1.5;stroke-dasharray:4,3;}
-@keyframes targetPulse{0%,100%{opacity:.5;stroke-width:1.5;}50%{opacity:1;stroke-width:2.5;}}
-.target-ring{animation:targetPulse 2s ease-in-out infinite;}
+.target-ring{pointer-events:none;fill:none;stroke:#ff4757;stroke-width:2;stroke-dasharray:4,3;}
+@keyframes targetPulse{0%,100%{opacity:.4;stroke-width:2;}50%{opacity:.9;stroke-width:3;}}
+.target-ring{animation:targetPulse 1.8s ease-in-out infinite;}
 
 /* ─── Category-aware node styles ─── */
 .node-circle.cat-context{fill-opacity:.3;stroke-opacity:.3;}
@@ -405,8 +420,8 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
 .edge-path.tier-3{opacity:.25;}
 
 /* ─── Namespace zones (replace namespace nodes with visual regions) ─── */
-.ns-zone{fill-opacity:.04;stroke-dasharray:5,4;stroke-opacity:.3;cursor:default;}
-.ns-label{pointer-events:none;font-weight:700;opacity:.35;text-transform:uppercase;letter-spacing:.06em;fill:inherit;}
+.ns-zone{fill-opacity:.05;stroke-dasharray:6,4;stroke-opacity:.35;cursor:default;stroke-width:1.5;}
+.ns-label{pointer-events:none;font-weight:800;opacity:.4;text-transform:uppercase;letter-spacing:.08em;fill:inherit;}
 
 /* ─── Host / Kubernetes node (Linux machine) — diamond shape ─── */
 .host-shape{stroke-width:2.5;cursor:pointer;transition:filter .2s,opacity .2s;}
@@ -422,7 +437,14 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
 .node-circle.path-end{stroke:var(--crit) !important;stroke-width:4 !important;filter:drop-shadow(0 0 16px var(--crit)) !important;}
 
 /* ─── Attack chain narrative strip (floating bar at bottom of canvas) ─── */
-#chain-strip{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(16,17,24,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:8px 14px;display:none;align-items:center;gap:0;z-index:15;max-width:calc(100% - 96px);overflow-x:auto;box-shadow:0 8px 32px rgba(0,0,0,.75),0 0 0 1px rgba(76,201,240,.06);}
+#chain-strip{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+  background:rgba(10,11,18,.96);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  border:1px solid rgba(169,227,75,.2);
+  border-top:1px solid rgba(169,227,75,.35);
+  border-radius:14px;padding:8px 16px;display:none;align-items:center;gap:0;z-index:15;
+  max-width:calc(100% - 96px);overflow-x:auto;
+  box-shadow:0 12px 48px rgba(0,0,0,.85),0 0 0 1px rgba(169,227,75,.06),inset 0 1px 0 rgba(169,227,75,.08);}
 #chain-strip.visible{display:flex;}
 #chain-strip::-webkit-scrollbar{height:3px;}
 #chain-strip::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px;}
@@ -701,8 +723,22 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
     </div>
 
     <!-- Minimap -->
-    <div id="minimap" title="Click to navigate">
+    <div id="minimap" title="Click to fit graph">
       <svg id="minimap-svg"><rect id="minimap-vp"></rect></svg>
+    </div>
+
+    <!-- Floating compact legend -->
+    <div id="canvas-legend" style="position:absolute;bottom:14px;left:14px;background:rgba(10,11,18,.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:8px 12px;z-index:8;font-size:9.5px;color:var(--muted);box-shadow:0 4px 20px rgba(0,0,0,.6);pointer-events:none;min-width:120px;">
+      <div style="font-size:8px;font-weight:800;letter-spacing:.08em;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:5px;">Node Types</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;">
+        <div style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#4cc9f0;flex-shrink:0;box-shadow:0 0 4px #4cc9f0"></span>Actor</div>
+        <div style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#2ecc71;flex-shrink:0;box-shadow:0 0 4px #2ecc71"></span>Workload</div>
+        <div style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#ff4757;flex-shrink:0;box-shadow:0 0 4px #ff4757"></span>Target</div>
+        <div style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#f1c40f;flex-shrink:0;box-shadow:0 0 4px #f1c40f"></span>Secret</div>
+        <div style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#9b59b6;flex-shrink:0;"></span>RBAC</div>
+        <div style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#ff9f43;flex-shrink:0;"></span>Webhook</div>
+      </div>
+      <div style="margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.06);font-size:8px;color:rgba(255,255,255,.25);">F = fit · / = search · Esc = clear</div>
     </div>
 
     <!-- Attack Chain Analyzer Overlay -->
@@ -828,21 +864,21 @@ const NODE_COLORS = {
 const DEFAULT_NODE_COLOR = '#555';
 
 const NODE_ICONS = {
-  Identity:           '⬡',
-  ServiceAccount:     'SA',
-  ClusterRole:        'CR',
-  Role:               'R',
-  ClusterRoleBinding: 'CB',
-  RoleBinding:        'RB',
-  Workload:           'W',
-  Pod:                'P',
-  Secret:             '🔒',
-  ConfigMap:          'CM',
-  Node:               'N',
+  Identity:           '◎',   // identity / user
+  ServiceAccount:     '◈',   // service account token holder
+  ClusterRole:        '⬡',   // hexagon = cluster-wide power
+  Role:               '⬡',   // namespace role
+  ClusterRoleBinding: '⟐',   // binding (cluster)
+  RoleBinding:        '⟐',   // binding (ns)
+  Workload:           '▣',   // workload / deployment box
+  Pod:                '▣',   // pod
+  Secret:             '🔑',  // key icon
+  ConfigMap:          '≡',   // config
+  Node:               '◆',   // host node diamond
   Namespace:          'NS',
-  Webhook:            'WH',
-  CRD:                'CRD',
-  CloudIdentity:      '☁',
+  Webhook:            '⚡',  // webhook trigger
+  CRD:                '⬡',
+  CloudIdentity:      '☁',   // cloud
 };
 
 const EDGE_COLORS = {
@@ -4142,23 +4178,53 @@ const hullLayer  = svg.select('#hull-layer');
 const linksLayer = svg.select('#links-layer');
 const nodesLayer = svg.select('#nodes-layer');
 
-// Set up glow filters
+// Set up glow filters and gradients
 function setupFilters() {
   svgDefs.selectAll('*').remove();
 
-  // Glow filter for critical nodes
-  const fCrit = svgDefs.append('filter').attr('id','glow-crit').attr('x','-50%').attr('y','-50%').attr('width','200%').attr('height','200%');
-  fCrit.append('feGaussianBlur').attr('stdDeviation','3').attr('result','coloredBlur');
+  // Glow filter for critical nodes (CRITICAL risk_score >= 8)
+  const fCrit = svgDefs.append('filter').attr('id','glow-crit').attr('x','-60%').attr('y','-60%').attr('width','220%').attr('height','220%');
+  fCrit.append('feGaussianBlur').attr('in','SourceGraphic').attr('stdDeviation','4').attr('result','blur');
   const mCrit = fCrit.append('feMerge');
-  mCrit.append('feMergeNode').attr('in','coloredBlur');
+  mCrit.append('feMergeNode').attr('in','blur');
   mCrit.append('feMergeNode').attr('in','SourceGraphic');
 
-  // Glow filter for high nodes
-  const fHigh = svgDefs.append('filter').attr('id','glow-high').attr('x','-40%').attr('y','-40%').attr('width','180%').attr('height','180%');
-  fHigh.append('feGaussianBlur').attr('stdDeviation','2').attr('result','coloredBlur');
+  // Glow filter for high nodes (HIGH risk_score 6-8)
+  const fHigh = svgDefs.append('filter').attr('id','glow-high').attr('x','-45%').attr('y','-45%').attr('width','190%').attr('height','190%');
+  fHigh.append('feGaussianBlur').attr('in','SourceGraphic').attr('stdDeviation','2.5').attr('result','blur');
   const mHigh = fHigh.append('feMerge');
-  mHigh.append('feMergeNode').attr('in','coloredBlur');
+  mHigh.append('feMergeNode').attr('in','blur');
   mHigh.append('feMergeNode').attr('in','SourceGraphic');
+
+  // Subtle inner shadow for nodes (feComponentTransfer for depth)
+  const fDepth = svgDefs.append('filter').attr('id','node-depth').attr('x','-20%').attr('y','-20%').attr('width','140%').attr('height','140%');
+  fDepth.append('feGaussianBlur').attr('in','SourceAlpha').attr('stdDeviation','1.5').attr('result','shadow');
+  fDepth.append('feOffset').attr('in','shadow').attr('dx','1').attr('dy','2').attr('result','offsetShadow');
+  fDepth.append('feComposite').attr('in','SourceGraphic').attr('in2','offsetShadow').attr('operator','over');
+
+  // Radial gradient defs for each security category (rich center → deep edge)
+  const GRAD_DEFS = [
+    { id:'g-actor',     c1:'#82e3f7', c2:'#2fb8e0', cx:'38%', cy:'32%' },
+    { id:'g-target',    c1:'#ff9099', c2:'#d42030', cx:'38%', cy:'32%' },
+    { id:'g-workload',  c1:'#6ef09a', c2:'#20a850', cx:'38%', cy:'32%' },
+    { id:'g-secret',    c1:'#f8e050', c2:'#c8960a', cx:'38%', cy:'32%' },
+    { id:'g-privilege', c1:'#cb96e6', c2:'#8030a8', cx:'38%', cy:'32%' },
+    { id:'g-hook',      c1:'#ffcf80', c2:'#de8010', cx:'38%', cy:'32%' },
+    { id:'g-cloud',     c1:'#f0a0ff', c2:'#b030d0', cx:'38%', cy:'32%' },
+    { id:'g-context',   c1:'#606470', c2:'#303440', cx:'38%', cy:'32%' },
+  ];
+  GRAD_DEFS.forEach(({ id, c1, c2, cx, cy }) => {
+    const g = svgDefs.append('radialGradient')
+      .attr('id', id).attr('cx', cx).attr('cy', cy).attr('r','70%').attr('gradientUnits','objectBoundingBox');
+    g.append('stop').attr('offset','0%').attr('stop-color', c1).attr('stop-opacity', 1);
+    g.append('stop').attr('offset','100%').attr('stop-color', c2).attr('stop-opacity', 1);
+  });
+
+  // Gradient for active path edges
+  const pathGrad = svgDefs.append('linearGradient').attr('id','path-edge-grad')
+    .attr('gradientUnits','userSpaceOnUse');
+  pathGrad.append('stop').attr('offset','0%').attr('stop-color','#a9e34b');
+  pathGrad.append('stop').attr('offset','100%').attr('stop-color','#06d6a0');
 }
 
 // Arrow markers
@@ -4365,18 +4431,18 @@ function renderGraph() {
 
     // Tier 1: exploitation — full opacity, thick, vivid color
     if (tier === 1) {
-      if (isNodeBreakout) return { stroke: '#ff4757', width: '2.5', dash: null, opacity: 1 };
-      if (d.inferred)     return { stroke: '#ff79c6', width: '2', dash: '5,3', opacity: 0.9 };
+      if (isNodeBreakout) return { stroke: '#ff4757', width: '2.8', dash: null, opacity: 1 };
+      if (d.inferred)     return { stroke: '#ff79c6', width: '2.2', dash: '5,3', opacity: 0.9 };
       const col = EDGE_COLORS[d.kind] || '#ff7f50';
-      return { stroke: col, width: '2', dash: null, opacity: 1 };
+      return { stroke: col, width: '2.4', dash: null, opacity: 1 };
     }
     // Tier 2: privilege chain — medium opacity, normal width
     if (tier === 2) {
-      if (isSecretExfil) return { stroke: '#ffd166', width: '1.5', dash: '6,3', opacity: 0.75 };
-      return { stroke: EDGE_COLORS[d.kind] || '#7b6fff', width: '1.5', dash: null, opacity: 0.65 };
+      if (isSecretExfil) return { stroke: '#ffd166', width: '1.8', dash: '6,3', opacity: 0.8 };
+      return { stroke: EDGE_COLORS[d.kind] || '#7b6fff', width: '1.8', dash: null, opacity: 0.7 };
     }
     // Tier 3: structural — very subtle, thin
-    return { stroke: '#444', width: '0.8', dash: null, opacity: 0.12 };
+    return { stroke: '#4a4e5a', width: '0.9', dash: null, opacity: 0.15 };
   }
 
   // Links (paths for curves)
@@ -4400,7 +4466,9 @@ function renderGraph() {
       const tgt = typeof d.target === 'object' ? d.target : simNodes[d.target];
       const sname = src?.name || src?.id || '?';
       const tname = tgt?.name || tgt?.id || '?';
-      showTooltip(event, d.kind, `${sname} → ${tname}${d.inferred ? ' (inferred)' : ''}`);
+      const tier = EDGE_TIER[d.kind] || 2;
+      const tierLabel = tier === 1 ? '⚡ Direct Exploitation' : tier === 2 ? '🔗 Privilege Chain' : '• Structural';
+      showTooltip(event, d.kind.replace(/_/g,' '), `${sname} → ${tname}${d.inferred ? ' (inferred)' : ''}\n${tierLabel}`);
     })
     .on('mouseleave', hideTooltip)
     .on('click', (event, d) => {
@@ -4410,6 +4478,27 @@ function renderGraph() {
       const tgt = typeof d.target === 'object' ? d.target : simNodes[d.target];
       showEdgeDetailPanel(src, tgt, d);
     });
+
+  // Always-on edge mid-labels for tier-1 (direct exploitation) edges
+  let edgeLabelSel;
+  {
+    const t1Edges = simEdges.filter(e => (EDGE_TIER[e.kind]||2) === 1);
+    edgeLabelSel = linksLayer.selectAll('g.edge-mid-label')
+      .data(t1Edges, d => `${edgeNodeId(d.source)}-${d.kind}-${edgeNodeId(d.target)}`)
+      .join(enter => {
+        const g = enter.append('g').attr('class','edge-mid-label').attr('pointer-events','none').attr('display','none');
+        g.append('rect').attr('rx',3).attr('height',12)
+          .attr('fill','rgba(10,10,18,.86)')
+          .attr('stroke','rgba(255,255,255,.07)').attr('stroke-width','0.5');
+        g.append('text')
+          .attr('y',1)
+          .attr('font-size','8.5px').attr('font-weight','700')
+          .attr('font-family',"'Cascadia Code','Fira Code','Consolas',monospace")
+          .attr('fill', d => EDGE_COLORS[d.kind] || '#a29bfe')
+          .text(d => d.kind.replace('can_','').replace(/_/g,' '));
+        return g;
+      });
+  }
 
   // Nodes
   nodeSel = nodesLayer.selectAll('g.node-g')
@@ -4425,21 +4514,40 @@ function renderGraph() {
   nodeSel.append('circle')
     .attr('class', d => `node-circle cat-${securityCategory(d)}`)
     .attr('r', d => nodeRadius(d))
-    .attr('fill', d => nodeColor(d))
+    .attr('fill', d => {
+      if (d.kind === 'Node') return 'none';  // host: use polygon
+      const cat = securityCategory(d);
+      const gradMap = {
+        actor:     'url(#g-actor)',
+        target:    'url(#g-target)',
+        workload:  'url(#g-workload)',
+        secret:    'url(#g-secret)',
+        privilege: 'url(#g-privilege)',
+        hook:      'url(#g-hook)',
+        context:   'url(#g-context)',
+      };
+      return gradMap[cat] || DEFAULT_NODE_COLOR;
+    })
     .attr('fill-opacity', d => {
       if (d.kind === 'Node') return 0;   // host: invisible circle, polygon renders shape
-      return securityCategory(d) === 'context' ? 0.4 : 0.85;
+      return securityCategory(d) === 'context' ? 0.45 : 0.92;
     })
     .attr('stroke-opacity', d => d.kind === 'Node' ? 0 : 1)
     .attr('stroke', d => {
       const cat = securityCategory(d);
-      if (cat === 'target') return '#ff4757';
-      if (cat === 'actor')  return '#4cc9f0';
-      return d3.color(nodeColor(d)).brighter(0.5);
+      if (cat === 'target')    return 'rgba(255,71,87,.9)';
+      if (cat === 'actor')     return 'rgba(76,201,240,.8)';
+      if (cat === 'workload')  return 'rgba(46,204,113,.7)';
+      if (cat === 'secret')    return 'rgba(241,196,15,.7)';
+      if (cat === 'privilege') return 'rgba(155,89,182,.6)';
+      if (cat === 'hook')      return 'rgba(255,159,67,.7)';
+      return 'rgba(255,255,255,.12)';
     })
     .attr('stroke-width', d => {
       const cat = securityCategory(d);
-      return cat === 'target' ? 2 : cat === 'actor' ? 1.5 : 1;
+      if (cat === 'target') return 2.5;
+      if (cat === 'actor')  return 2;
+      return 1.5;
     })
     .attr('filter', d => {
       if (d.kind === 'Node') return null;  // filter applied to polygon
@@ -4472,14 +4580,14 @@ function renderGraph() {
     .attr('class', 'host-shape')
     .attr('points', d => {
       const r = nodeRadius(d);
-      const rw = r * 1.05, rh = r * 1.35;
+      const rw = r * 1.1, rh = r * 1.4;
       return `0,${-rh} ${rw},0 0,${rh} ${-rw},0`;
     })
-    .attr('fill', '#c0392b')
-    .attr('fill-opacity', 0.9)
-    .attr('stroke', '#ff8080')
+    .attr('fill', 'url(#g-target)')
+    .attr('fill-opacity', 0.95)
+    .attr('stroke', '#ff6070')
     .attr('stroke-width', 2.5)
-    .attr('filter', d => (d.risk_score||0) >= 8 ? 'url(#glow-crit)' : 'url(#glow-high)')
+    .attr('filter', 'url(#glow-crit)')
     .on('click', (e, d) => { e.stopPropagation(); selectNode(d.id); })
     .on('mousemove', (e, d) => {
       const score = (d.risk_score||0).toFixed(1);
@@ -4531,46 +4639,72 @@ function renderGraph() {
   // Icon text
   nodeSel.append('text')
     .attr('class', 'node-icon')
-    .attr('font-size', d => nodeRadius(d) > 14 ? '11px' : '9px')
+    .attr('font-size', d => {
+      const r = nodeRadius(d);
+      return r > 16 ? '12px' : r > 12 ? '10px' : '8.5px';
+    })
     .attr('fill', '#fff')
-    .attr('opacity', 0.9)
+    .attr('opacity', 0.95)
+    .attr('stroke', 'rgba(0,0,0,.3)')
+    .attr('stroke-width', '0.5')
+    .attr('paint-order', 'stroke fill')
     .text(d => NODE_ICONS[d.kind] || '?');
 
   // Special annotation badges for dangerous configs
   nodeSel.filter(d => nodeHasSpecialConfig(d)).append('text')
     .attr('class', 'node-annotation')
-    .attr('dx', d => nodeRadius(d) - 2)
-    .attr('dy', d => -(nodeRadius(d) - 2))
-    .attr('font-size', '9px')
+    .attr('dx', d => nodeRadius(d) - 1)
+    .attr('dy', d => -(nodeRadius(d) - 1))
+    .attr('font-size', '10px')
     .attr('fill', '#fff')
+    .attr('filter', 'drop-shadow(0 0 3px rgba(255,100,0,.7))')
     .text(d => nodeSpecialIcon(d));
 
   // Label (shown based on security category; context nodes are silent)
   nodeSel.append('text')
     .attr('class', 'node-label')
-    .attr('dy', d => nodeRadius(d) + 12)
+    .attr('dy', d => nodeRadius(d) + 14)
     .attr('text-anchor', 'middle')
     .attr('fill', d => {
       const cat = securityCategory(d);
-      if (cat === 'target') return '#ff8a95';
-      if (cat === 'actor')  return '#4cc9f0';
-      return '#9098a5';
+      if (cat === 'target')    return '#ff9aa5';
+      if (cat === 'actor')     return '#5dd2f5';
+      if (cat === 'workload')  return '#6ee898';
+      if (cat === 'secret')    return '#f5de60';
+      if (cat === 'privilege') return '#c0a0e0';
+      if (cat === 'hook')      return '#ffbc60';
+      return '#8892a0';
     })
-    .attr('font-size', d => securityCategory(d) === 'target' ? '10px' : '9px')
-    .attr('font-weight', d => securityCategory(d) === 'target' ? '600' : '400')
+    .attr('font-size', d => {
+      const cat = securityCategory(d);
+      return cat === 'target' ? '10.5px' : cat === 'actor' ? '10px' : '9px';
+    })
+    .attr('font-weight', d => {
+      const cat = securityCategory(d);
+      return cat === 'target' ? '700' : cat === 'actor' ? '600' : '500';
+    })
+    .attr('stroke', 'rgba(13,14,20,.85)')
+    .attr('stroke-width', '3')
+    .attr('paint-order', 'stroke fill')
     .text(d => {
       const cat = securityCategory(d);
       if (cat === 'context') return '';  // suppress namespace/configmap labels
       const nm = d.name || d.id || '';
-      return nm.length > 24 ? nm.slice(0,22)+'…' : nm;
+      // Show "kind: name" for targets to make them immediately understandable
+      if (cat === 'target' && d.kind && d.name) {
+        const short = d.name.length > 18 ? d.name.slice(0,16)+'…' : d.name;
+        return short;
+      }
+      return nm.length > 22 ? nm.slice(0,20)+'…' : nm;
     });
 
   // Simulation setup
   const W = canvasWrap.clientWidth;
   const H = canvasWrap.clientHeight;
   const nodeCount = simNodes.length;
-  const alphaDecay = nodeCount > 500 ? 0.1 : nodeCount > 200 ? 0.05 : 0.028;
-  const chargeStr  = nodeCount > 500 ? -120 : nodeCount > 200 ? -200 : -280;
+  const alphaDecay = nodeCount > 500 ? 0.1 : nodeCount > 200 ? 0.045 : 0.024;
+  // More negative charge = nodes spread out more, fewer overlaps, easier to read
+  const chargeStr  = nodeCount > 500 ? -180 : nodeCount > 200 ? -280 : -380;
 
   // Y-layer targets: workloads/pods at top, hosts at bottom, RBAC in middle.
   // Using a weak forceY nudge so the layout is guided but not rigid.
@@ -4585,12 +4719,12 @@ function renderGraph() {
 
   simulation = d3.forceSimulation(simNodes)
     .force('link',    d3.forceLink(simEdges).id((_,i) => i)
-      .distance(d => (EDGE_TIER[d.kind]||2) === 1 ? 120 : (EDGE_TIER[d.kind]||2) === 3 ? 60 : 90)
-      .strength(d => (EDGE_TIER[d.kind]||2) === 3 ? 0.15 : 0.4))
-    .force('charge',  d3.forceManyBody().strength(chargeStr))
-    .force('center',  d3.forceCenter(W/2, H/2))
-    .force('y',       d3.forceY().y(yLayerTarget).strength(nodeCount > 200 ? 0.15 : 0.12))
-    .force('collide', d3.forceCollide().radius(d => nodeRadius(d) + 5))
+      .distance(d => (EDGE_TIER[d.kind]||2) === 1 ? 150 : (EDGE_TIER[d.kind]||2) === 3 ? 70 : 110)
+      .strength(d => (EDGE_TIER[d.kind]||2) === 3 ? 0.12 : 0.35))
+    .force('charge',  d3.forceManyBody().strength(chargeStr).distanceMax(500))
+    .force('center',  d3.forceCenter(W/2, H/2).strength(0.04))
+    .force('y',       d3.forceY().y(yLayerTarget).strength(nodeCount > 200 ? 0.18 : 0.14))
+    .force('collide', d3.forceCollide().radius(d => nodeRadius(d) + 12).iterations(3))
     .alphaDecay(alphaDecay)
     .on('tick', ticked);
 
@@ -4604,9 +4738,10 @@ function renderGraph() {
       currentTransform = e.transform;
       zoomLayer.attr('transform', e.transform);
       updateMinimapViewport();
-      // LOD: hide labels when zoomed out
+      // LOD: hide/show labels based on zoom level
       const k = e.transform.k;
-      nodesLayer.selectAll('text.node-label').attr('display', k < 0.5 ? 'none' : null);
+      nodesLayer.selectAll('text.node-label').attr('display', k < 0.45 ? 'none' : null);
+      // Edge mid-labels only shown for selected node — don't force-show them on zoom
     });
   svg.call(zoomBehavior);
   svg.on('click', () => { clearSelection(); clearPathHighlight(); });
@@ -4614,6 +4749,24 @@ function renderGraph() {
   function ticked() {
     linkSel.attr('d', edgePath);
     nodeSel.attr('transform', d => `translate(${d.x?.toFixed(1)||0},${d.y?.toFixed(1)||0})`);
+
+    // Update edge mid-label positions
+    if (edgeLabelSel) {
+      edgeLabelSel.each(function(d) {
+        const s = typeof d.source === 'object' ? d.source : simNodes[d.source];
+        const t = typeof d.target === 'object' ? d.target : simNodes[d.target];
+        if (!s || !t || s.x == null || t.x == null) return;
+        const mx = ((s.x||0)+(t.x||0))/2;
+        const my = ((s.y||0)+(t.y||0))/2;
+        const el = d3.select(this);
+        el.attr('transform', `translate(${mx.toFixed(1)},${my.toFixed(1)})`);
+        const txtEl = el.select('text').node();
+        const lw = txtEl ? Math.max(40, txtEl.textContent.length * 5.5 + 12) : 48;
+        el.select('rect').attr('x', -lw/2).attr('y', -6).attr('width', lw);
+        el.select('text').attr('x', 0);
+      });
+    }
+
     // Update position map for minimap
     simNodes.forEach(n => { nodePosMap[n.id] = {x: n.x, y: n.y, kind: n.kind, risk: n.risk_score||0}; });
     updateMinimapViewport();
@@ -4787,6 +4940,13 @@ function selectNode(id) {
     })
     .classed('path-active', false);
 
+  // Show edge mid-labels only for edges connected to the selected node
+  linksLayer.selectAll('g.edge-mid-label')
+    .attr('display', d => {
+      const sid = edgeNodeId(d.source), tid = edgeNodeId(d.target);
+      return (sid === id || tid === id) ? null : 'none';
+    });
+
   showDetailPanel(node);
 }
 
@@ -4795,6 +4955,8 @@ function clearSelection() {
   nodesLayer.selectAll('circle.node-circle').classed('dimmed',false).classed('highlighted',false).classed('path-active',false).classed('path-start',false).classed('path-end',false);
   nodesLayer.selectAll('polygon.host-shape').classed('dimmed',false).classed('path-active',false).classed('path-start',false).classed('path-end',false);
   linksLayer.selectAll('path.edge-path').classed('dimmed',false).classed('highlighted',false).classed('path-active',false);
+  // Hide all edge mid-labels when selection is cleared
+  linksLayer.selectAll('g.edge-mid-label').attr('display', 'none');
   nodesLayer.selectAll('text.path-step-num').remove();
   nodesLayer.selectAll('g.path-edge-label').remove();
   hideDetailPanel();
@@ -4810,6 +4972,9 @@ function highlightPath(path) {
   });
   const startId = path.nodes[0];
   const endId   = path.nodes[path.nodes.length - 1];
+
+  // Hide any per-node edge mid-labels from prior node selection
+  linksLayer.selectAll('g.edge-mid-label').attr('display', 'none');
 
   // Force-show RBAC nodes in this path even if RBAC is hidden
   activePathNodeIds = pathNodeSet;
@@ -4915,6 +5080,7 @@ function clearPathHighlight() {
     .classed('dimmed',false).classed('path-active',false)
     .classed('path-start',false).classed('path-end',false);
   linksLayer.selectAll('path.edge-path').classed('dimmed',false).classed('highlighted',false).classed('path-active',false);
+  linksLayer.selectAll('g.edge-mid-label').attr('display', 'none');
   nodesLayer.selectAll('text.path-step-num').remove();
   nodesLayer.selectAll('g.path-edge-label').remove();
   hideChainStrip();
