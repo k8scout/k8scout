@@ -36,6 +36,223 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;display:flex;flex-direction:column;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased;}
 
+/* ─── App shell ─── */
+#app{display:flex;flex-direction:column;flex:1;min-height:0;position:relative;}
+#route-outlet{display:flex;flex-direction:column;flex:1;min-height:0;}
+#explore-route{display:flex;flex-direction:column;flex:1;min-height:0;}
+#overlays{position:relative;z-index:60;}
+
+/* ─── Explore route ─── */
+#explore-gate{display:none;flex:1;align-items:center;justify-content:center;padding:24px;background:
+  radial-gradient(ellipse at top left,rgba(76,201,240,.05),transparent 34%),
+  radial-gradient(ellipse at top right,rgba(255,71,87,.04),transparent 30%),
+  linear-gradient(180deg,#0a0b12,#0b0d16 45%,#0a0b12);}
+#explore-gate.visible{display:flex;}
+.explore-gate-card{max-width:860px;width:100%;padding:22px 24px;border-radius:16px;border:1px solid rgba(255,255,255,.07);background:linear-gradient(145deg,rgba(22,24,34,.97),rgba(16,18,26,.94));box-shadow:0 12px 32px rgba(0,0,0,.34);}
+.explore-gate-title{font-size:24px;font-weight:800;letter-spacing:-.04em;color:var(--text);margin-bottom:8px;}
+.explore-gate-sub{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:18px;max-width:680px;}
+.explore-gate-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.explore-ns-btn{padding:14px 15px;border-radius:12px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.025);color:var(--text);cursor:pointer;text-align:left;transition:border-color .18s,transform .15s,background .18s;}
+.explore-ns-btn:hover{border-color:rgba(76,201,240,.42);transform:translateY(-1px);}
+.explore-ns-btn .label{display:block;font-size:12px;font-weight:800;line-height:1.45;margin-bottom:5px;}
+.explore-ns-btn .meta{display:block;font-size:10px;color:var(--muted);}
+.explore-gate-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;}
+@media (max-width: 960px){.explore-gate-grid{grid-template-columns:1fr 1fr;}}
+@media (max-width: 680px){.explore-gate-grid{grid-template-columns:1fr;}}
+
+/* ─── Foothold header ─── */
+#foothold-header{display:none;flex-shrink:0;padding:12px 16px 14px;background:
+  radial-gradient(ellipse at top left,rgba(76,201,240,.08),transparent 45%),
+  linear-gradient(180deg,rgba(13,14,20,.98),rgba(10,11,18,.98));
+  border-bottom:1px solid rgba(255,255,255,.07);
+  box-shadow:0 1px 0 rgba(76,201,240,.08),0 8px 24px rgba(0,0,0,.28);}
+#foothold-header.visible{display:block;}
+.foothold-top{display:flex;align-items:flex-start;gap:14px;justify-content:space-between;margin-bottom:10px;}
+.foothold-title-wrap{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.foothold-kicker{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);}
+.foothold-title{font-size:16px;font-weight:800;letter-spacing:-.03em;color:var(--text);line-height:1.2;}
+.foothold-subtitle{font-size:11px;color:var(--muted);line-height:1.5;max-width:820px;}
+.foothold-status{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
+.foothold-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-left:10px;}
+.fh-action-btn{padding:7px 11px;border-radius:9px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(135deg,rgba(26,29,40,.94),rgba(18,20,28,.88));color:var(--text);cursor:pointer;font-size:11px;font-weight:700;transition:border-color .18s,color .18s,transform .15s,background .18s;box-shadow:0 2px 10px rgba(0,0,0,.22);}
+.fh-action-btn:hover{border-color:rgba(76,201,240,.42);color:var(--accent);transform:translateY(-1px);}
+.fh-action-btn:disabled{opacity:.55;cursor:default;transform:none;color:var(--muted);}
+.fh-action-btn.primary{border-color:rgba(76,201,240,.35);background:linear-gradient(135deg,rgba(76,201,240,.14),rgba(76,201,240,.06));color:var(--accent);}
+.foothold-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;}
+.foothold-card{padding:10px 11px;background:linear-gradient(145deg,rgba(21,23,33,.95),rgba(14,16,24,.9));border:1px solid rgba(255,255,255,.06);border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.03);}
+.foothold-label{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;}
+.foothold-value{font-size:12px;font-weight:600;color:var(--text);line-height:1.4;word-break:break-word;}
+.foothold-value.muted{color:var(--muted);font-weight:500;}
+@media (max-width: 1180px){.foothold-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
+@media (max-width: 760px){
+  .foothold-top{flex-direction:column;}
+  .foothold-status{justify-content:flex-start;}
+  .foothold-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+
+/* ─── Briefing route ─── */
+#briefing-route{display:none;flex:1;min-height:0;overflow:hidden;}
+#briefing-route.visible{display:flex;min-height:0;overflow:hidden;}
+#briefing-view{display:flex;flex-direction:column;gap:16px;flex:1;min-height:0;padding:18px 18px 22px;overflow:hidden;
+  background:
+    radial-gradient(ellipse at top left,rgba(76,201,240,.06),transparent 35%),
+    radial-gradient(ellipse at top right,rgba(123,111,255,.04),transparent 30%),
+    linear-gradient(180deg,#0a0b12,#0b0d16 42%,#0a0b12);}
+.briefing-grid{display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr);gap:16px;min-height:0;flex:1;}
+.briefing-left,.briefing-main{display:flex;flex-direction:column;gap:16px;min-height:0;}
+.briefing-left{overflow:auto;padding-right:6px;}
+.briefing-main{overflow:hidden;}
+.brief-card{background:linear-gradient(145deg,rgba(22,24,34,.96),rgba(15,17,25,.94));border:1px solid rgba(255,255,255,.07);border-radius:14px;box-shadow:0 10px 28px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.03);}
+.brief-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.05);}
+.brief-card-title{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+.brief-card-body{padding:14px 16px;}
+.brief-card.scroll-card{display:flex;flex-direction:column;min-height:0;}
+.brief-card-body.scroll-body{flex:1;min-height:0;overflow:auto;}
+.brief-empty{display:flex;align-items:center;justify-content:center;height:100%;text-align:center;color:var(--muted);font-size:13px;line-height:1.7;padding:28px;}
+.brief-empty-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:300px;}
+.brief-empty-icon{font-size:54px;line-height:1;filter:drop-shadow(0 0 24px rgba(76,201,240,.35));}
+.brief-empty-title{font-size:24px;font-weight:800;letter-spacing:-.04em;color:var(--text);}
+.brief-empty-sub{font-size:13px;color:var(--muted);max-width:520px;line-height:1.7;}
+.brief-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+.brief-btn{padding:8px 14px;border-radius:9px;border:1px solid var(--border);background:linear-gradient(135deg,rgba(28,31,42,.96),rgba(18,20,29,.88));color:var(--text);cursor:pointer;font-size:12px;font-weight:700;transition:all .18s;box-shadow:0 2px 10px rgba(0,0,0,.3);}
+.brief-btn:hover{border-color:rgba(76,201,240,.55);color:var(--accent);transform:translateY(-1px);}
+.brief-btn.primary{background:linear-gradient(135deg,rgba(76,201,240,.16),rgba(76,201,240,.08));border-color:rgba(76,201,240,.45);color:var(--accent);}
+.brief-meta{font-size:11px;color:var(--muted);}
+.brief-actions-list{display:flex;flex-direction:column;gap:10px;}
+.brief-action-card{padding:12px 13px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);}
+.brief-action-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:7px;}
+.brief-action-title{font-size:12px;font-weight:700;color:var(--text);line-height:1.45;}
+.brief-action-sub{font-size:11px;color:var(--muted);line-height:1.55;}
+.brief-action-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.mini-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);font-size:10px;font-weight:700;color:var(--muted);}
+.mini-chip strong{color:var(--text);}
+.impact-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.impact-tile{padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.025);cursor:pointer;transition:border-color .18s,transform .15s,background .18s;}
+.impact-tile:hover{border-color:rgba(76,201,240,.35);transform:translateY(-1px);}
+.impact-tile.active{border-color:rgba(76,201,240,.55);background:rgba(76,201,240,.08);}
+.impact-tile-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
+.impact-tile-label{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+.impact-tile-count{font-size:22px;font-weight:900;color:var(--text);letter-spacing:-.04em;}
+.impact-tile-sub{font-size:10px;color:var(--muted);line-height:1.55;}
+.brief-filter-bar{display:grid;grid-template-columns:minmax(260px,2fr) repeat(2,minmax(160px,1fr));gap:10px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.05);}
+.brief-input,.brief-select{width:100%;background:rgba(18,20,29,.9);border:1px solid rgba(255,255,255,.08);border-radius:9px;color:var(--text);padding:9px 11px;font-size:12px;outline:none;transition:border-color .18s,box-shadow .18s;}
+.brief-input:focus,.brief-select:focus{border-color:rgba(76,201,240,.5);box-shadow:0 0 0 3px rgba(76,201,240,.11);}
+.brief-input::placeholder{color:var(--muted);}
+.brief-list-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;font-size:11px;color:var(--muted);}
+.brief-virtual-wrap{flex:1;min-height:0;overflow:auto;position:relative;}
+.brief-virtual-inner{position:relative;width:100%;}
+.brief-path-row{position:absolute;left:0;right:0;padding:0 16px 12px;}
+.brief-path-card{height:94px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:linear-gradient(145deg,rgba(22,24,34,.96),rgba(16,18,26,.92));padding:10px 12px 8px;cursor:pointer;transition:border-color .18s,transform .15s,box-shadow .18s;display:flex;flex-direction:column;gap:4px;box-shadow:0 6px 18px rgba(0,0,0,.24);overflow:hidden;}
+.brief-path-card:hover{border-color:rgba(76,201,240,.35);transform:translateY(-1px);}
+.brief-path-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+.brief-path-top > div{min-width:0;flex:1;}
+.brief-path-title{font-size:12px;font-weight:700;color:var(--text);line-height:1.3;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.chain-stamp{display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow:hidden;white-space:nowrap;min-height:20px;padding:4px 8px 0 0;margin-top:2px;border-top:1px solid rgba(255,255,255,.06);mask-image:linear-gradient(90deg,#000 0,#000 86%,transparent 100%);-webkit-mask-image:linear-gradient(90deg,#000 0,#000 86%,transparent 100%);}
+.chain-stamp-node{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);font-size:10px;font-weight:700;color:var(--text);flex:0 0 auto;max-width:150px;}
+.chain-stamp-node span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;max-width:108px;}
+.chain-stamp-arrow{font-size:10px;color:var(--muted);}
+.mitre-chip{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:#0a1628;border:1px solid #4cc9f040;color:#4cc9f0;font-size:10px;font-weight:700;}
+.brief-path-actions{display:flex;align-items:center;gap:8px;justify-content:flex-end;}
+.brief-inline-btn{padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);color:var(--text);cursor:pointer;font-size:11px;font-weight:700;transition:all .16s;flex:0 0 auto;}
+.brief-inline-btn:hover{border-color:rgba(76,201,240,.45);color:var(--accent);}
+.brief-analyzer-card{padding:14px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:linear-gradient(145deg,rgba(22,24,34,.96),rgba(15,17,25,.94));box-shadow:0 10px 28px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.03);}
+.brief-analyzer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.brief-analyzer-title{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+.brief-analyzer-sub{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:12px;}
+.brief-analyzer-slot{min-height:520px;}
+.brief-analyzer-collapse{border:1px solid rgba(255,255,255,.07);border-radius:14px;background:linear-gradient(145deg,rgba(22,24,34,.96),rgba(15,17,25,.94));box-shadow:0 10px 28px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.03);overflow:hidden;flex-shrink:0;}
+.brief-analyzer-collapse summary{list-style:none;cursor:pointer;padding:14px 16px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+.brief-analyzer-collapse summary::-webkit-details-marker{display:none;}
+.brief-analyzer-collapse summary::after{content:'Expand';font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:none;color:var(--accent);}
+.brief-analyzer-collapse[open] summary::after{content:'Collapse';}
+.brief-analyzer-collapse[open]{display:flex;flex-direction:column;}
+.brief-analyzer-collapse-body{padding:0 14px 14px;max-height:min(78vh,960px);overflow:auto;}
+.brief-analyzer-collapse-body::-webkit-scrollbar{width:6px;}
+.brief-analyzer-collapse-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:999px;}
+.brief-analyzer-collapse-body::-webkit-scrollbar-track{background:transparent;}
+.brief-path-list-host{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
+.brief-list-empty{padding:28px 18px;color:var(--muted);font-size:12px;line-height:1.7;text-align:center;}
+@media (max-width: 1180px){
+  .briefing-grid{grid-template-columns:1fr;}
+  .brief-filter-bar{grid-template-columns:1fr 1fr;}
+}
+@media (max-width: 760px){
+  #briefing-view{padding:14px;}
+  .brief-filter-bar{grid-template-columns:1fr;}
+  .impact-grid{grid-template-columns:1fr;}
+  .brief-path-card{height:104px;}
+}
+
+/* ─── Path route ─── */
+#path-route{display:none;flex:1;min-height:0;overflow:hidden;}
+#path-route.visible{display:block;}
+#path-view{display:flex;flex-direction:column;gap:14px;height:100%;padding:18px 18px 22px;overflow:hidden;
+  background:
+    radial-gradient(ellipse at top left,rgba(255,71,87,.05),transparent 34%),
+    radial-gradient(ellipse at top right,rgba(76,201,240,.04),transparent 32%),
+    linear-gradient(180deg,#0a0b12,#0b0d16 45%,#0a0b12);}
+.phase-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;}
+.phase-step{padding:12px 13px;border-radius:12px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.025);min-height:74px;}
+.phase-step.active{border-color:rgba(169,227,75,.42);background:rgba(169,227,75,.08);}
+.phase-step-label{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+.phase-step-node{font-size:12px;font-weight:700;color:var(--text);line-height:1.45;}
+.phase-step-meta{margin-top:5px;font-size:10px;color:var(--muted);}
+.path-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;min-height:0;flex:1;}
+.path-main,.path-rail{display:flex;flex-direction:column;gap:16px;min-height:0;}
+.path-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.05);}
+.path-toolbar-title{font-size:16px;font-weight:800;letter-spacing:-.03em;color:var(--text);line-height:1.25;}
+.path-toolbar-sub{font-size:11px;color:var(--muted);margin-top:5px;}
+.path-toolbar-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+.path-scroll{flex:1;min-height:0;overflow:auto;padding:16px;}
+.path-storyboard{display:flex;flex-direction:column;gap:14px;}
+.hop-card{border:1px solid rgba(255,255,255,.07);border-radius:14px;background:linear-gradient(145deg,rgba(22,24,34,.97),rgba(16,18,26,.94));box-shadow:0 8px 24px rgba(0,0,0,.28);overflow:hidden;}
+.hop-card.active{border-color:rgba(76,201,240,.42);box-shadow:0 0 0 1px rgba(76,201,240,.18),0 10px 26px rgba(0,0,0,.32);}
+.hop-head{padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.05);}
+.hop-head-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.hop-title{font-size:13px;font-weight:800;color:var(--text);line-height:1.45;display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+.hop-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:12px;}
+.hop-section{padding:11px 12px;border-radius:12px;background:rgba(255,255,255,.022);border:1px solid rgba(255,255,255,.05);}
+.hop-section-title{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.hop-copy-wrap{position:relative;}
+.hop-copy-btn{position:absolute;top:8px;right:8px;padding:4px 7px;border-radius:7px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);color:var(--muted);cursor:pointer;font-size:10px;font-weight:700;}
+.hop-copy-btn:hover{border-color:rgba(76,201,240,.45);color:var(--accent);}
+.hop-evidence-list,.hop-alt-list,.hop-mitre-list{display:flex;flex-direction:column;gap:8px;}
+.hop-evidence-item,.hop-alt-item{padding:8px 9px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);font-size:11px;line-height:1.55;color:var(--muted);}
+.hop-alt-item strong,.hop-evidence-item strong{color:var(--text);}
+.hop-alt-toggle{margin-top:8px;}
+.hop-inline-row{display:flex;gap:6px;flex-wrap:wrap;}
+.hop-primary-stack{display:flex;flex-direction:column;gap:12px;}
+.hop-extra-details{border:1px solid rgba(255,255,255,.05);border-radius:12px;background:rgba(255,255,255,.018);overflow:hidden;}
+.hop-extra-details summary{list-style:none;cursor:pointer;padding:11px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--muted);font-size:11px;font-weight:700;}
+.hop-extra-details summary::-webkit-details-marker{display:none;}
+.hop-extra-details summary::after{content:'Show';color:var(--accent);font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
+.hop-extra-details[open] summary::after{content:'Hide';}
+.hop-extra-summary{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.hop-extra-body{padding:0 12px 12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.path-rail-card{padding:14px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:linear-gradient(145deg,rgba(22,24,34,.97),rgba(16,18,26,.94));box-shadow:0 8px 24px rgba(0,0,0,.28);}
+.path-rail-title{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+.path-rail-body{font-size:12px;color:var(--text);line-height:1.6;}
+.path-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.path-stat{padding:9px 10px;border-radius:11px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);}
+.path-stat-label{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+.path-stat-value{font-size:13px;font-weight:800;color:var(--text);}
+.subgraph-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;}
+.subgraph-svg-wrap{height:230px;border-radius:12px;background:
+  radial-gradient(ellipse at top left,rgba(76,201,240,.06),transparent 40%),
+  linear-gradient(180deg,rgba(10,11,18,.94),rgba(8,9,13,.96));border:1px solid rgba(255,255,255,.05);overflow:hidden;position:relative;}
+.subgraph-overflow{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+.subgraph-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:11px;text-align:center;padding:12px;}
+.subgraph-node-label{font-size:8px;fill:#d8dce8;font-weight:700;paint-order:stroke fill;stroke:#0d0f13;stroke-width:2;}
+.path-back-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+@media (max-width: 1220px){
+  .path-layout{grid-template-columns:1fr;}
+}
+@media (max-width: 860px){
+  .phase-strip{grid-template-columns:1fr;}
+  .hop-extra-body{grid-template-columns:1fr;}
+  #path-view{padding:14px;}
+}
+
 /* ─── Toolbar ─── */
 #toolbar{height:50px;background:rgba(11,12,18,.92);backdrop-filter:blur(28px) saturate(200%);-webkit-backdrop-filter:blur(28px) saturate(200%);border-bottom:1px solid rgba(255,255,255,.07);box-shadow:0 1px 0 rgba(76,201,240,.08),0 2px 16px rgba(0,0,0,.4);display:flex;align-items:center;gap:8px;padding:0 16px;flex-shrink:0;z-index:20;}
 #toolbar-logo{font-size:15px;font-weight:900;background:linear-gradient(135deg,var(--accent) 0%,#82e8ff 40%,var(--accent2) 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;letter-spacing:-.5px;margin-right:6px;display:flex;align-items:center;gap:8px;}
@@ -182,7 +399,7 @@ svg#graph{width:100%;height:100%;display:block;}
 .canvas-btn:hover{border-color:rgba(76,201,240,.55);color:var(--accent);background:rgba(76,201,240,.07);box-shadow:0 0 18px rgba(76,201,240,.2),0 2px 12px rgba(0,0,0,.5);transform:scale(1.08);}
 
 /* Drop overlay */
-#drop-overlay{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,rgba(20,22,32,.98) 0%,rgba(9,10,15,.99) 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:30;gap:20px;}
+#drop-overlay{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 45%,rgba(20,22,32,.98) 0%,rgba(9,10,15,.99) 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:90;gap:20px;}
 #drop-overlay.hidden{display:none;}
 #drop-overlay.drag-active{background:radial-gradient(ellipse at 50% 45%,rgba(76,201,240,.08) 0%,rgba(9,10,15,.98) 70%);outline:2px dashed rgba(76,201,240,.4);outline-offset:-24px;}
 .drop-icon{font-size:64px;line-height:1;filter:drop-shadow(0 0 32px rgba(76,201,240,.5));animation:dropBounce 2s ease-in-out infinite;}
@@ -193,7 +410,7 @@ svg#graph{width:100%;height:100%;display:block;}
 .drop-sub::after{content:'';display:inline-block;width:24px;height:1px;background:linear-gradient(90deg,var(--muted),transparent);}
 
 /* Loading overlay */
-#loading-overlay{position:absolute;inset:0;background:rgba(10,11,18,.96);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:40;gap:18px;}
+#loading-overlay{position:fixed;inset:0;background:rgba(10,11,18,.96);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:95;gap:18px;}
 #loading-overlay.visible{display:flex;}
 .spinner{width:44px;height:44px;border:3px solid rgba(76,201,240,.1);border-top-color:var(--accent);border-right-color:rgba(76,201,240,.4);border-radius:50%;animation:spin .7s linear infinite;box-shadow:0 0 24px rgba(76,201,240,.18);}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -217,7 +434,7 @@ svg#graph{width:100%;height:100%;display:block;}
 .node-circle.highlighted{stroke:#fff !important;stroke-width:3;filter:drop-shadow(0 0 10px rgba(255,255,255,.5)) !important;}
 .node-circle.path-active{stroke:var(--path-glow) !important;stroke-width:4.5;filter:drop-shadow(0 0 16px var(--path-glow)) drop-shadow(0 0 6px var(--path-glow)) !important;}
 .node-circle.path-active ~ text.node-label{fill:#fff;font-weight:700;}
-.node-icon{pointer-events:none;user-select:none;dominant-baseline:middle;text-anchor:middle;letter-spacing:-.5px;}
+.node-icon{pointer-events:none;user-select:none;dominant-baseline:middle;text-anchor:middle;letter-spacing:-.5px;font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji','Twemoji Mozilla','Segoe UI Symbol',sans-serif;}
 .node-label{pointer-events:none;user-select:none;transition:opacity .2s;paint-order:stroke fill;letter-spacing:.01em;}
 /* ─── Always-on edge mid-labels ─── */
 .edge-mid-label{pointer-events:none;transition:opacity .2s;}
@@ -361,8 +578,10 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
 .path-label{font-size:10px;font-weight:600;font-style:italic;color:var(--muted);padding:0 12px 3px;line-height:1.4;}
 
 /* ─── Attack Chain Analyzer ─── */
-#god-panel{position:absolute;inset:0;background:linear-gradient(145deg,rgba(10,11,16,.99),rgba(8,9,13,.99));z-index:25;display:none;flex-direction:column;overflow:hidden;}
-#god-panel.visible{display:flex;}
+#god-panel{position:relative;background:linear-gradient(145deg,rgba(10,11,16,.99),rgba(8,9,13,.99));border:1px solid rgba(255,255,255,.07);border-radius:14px;box-shadow:0 10px 28px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.03);display:none;flex-direction:column;overflow:hidden;min-height:520px;}
+#god-panel.visible,#god-panel.embedded{display:flex;}
+#god-panel.embedded{min-height:520px;}
+#god-panel.embedded #god-close{display:none;}
 #god-header{padding:11px 18px;background:rgba(22,24,32,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;box-shadow:0 2px 16px rgba(0,0,0,.4);}
 #god-title{font-size:14px;font-weight:900;background:linear-gradient(135deg,#ff4757,#ff7043);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:.05em;white-space:nowrap;filter:drop-shadow(0 0 12px rgba(255,71,87,.3));}
 #god-sa-wrap{display:flex;align-items:center;gap:6px;margin-left:12px;}
@@ -408,8 +627,8 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
 @keyframes nodeGlow{0%,100%{filter:drop-shadow(0 0 5px rgba(255,71,87,.5));}50%{filter:drop-shadow(0 0 14px rgba(255,71,87,1));}}
 
 /* ─── Target ring (goal node halo) ─── */
-.target-ring{pointer-events:none;fill:none;stroke:#ff4757;stroke-width:2;stroke-dasharray:4,3;}
-@keyframes targetPulse{0%,100%{opacity:.4;stroke-width:2;}50%{opacity:.9;stroke-width:3;}}
+.target-ring{pointer-events:none;fill:none;stroke:rgba(255,71,87,.28);stroke-width:1.5;stroke-dasharray:4,4;}
+@keyframes targetPulse{0%,100%{opacity:.12;stroke-width:1.5;}50%{opacity:.28;stroke-width:2;}}
 .target-ring{animation:targetPulse 1.8s ease-in-out infinite;}
 
 /* ─── Category-aware node styles ─── */
@@ -421,7 +640,7 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
 
 /* ─── Namespace zones (replace namespace nodes with visual regions) ─── */
 .ns-zone{fill-opacity:.05;stroke-dasharray:6,4;stroke-opacity:.35;cursor:default;stroke-width:1.5;}
-.ns-label{pointer-events:none;font-weight:800;opacity:.4;text-transform:uppercase;letter-spacing:.08em;fill:inherit;}
+.ns-label{pointer-events:none;font-weight:800;opacity:.88;text-transform:uppercase;letter-spacing:.08em;fill:#d8dce8;paint-order:stroke fill;stroke:#0d0f13;stroke-width:3px;stroke-linejoin:round;}
 
 /* ─── Host / Kubernetes node (Linux machine) — diamond shape ─── */
 .host-shape{stroke-width:2.5;cursor:pointer;transition:filter .2s,opacity .2s;}
@@ -450,15 +669,16 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
 #chain-strip::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px;}
 #chain-strip-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 0 0 12px;flex-shrink:0;line-height:1;transition:color .15s;}
 #chain-strip-close:hover{color:var(--text);}
-.cs-step{display:flex;align-items:center;gap:4px;flex-shrink:0;}
-.cs-node{display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid transparent;white-space:nowrap;cursor:pointer;transition:filter .1s;}
-.cs-node:hover{filter:brightness(1.3);}
-.cs-node-num{width:14px;height:14px;border-radius:50%;background:rgba(0,0,0,.5);font-size:8px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.cs-arrow{display:flex;flex-direction:column;align-items:center;padding:0 2px;flex-shrink:0;}
-.cs-edge-label{font-size:8px;color:#a29bfe;white-space:nowrap;line-height:1;margin-bottom:1px;}
-.cs-edge-icon{color:var(--muted);font-size:10px;line-height:1;}
-.cs-start-badge{font-size:8px;background:#0a1a2a;color:#4cc9f0;border:1px solid #4cc9f030;padding:1px 4px;border-radius:3px;margin-left:2px;font-weight:700;}
-.cs-end-badge{font-size:8px;background:#2a0000;color:#ff8a95;border:1px solid #ff475730;padding:1px 4px;border-radius:3px;margin-left:2px;font-weight:700;}
+.cs-step{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.cs-node{display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid transparent;white-space:nowrap;cursor:pointer;transition:filter .12s,border-color .12s,background .12s;box-shadow:inset 0 1px 0 rgba(255,255,255,.03);}
+.cs-node:hover{filter:brightness(1.08);}
+.cs-node-num{width:16px;height:16px;border-radius:999px;background:rgba(0,0,0,.42);font-size:8px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.cs-node-label{max-width:124px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cs-arrow{display:flex;align-items:center;gap:5px;padding:0 1px;flex-shrink:0;}
+.cs-edge-label{display:inline-flex;align-items:center;padding:2px 6px;border-radius:999px;background:rgba(162,155,254,.12);border:1px solid rgba(162,155,254,.24);font-size:8px;color:#c7c2ff;white-space:nowrap;line-height:1;text-transform:uppercase;letter-spacing:.04em;}
+.cs-edge-icon{color:rgba(255,255,255,.38);font-size:11px;line-height:1;}
+.cs-start-badge{font-size:8px;background:#0a1a2a;color:#7dd8ff;border:1px solid #4cc9f030;padding:1px 5px;border-radius:999px;margin-left:2px;font-weight:800;letter-spacing:.04em;}
+.cs-end-badge{font-size:8px;background:#2a0000;color:#ff9aa3;border:1px solid #ff475730;padding:1px 5px;border-radius:999px;margin-left:2px;font-weight:800;letter-spacing:.04em;}
 
 /* ─── Enhanced finding modal ─── */
 .modal-impact{background:linear-gradient(135deg,rgba(255,71,87,.06),rgba(255,71,87,.02));border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:11px 14px;margin-bottom:6px;}
@@ -522,9 +742,29 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
 .god-step.ai-step .god-step-num{border-color:#a29bfe;color:#a29bfe;background:#0a0814;}
 .god-step.ai-step .god-step-cmd{border-color:#a29bfe25;color:#c4b5fd;}
 .god-step.ai-step.active-step .god-step-num{border-color:#d8b4fe;color:#d8b4fe;background:#1a0f35;}
+
+body[data-explore-mode="path-focus"] .tab-bar,
+body[data-explore-mode="path-focus"] #tab-findings,
+body[data-explore-mode="path-focus"] #tab-legend,
+body[data-explore-mode="path-focus"] #tab-queries,
+body[data-explore-mode="path-focus"] .filter-btn{display:none !important;}
+body[data-explore-mode="path-focus"] #sidebar{width:340px;}
+body[data-explore-mode="path-focus"] #tab-paths{display:flex !important;}
+body[data-explore-mode="path-focus"] #paths-container{padding:12px 10px;}
+body[data-explore-mode="path-focus"] .path-card{margin-bottom:0;}
+body[data-explore-mode="path-focus"] .sev-group-header{display:none;}
 </style>
 </head>
 <body>
+
+<div id="app">
+<div id="foothold-header" aria-live="polite"></div>
+
+<div id="route-outlet">
+<div id="briefing-route"></div>
+<div id="path-route"></div>
+<div id="explore-route">
+<div id="explore-gate"></div>
 
 <!-- Toolbar -->
 <div id="toolbar">
@@ -544,9 +784,11 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
   <div class="toolbar-sep"></div>
   <button class="tb-btn" id="rbac-btn" title="Toggle RBAC nodes (Roles, Bindings)">👁 RBAC</button>
   <button class="tb-btn" id="focus-btn" title="Focus mode: dim low-risk noise, emphasize attack surfaces">🎯 Focus</button>
-  <button class="tb-btn" id="export-btn" title="Export pentest report">⬇ Export</button>
+  <button class="tb-btn" id="export-btn" title="Export pentest report" style="display:none">⬇ Export</button>
+  <button class="tb-btn" id="explore-scope-btn" title="Change Explore scope" style="display:none">🧭 Scope</button>
+  <button class="tb-btn danger" id="explore-full-toggle-btn" title="Load full cluster graph" style="display:none">⚠ Full Graph</button>
   <div class="toolbar-sep"></div>
-  <button class="tb-btn danger" id="god-btn" title="Attack Chain Analyzer: full-cluster attack chain per SA">⛓ Attack Chain Analyzer</button>
+  <button class="tb-btn danger" id="god-btn" title="Attack Chain Analyzer: full-cluster attack chain per SA" style="display:none">⛓ Attack Chain Analyzer</button>
   <span id="stats">No data loaded</span>
   <button class="tb-btn" id="open-file-btn">📂 Open JSON</button>
   <input id="file-input" type="file" accept=".json,application/json">
@@ -687,20 +929,6 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
 
   <!-- Canvas -->
   <div id="canvas-wrap">
-    <!-- Drop overlay -->
-    <div id="drop-overlay">
-      <div class="drop-icon">📂</div>
-      <div class="drop-title">Drop k8scout JSON here</div>
-      <div class="drop-sub">or click "Open JSON" in the toolbar</div>
-    </div>
-
-    <!-- Loading overlay -->
-    <div id="loading-overlay">
-      <div class="spinner"></div>
-      <div class="loading-text" id="loading-text">Loading…</div>
-      <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-fill" style="width:0%"></div></div>
-    </div>
-
     <svg id="graph">
       <defs id="svg-defs"></defs>
       <g id="zoom-layer">
@@ -741,42 +969,6 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
       <div style="margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.06);font-size:8px;color:rgba(255,255,255,.25);">F = fit · / = search · Esc = clear</div>
     </div>
 
-    <!-- Attack Chain Analyzer Overlay -->
-    <div id="god-panel">
-      <div id="god-header">
-        <span style="font-size:20px;filter:drop-shadow(0 0 6px #ff475780)">👁</span>
-        <div id="god-title">ATTACK CHAIN ANALYZER</div>
-        <div id="god-sa-wrap">
-          <label id="god-sa-label">Simulate from:</label>
-          <select id="god-sa-select"><option value="__all__">All Identities</option></select>
-        </div>
-        <span id="god-chains-count"></span>
-        <div id="god-ai-wrap">
-          <button id="god-ai-toggle" title="AI-powered attack chain generation">🤖 AI Mode</button>
-          <div id="god-ai-settings">
-            <select id="god-ai-provider">
-              <option value="openai">OpenAI</option>
-              <option value="openrouter">OpenRouter</option>
-            </select>
-            <input type="password" id="god-ai-key" placeholder="sk-…  API key" autocomplete="off" spellcheck="false">
-            <select id="god-ai-model">
-              <option value="gpt-4o">GPT-4o</option>
-              <option value="gpt-4-turbo">GPT-4 Turbo</option>
-              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-            </select>
-            <button id="god-ai-generate" disabled>⚡ Generate</button>
-            <button id="god-blueteam-btn" title="Blue Team Mode: generate detection rules instead of attack steps" style="background:none;border:1px solid #06d6a050;color:#06d6a0;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">🛡 Blue Team</button>
-            <button id="god-compare-btn" title="Compare top 5 SAs and rank attack potential" style="background:none;border:1px solid #74b9ff50;color:#74b9ff;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">⇄ Compare SAs</button>
-            <span id="god-ai-status"></span>
-          </div>
-        </div>
-        <div id="god-subtitle">Cluster-wide attack chain simulation per identity</div>
-        <span id="god-close" title="Close Attack Chain Analyzer">✕</span>
-      </div>
-      <div id="god-body">
-        <div class="god-empty">Load a k8scout JSON file to generate<br>identity-specific attack chain simulations.</div>
-      </div>
-    </div>
   </div>
 
   <!-- Detail panel -->
@@ -790,6 +982,60 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
       <span id="detail-close" title="Close (Esc)">✕</span>
     </div>
     <div id="detail-body"></div>
+  </div>
+</div>
+</div>
+</div>
+
+<div id="overlays">
+<div id="drop-overlay">
+  <div class="drop-icon">📂</div>
+  <div class="drop-title">Drop k8scout JSON here</div>
+  <div class="drop-sub">Attack paths load directly in the browser with no build step.</div>
+  <button class="brief-btn primary" id="drop-open-file-btn">Open JSON</button>
+</div>
+
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">Loading…</div>
+  <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-fill" style="width:0%"></div></div>
+</div>
+
+<div id="shared-panel-host" hidden>
+  <div id="god-panel">
+    <div id="god-header">
+      <span style="font-size:20px;filter:drop-shadow(0 0 6px #ff475780)">👁</span>
+      <div id="god-title">ATTACK CHAIN ANALYZER</div>
+      <div id="god-sa-wrap">
+        <label id="god-sa-label">Simulate from:</label>
+        <select id="god-sa-select"><option value="__all__">All Identities</option></select>
+      </div>
+      <span id="god-chains-count"></span>
+      <div id="god-ai-wrap">
+        <button id="god-ai-toggle" title="AI-powered attack chain generation">🤖 AI Mode</button>
+        <div id="god-ai-settings">
+          <select id="god-ai-provider">
+            <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
+          <input type="password" id="god-ai-key" placeholder="sk-…  API key" autocomplete="off" spellcheck="false">
+          <select id="god-ai-model">
+            <option value="gpt-4o">GPT-4o</option>
+            <option value="gpt-4-turbo">GPT-4 Turbo</option>
+            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+          </select>
+          <button id="god-ai-generate" disabled>⚡ Generate</button>
+          <button id="god-blueteam-btn" title="Blue Team Mode: generate detection rules instead of attack steps" style="background:none;border:1px solid #06d6a050;color:#06d6a0;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">🛡 Blue Team</button>
+          <button id="god-compare-btn" title="Compare top 5 SAs and rank attack potential" style="background:none;border:1px solid #74b9ff50;color:#74b9ff;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">⇄ Compare SAs</button>
+          <span id="god-ai-status"></span>
+        </div>
+      </div>
+      <div id="god-subtitle">Cluster-wide attack chain simulation per identity</div>
+      <span id="god-close" title="Close Attack Chain Analyzer">✕</span>
+    </div>
+    <div id="god-body">
+      <div class="god-empty">Load a k8scout JSON file to generate<br>identity-specific attack chain simulations.</div>
+    </div>
   </div>
 </div>
 
@@ -839,6 +1085,8 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
     </div>
   </div>
 </div>
+</div>
+</div>
 
 <script>
 /* ================================================================
@@ -872,7 +1120,7 @@ const NODE_ICONS = {
   RoleBinding:        '⟐',   // binding (ns)
   Workload:           '▣',   // workload / deployment box
   Pod:                '▣',   // pod
-  Secret:             '🔑',  // key icon
+  Secret:             '⚿',   // secret/key symbol that renders reliably in SVG text
   ConfigMap:          '≡',   // config
   Node:               '◆',   // host node diamond
   Namespace:          'NS',
@@ -934,6 +1182,19 @@ const EDGE_WEIGHT = {
   can_create:2.0, can_patch:2.0, can_delete:3.0,
   can_escalate:1.0, can_bind:1.0, inferred:2.0,
 };
+
+/* Attack-relevant edge kinds used by ingest, pathing, and scoped graph helpers */
+const ATTACK_EDGE_KINDS = new Set([
+  'grants','bound_to','runs_as','mounts',
+  'can_exec','can_impersonate','can_create','can_patch',
+  'can_delete','can_get','can_list','can_portforward','member_of',
+  'can_escalate','can_bind',
+  'inferred',
+  'granted_by',
+  'runs_on',
+  'authenticates_as',
+  'assumes_cloud_role',
+]);
 
 /* Goal node IDs (populated from findings before renderGraph) */
 let goalNodeSet = new Set();
@@ -1699,6 +1960,7 @@ function buildGodChains(saId) {
 function populateGodSASelector() {
   if (!graphData) return;
   const sel = document.getElementById('god-sa-select');
+  const previousValue = sel.value;
   sel.innerHTML = '<option value="__all__">All Identities</option>';
 
   // Get all source nodes (Identity + SA) sorted by their max path impact
@@ -1732,6 +1994,10 @@ function populateGodSASelector() {
       opt.textContent = score ? `${label}${foothold}  [score ${score}]` : `${label}${foothold}`;
       sel.appendChild(opt);
     });
+
+  if (previousValue && [...sel.options].some(opt => opt.value === previousValue)) {
+    sel.value = previousValue;
+  }
 }
 
 function renderGodPanel() {
@@ -1767,30 +2033,61 @@ function renderGodPanel() {
   body.innerHTML = '<div class="god-empty" style="color:var(--accent2);opacity:.8">Ready — click ⚡ Generate to analyze this identity.</div>';
 }
 
-document.getElementById('god-btn').addEventListener('click', () => {
+function syncIdentityAnalyzerTrigger(active) {
+  document.getElementById('god-btn')?.classList.toggle('active', !!active);
+}
+
+function closeIdentityAnalyzer() {
   const panel = document.getElementById('god-panel');
+  panel?.classList.remove('visible');
+  syncIdentityAnalyzerTrigger(false);
+}
+
+function parkIdentityAnalyzer() {
+  const panel = document.getElementById('god-panel');
+  const host = document.getElementById('shared-panel-host');
+  if (!panel || !host) return;
+  if (panel.parentElement !== host) host.appendChild(panel);
+  panel.classList.remove('embedded');
+  closeIdentityAnalyzer();
+}
+
+function mountIdentityAnalyzer(containerEl) {
+  const panel = document.getElementById('god-panel');
+  if (!panel || !containerEl) return;
+  if (panel.parentElement !== containerEl) containerEl.appendChild(panel);
+  panel.classList.add('embedded');
+  const needsRefresh = panel.dataset.boundVersion !== String(dataVersion);
+  const provider = getActiveProvider();
+  const saved = localStorage.getItem(PROVIDER_KEY_STORAGE[provider] || PROVIDER_KEY_STORAGE.openai);
+  if (saved) document.getElementById('god-ai-key').value = saved;
+  populateGodSASelector();
+  if (needsRefresh || !panel.querySelector('.god-ai-block')) renderGodPanel();
+  panel.dataset.boundVersion = String(dataVersion);
+}
+
+window.closeIdentityAnalyzer = closeIdentityAnalyzer;
+
+document.getElementById('god-btn')?.addEventListener('click', () => {
+  const panel = document.getElementById('god-panel');
+  if (!panel) return;
   const isVisible = panel.classList.contains('visible');
   if (!isVisible) {
-    // Restore saved API key for the active provider
     const provider = getActiveProvider();
     const saved = localStorage.getItem(PROVIDER_KEY_STORAGE[provider] || PROVIDER_KEY_STORAGE.openai);
     if (saved) document.getElementById('god-ai-key').value = saved;
     populateGodSASelector();
     renderGodPanel();
     panel.classList.add('visible');
-    document.getElementById('god-btn').classList.add('active');
+    syncIdentityAnalyzerTrigger(true);
   } else {
-    panel.classList.remove('visible');
-    document.getElementById('god-btn').classList.remove('active');
+    closeIdentityAnalyzer();
   }
 });
 
-document.getElementById('god-close').addEventListener('click', () => {
-  document.getElementById('god-panel').classList.remove('visible');
-  document.getElementById('god-btn').classList.remove('active');
-});
+document.getElementById('god-close')?.addEventListener('click', closeIdentityAnalyzer);
 
-document.getElementById('god-sa-select').addEventListener('change', () => {
+document.getElementById('god-sa-select')?.addEventListener('change', () => {
   const saId = document.getElementById('god-sa-select').value;
   const aiOn = document.getElementById('god-ai-toggle').classList.contains('active');
   document.getElementById('god-ai-generate').disabled = !aiOn || saId === '__all__';
@@ -2399,6 +2696,17 @@ function setAIStatus(html, color, isHtml) {
   else el.textContent = html;
 }
 
+function openAnalyzerPathInExplore(path) {
+  if (!path) return;
+  const idx = Math.max(computedPaths.indexOf(path), 0);
+  const pathId = ensurePathId(path, idx);
+  route(`/explore?scope=path:${encodeURIComponent(pathId)}&path=${encodeURIComponent(pathId)}`);
+}
+
+window.openAnalyzerPathInExplore = function() {
+  openAnalyzerPathInExplore(window._k8s_miniPath);
+};
+
 function renderAttackPathMiniGraph(saNode, containerEl) {
   const saId = saNode?.id;
   if (!saId || !graphData) return;
@@ -2506,10 +2814,7 @@ function renderAttackPathMiniGraph(saNode, containerEl) {
       onmouseenter="this.style.background='rgba(169,227,75,.08)'"
       onmouseleave="this.style.background='none'"
       onclick="
-        document.getElementById('god-panel').classList.remove('visible');
-        document.getElementById('god-btn').classList.remove('active');
-        highlightPath(window._k8s_miniPath);
-        setTimeout(()=>{ const fb=document.getElementById('fit-btn'); if(fb)fb.click(); },80);
+        window.openAnalyzerPathInExplore && window.openAnalyzerPathInExplore();
       ">↗ View in graph</button>`;
 
   // ── SVG ──────────────────────────────────────────────────────────────────
@@ -2680,8 +2985,11 @@ function renderAttackPathMiniGraph(saNode, containerEl) {
       g.setAttribute('transform', `translate(${n._lx},${cy})`);
       g.style.cursor = 'pointer';
       g.addEventListener('click', () => {
-        document.getElementById('god-panel').classList.remove('visible');
-        document.getElementById('god-btn').classList.remove('active');
+        if (currentRoute?.name !== 'explore' || !nodesLayer || !linksLayer) {
+          openAnalyzerPathInExplore(window._k8s_miniPath);
+          return;
+        }
+        closeIdentityAnalyzer();
         selectNode(n.id);
       });
 
@@ -3027,19 +3335,321 @@ let showRbac        = true;  // RBAC node visibility toggle
 let playbackTimer   = null; // attack playback timer
 let blueTeamMode    = false; // blue team detection mode
 let nodePosMap      = {}; // id -> {x,y} for minimap
+let dataLayer       = createEmptyDataLayer();
+let currentRoute    = null;
+const routeListeners = new Set();
+let dataVersion = 0;
+let subgraphSimulation = null;
+const svg        = d3.select('#graph');
+const svgDefs    = svg.select('#svg-defs');
+const zoomLayer  = svg.select('#zoom-layer');
+const hullLayer  = svg.select('#hull-layer');
+const linksLayer = svg.select('#links-layer');
+const nodesLayer = svg.select('#nodes-layer');
+let linkSel      = null;
+let nodeSel      = null;
+
+function createEmptyDataLayer() {
+  return {
+    nodes: [],
+    edges: [],
+    findings: [],
+    nodeById: {},
+    adjacency: { out: {}, in: {}, attackOut: {}, attackIn: {} },
+    findingsByNode: {},
+    pathsById: {},
+    pathsByImpact: {},
+    pathRows: [],
+    actionsByNode: {},
+    saUsage: { withWorkload: new Set(), withPrivilegedWorkload: new Set() },
+    foothold: null,
+    fullGraph: null,
+  };
+}
+
+function createAdjacencyBuckets(nodes) {
+  const buckets = {};
+  nodes.forEach(n => { buckets[n.id] = []; });
+  return buckets;
+}
+
+function parseServiceAccountRef(username) {
+  const m = String(username || '').match(/^system:serviceaccount:([^:]+):([^:]+)$/);
+  return m ? { namespace: m[1], name: m[2] } : null;
+}
+
+function formatFootholdValue(value) {
+  if (value == null || value === '') return '<span class="foothold-value muted">Unknown</span>';
+  return `<span class="foothold-value">${escHtml(String(value))}</span>`;
+}
+
+function extractFoothold(raw, graph, byId) {
+  const identity = raw?.identity || {};
+  const saRef = {
+    namespace: identity.namespace || parseServiceAccountRef(identity.username)?.namespace || '',
+    name: identity.sa_name || parseServiceAccountRef(identity.username)?.name || '',
+  };
+
+  const saNode = graph.nodes.find(n =>
+    n.kind === 'ServiceAccount' &&
+    n.name === saRef.name &&
+    (n.namespace || '') === (saRef.namespace || '')
+  ) || null;
+
+  const workloadCandidates = graph.edges
+    .filter(e => e.kind === 'runs_as' && edgeNodeId(e.target || e.to) === saNode?.id)
+    .map(e => byId[edgeNodeId(e.source || e.from)])
+    .filter(Boolean)
+    .sort((a, b) => {
+      const aPod = a.kind === 'Pod' ? 1 : 0;
+      const bPod = b.kind === 'Pod' ? 1 : 0;
+      if (aPod !== bPod) return bPod - aPod;
+      const aRunning = a.metadata?.phase === 'Running' ? 1 : 0;
+      const bRunning = b.metadata?.phase === 'Running' ? 1 : 0;
+      if (aRunning !== bRunning) return bRunning - aRunning;
+      return (b.risk_score || 0) - (a.risk_score || 0);
+    });
+
+  const primaryWorkload = workloadCandidates[0] || null;
+  const podNode = workloadCandidates.find(n => n.kind === 'Pod') || null;
+  const nodeName = podNode?.metadata?.node || primaryWorkload?.metadata?.node || '';
+  const cloudEdge = graph.edges.find(e => {
+    const sid = edgeNodeId(e.source || e.from);
+    const tid = edgeNodeId(e.target || e.to);
+    return sid === saNode?.id && byId[tid]?.kind === 'CloudIdentity';
+  });
+  const cloudIdentity = cloudEdge ? byId[edgeNodeId(cloudEdge.target || cloudEdge.to)] : null;
+  const auditEntries = raw?.audit_footprint || [];
+  const auditSkipped = auditEntries.filter(e => e.skipped).length;
+
+  return {
+    username: identity.username || '',
+    identityId: byId[`identity:${identity.username || ''}`]?.id || '',
+    namespace: saRef.namespace || '',
+    serviceAccount: saNode?.name || saRef.name || '',
+    serviceAccountId: saNode?.id || '',
+    workloadId: primaryWorkload?.kind === 'Workload' ? primaryWorkload.id : '',
+    workload: primaryWorkload?.kind === 'Workload' ? primaryWorkload.name : '',
+    podId: podNode?.id || (primaryWorkload?.kind === 'Pod' ? primaryWorkload.id : ''),
+    pod: podNode?.name || (primaryWorkload?.kind === 'Pod' ? primaryWorkload.name : ''),
+    node: nodeName,
+    cloudIdentity: cloudIdentity?.name || cloudIdentity?.id || '',
+    stealth: !!raw?.meta?.stealth,
+    auditSkipped,
+    auditTotal: auditEntries.length,
+  };
+}
+
+function renderFootholdHeader() {
+  const header = document.getElementById('foothold-header');
+  if (!header) return;
+
+  const foothold = dataLayer.foothold;
+  if (!foothold || !graphData) {
+    header.classList.remove('visible');
+    header.innerHTML = '';
+    return;
+  }
+
+  const routeName = currentRoute?.name || 'briefing';
+
+  header.innerHTML = `
+    <div class="foothold-top">
+      <div class="foothold-title-wrap">
+        <div class="foothold-kicker">Foothold</div>
+        <div class="foothold-title">${escHtml(foothold.username || 'Current identity')}</div>
+        <div class="foothold-subtitle">Current operator context detected from the report. This stays stable across routes so later briefing and path views can pivot without rebuilding the graph.</div>
+      </div>
+      <div class="foothold-status">
+        <div class="foothold-actions">
+          <button class="fh-action-btn" id="fh-scan-details">Scan details</button>
+          <button class="fh-action-btn" id="fh-open-json">Open JSON</button>
+          <button class="fh-action-btn" id="fh-export-report"${rawGraphData ? '' : ' disabled'}>Export HTML</button>
+          <button class="fh-action-btn${routeName === 'briefing' ? ' primary' : ''}" id="fh-briefing-btn"${routeName === 'briefing' ? ' disabled' : ''}>Briefing</button>
+          <button class="fh-action-btn${routeName === 'explore' ? ' primary' : ''}" id="fh-explore-btn"${routeName === 'explore' ? ' disabled' : ''}>Explore</button>
+        </div>
+      </div>
+    </div>
+    <div class="foothold-grid">
+      <div class="foothold-card"><div class="foothold-label">Pod</div>${formatFootholdValue(foothold.pod)}</div>
+      <div class="foothold-card"><div class="foothold-label">Workload</div>${formatFootholdValue(foothold.workload)}</div>
+      <div class="foothold-card"><div class="foothold-label">Service Account</div>${formatFootholdValue(foothold.serviceAccount)}</div>
+      <div class="foothold-card"><div class="foothold-label">Namespace</div>${formatFootholdValue(foothold.namespace)}</div>
+      <div class="foothold-card"><div class="foothold-label">Node</div>${formatFootholdValue(foothold.node)}</div>
+      <div class="foothold-card"><div class="foothold-label">Cloud Identity</div>${formatFootholdValue(foothold.cloudIdentity)}</div>
+    </div>
+  `;
+  header.classList.add('visible');
+  header.querySelector('#fh-scan-details')?.addEventListener('click', showScanDetailsModal);
+  header.querySelector('#fh-open-json')?.addEventListener('click', () => fileInput.click());
+  header.querySelector('#fh-export-report')?.addEventListener('click', exportReport);
+  header.querySelector('#fh-briefing-btn')?.addEventListener('click', () => route('/briefing'));
+  header.querySelector('#fh-explore-btn')?.addEventListener('click', () => route('/explore'));
+}
+
+function showScanDetailsModal() {
+  if (!rawGraphData) return;
+  const fp = rawGraphData.audit_footprint || [];
+  const scanMode = rawGraphData?.meta?.stealth ? 'Stealth' : 'Standard';
+  const skipped = fp.filter(entry => entry.skipped).length;
+  const summaryHtml = `
+    <div class="modal-section">
+      <h4>Scan Mode</h4>
+      <div style="color:var(--text);line-height:1.7;font-size:13px;">
+        ${rawGraphData?.meta?.stealth
+          ? 'Stealth mode was enabled. The scan avoided noisier SSRR/SSAR checks where possible.'
+          : 'Standard mode was used. Full audit-relevant checks were not intentionally suppressed.'}
+      </div>
+    </div>
+    <div class="modal-section">
+      <h4>API Noise Summary</h4>
+      <div style="color:var(--muted);line-height:1.7;font-size:12px;">
+        ${fp.length
+          ? `${skipped} of ${fp.length} audit-relevant checks were skipped.`
+          : 'No audit footprint details were reported in this file.'}
+      </div>
+    </div>
+  `;
+
+  if (!fp.length) {
+    openModal('Scan Details', summaryHtml);
+    return;
+  }
+
+  const rows = fp.map(entry => `
+    <tr>
+      <td style="padding:4px 10px;color:#ccc">${escHtml(entry.action)}</td>
+      <td style="padding:4px 10px;text-align:right;color:#aaa">${entry.count}</td>
+      <td style="padding:4px 10px;color:${entry.skipped ? '#e74c3c' : '#2ecc71'}">${entry.skipped ? 'Skipped' : 'Called'}</td>
+      <td style="padding:4px 10px;color:${entry.noise_level==='high' ? '#e74c3c' : entry.noise_level==='medium' ? '#f39c12' : '#2ecc71'}">${escHtml(entry.noise_level || 'unknown')}</td>
+    </tr>
+  `).join('');
+
+  openModal(
+    'Scan Details',
+    `${summaryHtml}
+    <div class="modal-section">
+      <h4>Audit-Relevant Calls</h4>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="color:#888;border-bottom:1px solid #333">
+          <th style="text-align:left;padding:4px 10px">Action</th>
+          <th style="text-align:right;padding:4px 10px">Count</th>
+          <th style="text-align:left;padding:4px 10px">Status</th>
+          <th style="text-align:left;padding:4px 10px">Noise</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`
+  );
+}
+
+function parseRouteQuery(queryString) {
+  const query = {};
+  const params = new URLSearchParams(queryString || '');
+  for (const [key, value] of params.entries()) query[key] = value;
+  return query;
+}
+
+function parseHashRoute(hash) {
+  const raw = (hash || '').replace(/^#/, '');
+  const normalized = raw || '/briefing';
+  const [pathname, queryString = ''] = normalized.split('?');
+  if (pathname === '/briefing') {
+    return { name: 'briefing', path: pathname, query: parseRouteQuery(queryString), params: {} };
+  }
+  const pathMatch = pathname.match(/^\/path\/([^/?]+)$/);
+  if (pathMatch) {
+    return { name: 'path', path: pathname, query: parseRouteQuery(queryString), params: { id: decodeURIComponent(pathMatch[1]) } };
+  }
+  if (pathname === '/explore' || pathname === '/legacy') {
+    return { name: 'explore', path: '/explore', query: parseRouteQuery(queryString), params: {} };
+  }
+  return null;
+}
+
+function buildHash(path, query) {
+  const params = new URLSearchParams();
+  Object.entries(query || {}).forEach(([key, value]) => {
+    if (value == null || value === '') return;
+    params.set(key, value);
+  });
+  const qs = params.toString();
+  return `#${path}${qs ? `?${qs}` : ''}`;
+}
+
+function applyRoute(routeInfo) {
+  currentRoute = routeInfo;
+  const briefingRoute = document.getElementById('briefing-route');
+  const pathRoute = document.getElementById('path-route');
+  const exploreRoute = document.getElementById('explore-route');
+  if (briefingRoute) briefingRoute.classList.toggle('visible', routeInfo?.name === 'briefing');
+  if (pathRoute) pathRoute.classList.toggle('visible', routeInfo?.name === 'path');
+  if (exploreRoute) exploreRoute.style.display = routeInfo?.name === 'explore' ? 'flex' : 'none';
+  document.body.dataset.route = routeInfo?.name || 'briefing';
+  routeListeners.forEach(listener => listener(routeInfo));
+}
+
+function handleRouteChange() {
+  const next = parseHashRoute(location.hash);
+  if (!next) {
+    if (location.hash !== '#/briefing') {
+      location.hash = '/briefing';
+      return;
+    }
+    applyRoute({ name: 'briefing', path: '/briefing', query: {}, params: {} });
+    return;
+  }
+  applyRoute(next);
+}
+
+function route(path) {
+  const target = path.startsWith('#') ? path : `#${path.startsWith('/') ? path : `/${path}`}`;
+  if (location.hash === target) {
+    handleRouteChange();
+    return;
+  }
+  location.hash = target;
+}
+
+function onRouteChange(listener) {
+  routeListeners.add(listener);
+  return () => routeListeners.delete(listener);
+}
+
+function getCurrentRouteQuery() {
+  return { ...(currentRoute?.query || {}) };
+}
+
+function updateRouteQuery(patch, pathOverride) {
+  const nextPath = pathOverride || currentRoute?.path || '/briefing';
+  const nextQuery = { ...(currentRoute?.query || {}) };
+  Object.entries(patch || {}).forEach(([key, value]) => {
+    if (value == null || value === '') delete nextQuery[key];
+    else nextQuery[key] = value;
+  });
+  location.hash = buildHash(nextPath, nextQuery);
+}
 
 /* ================================================================
    FILE LOADING
    ================================================================ */
 const dropOverlay  = document.getElementById('drop-overlay');
+const appRoot      = document.getElementById('app');
 const canvasWrap   = document.getElementById('canvas-wrap');
 const fileInput    = document.getElementById('file-input');
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingText  = document.getElementById('loading-text');
 const progressFill = document.getElementById('progress-fill');
+const exploreScopeBtn = document.getElementById('explore-scope-btn');
+const exploreFullToggleBtn = document.getElementById('explore-full-toggle-btn');
 
 document.getElementById('open-file-btn').addEventListener('click', () => fileInput.click());
+document.getElementById('drop-open-file-btn')?.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+window.addEventListener('hashchange', handleRouteChange);
+handleRouteChange();
+exploreScopeBtn?.addEventListener('click', () => route('/explore'));
+exploreFullToggleBtn?.addEventListener('click', () => updateRouteQuery({ scope: 'full', confirm: '' }, '/explore'));
 
 const RBAC_KINDS = new Set(['ClusterRole','Role','ClusterRoleBinding','RoleBinding']);
 let activePathNodeIds = new Set(); // RBAC nodes to keep visible during path highlight
@@ -3147,7 +3757,7 @@ function applyFocusMode() {
   });
 }
 
-document.getElementById('export-btn').addEventListener('click', exportReport);
+document.getElementById('export-btn')?.addEventListener('click', exportReport);
 
 function exportReport() {
   if (!rawGraphData) { alert('Load a scan file first.'); return; }
@@ -3341,15 +3951,40 @@ Respond with valid JSON only:
   }
 }
 
-canvasWrap.addEventListener('dragover', e => { e.preventDefault(); dropOverlay.classList.add('drag-active'); });
-canvasWrap.addEventListener('dragleave', () => dropOverlay.classList.remove('drag-active'));
-canvasWrap.addEventListener('drop', e => {
-  e.preventDefault(); dropOverlay.classList.remove('drag-active');
+function revealDropOverlay(isDragging) {
+  if (!dropOverlay) return;
+  dropOverlay.classList.remove('hidden');
+  dropOverlay.classList.toggle('drag-active', !!isDragging);
+}
+
+function restoreDropOverlay() {
+  if (!dropOverlay) return;
+  dropOverlay.classList.remove('drag-active');
+  if (graphData) dropOverlay.classList.add('hidden');
+}
+
+appRoot?.addEventListener('dragenter', e => {
+  e.preventDefault();
+  revealDropOverlay(true);
+});
+appRoot?.addEventListener('dragover', e => {
+  e.preventDefault();
+  revealDropOverlay(true);
+});
+appRoot?.addEventListener('dragleave', e => {
+  if (e.relatedTarget && appRoot.contains(e.relatedTarget)) return;
+  restoreDropOverlay();
+});
+appRoot?.addEventListener('drop', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  restoreDropOverlay();
   if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
 });
 document.body.addEventListener('dragover', e => e.preventDefault());
 document.body.addEventListener('drop', e => {
   e.preventDefault();
+  restoreDropOverlay();
   if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
 });
 
@@ -3378,7 +4013,13 @@ async function handleFile(file) {
   } else {
     showLoading('Building graph…', 30);
     await nextFrame();
-    ingestData(raw, allNodes, allEdges);
+    try {
+      ingestData(raw, allNodes, allEdges);
+    } catch(e) {
+      hideLoading();
+      console.error('k8scout ingest failed', e);
+      alert('Failed to build graph: ' + e.message);
+    }
   }
 }
 
@@ -3432,7 +4073,13 @@ function showLargeFileDialog(raw, nodes, edges) {
       document.getElementById('largefile-bg').classList.remove('visible');
       showLoading('Building graph…', 30);
       setTimeout(() => {
-        ingestData(raw, filtered.nodes, filtered.edges);
+        try {
+          ingestData(raw, filtered.nodes, filtered.edges);
+        } catch(e) {
+          hideLoading();
+          console.error('k8scout filtered ingest failed', e);
+          alert('Failed to build filtered graph: ' + e.message);
+        }
         largeFileResolve && largeFileResolve();
       }, 30);
     };
@@ -3493,20 +4140,1193 @@ function buildSAUsageIndex() {
       saWithPrivilegedWorkload.add(tgt);
     }
   });
+  dataLayer.saUsage = {
+    withWorkload: new Set(saWithWorkload),
+    withPrivilegedWorkload: new Set(saWithPrivilegedWorkload),
+  };
 }
+
+function resetTransientState() {
+  selectedNodeId = null;
+  activeFindingId = null;
+  activePathIdx = null;
+  activePathNodeIds = new Set();
+  computedPaths = [];
+  nodePosMap = {};
+}
+
+function buildDataLayerIndices(raw, nodes, edges, findings) {
+  const index = createEmptyDataLayer();
+  index.nodes = nodes;
+  index.edges = edges;
+  index.findings = findings;
+  index.fullGraph = { nodes, edges, findings };
+  index.nodeById = Object.fromEntries(nodes.map(n => [n.id, n]));
+  index.adjacency.out = createAdjacencyBuckets(nodes);
+  index.adjacency.in = createAdjacencyBuckets(nodes);
+  index.adjacency.attackOut = createAdjacencyBuckets(nodes);
+  index.adjacency.attackIn = createAdjacencyBuckets(nodes);
+
+  edges.forEach((edge, edgeIdx) => {
+    const from = edgeNodeId(edge.source || edge.from);
+    const to = edgeNodeId(edge.target || edge.to);
+    if (!from || !to) return;
+    const entry = { edge, edgeIdx, from, to, kind: edge.kind };
+    (index.adjacency.out[from] ||= []).push(entry);
+    (index.adjacency.in[to] ||= []).push(entry);
+    if (ATTACK_EDGE_KINDS.has(edge.kind)) {
+      (index.adjacency.attackOut[from] ||= []).push(entry);
+      (index.adjacency.attackIn[to] ||= []).push(entry);
+    }
+  });
+
+  findings.forEach(finding => {
+    (finding.affected_nodes || []).forEach(nodeId => {
+      (index.findingsByNode[nodeId] ||= []).push(finding);
+    });
+  });
+
+  index.foothold = extractFoothold(raw, { nodes, edges }, index.nodeById);
+  return index;
+}
+
+function hashText(input) {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function ensurePathId(path, idx) {
+  if (path._pathId) return path._pathId;
+  const signature = path.nodes.join('→');
+  path._pathId = `path-${idx}-${hashText(signature)}`;
+  path._pathSignature = signature;
+  return path._pathId;
+}
+
+function buildActionsByNode() {
+  const actionsByNode = {};
+
+  computedPaths.forEach((path, idx) => {
+    if (!path?.nodes?.length || !path?.edges?.length) return;
+    const sourceId = path.nodes[0];
+    const targetId = path.nodes[path.nodes.length - 1];
+    const firstHopId = path.nodes[1];
+    const edgeKind = path.edges[0];
+    if (!sourceId || !firstHopId || !edgeKind) return;
+
+    const target = nodeById[targetId];
+    const firstHop = nodeById[firstHopId];
+    const impact = pathImpactType(path);
+    const edgeWeight = EDGE_WEIGHT[edgeKind] || 5;
+    const pathWeight = (path.edges || []).reduce((sum, kind) => sum + (EDGE_WEIGHT[kind] || 5), 0);
+    const ranking = impact.score / Math.max(edgeWeight, 0.1);
+    const dedupeKey = `${edgeKind}:${firstHopId}`;
+
+    const current = (actionsByNode[sourceId] ||= {});
+    const nextCandidate = {
+      dedupeKey,
+      sourceId,
+      targetId: firstHopId,
+      terminalTargetId: targetId,
+      edgeKind,
+      impact,
+      edgeWeight,
+      pathWeight,
+      ranking,
+      narrative: getPathNarrative(path),
+      pathId: ensurePathId(path, idx),
+      path,
+      target: firstHop,
+      terminalTarget: target,
+    };
+
+    if (!current[dedupeKey] || nextCandidate.ranking > current[dedupeKey].ranking) {
+      current[dedupeKey] = nextCandidate;
+    }
+  });
+
+  return Object.fromEntries(
+    Object.entries(actionsByNode).map(([nodeId, actionMap]) => [
+      nodeId,
+      Object.values(actionMap).sort((a, b) => {
+        if (b.ranking !== a.ranking) return b.ranking - a.ranking;
+        if (b.impact.score !== a.impact.score) return b.impact.score - a.impact.score;
+        return a.edgeWeight - b.edgeWeight;
+      }),
+    ])
+  );
+}
+
+function rebuildPathIndices() {
+  const pathsById = {};
+  const pathsByImpact = {};
+  const pathRows = [];
+
+  computedPaths.forEach((path, idx) => {
+    const pathId = ensurePathId(path, idx);
+    const impact = pathImpactType(path);
+    const source = nodeById[path.nodes[0]];
+    const target = nodeById[path.nodes[path.nodes.length - 1]];
+    const relatedFindings = (graphData?.findings || []).filter(f =>
+      f.id === path._findingId ||
+      path.nodes.some(nodeId => (f.affected_nodes || []).includes(nodeId))
+    );
+    const mitreIds = [...new Set(relatedFindings.flatMap(f => f.mitre_ids || []))];
+    const namespaces = [...new Set(path.nodes.map(nodeId => nodeById[nodeId]?.namespace).filter(Boolean))];
+    const edgeKinds = [...new Set(path.edges || [])];
+    const searchText = [
+      source?.name,
+      target?.name,
+      impact.label,
+      impact.type,
+      getPathNarrative(path),
+      edgeKinds.join(' '),
+      namespaces.join(' '),
+      path.nodes.map(nodeId => nodeById[nodeId]?.name || nodeId).join(' '),
+    ].filter(Boolean).join(' ').toLowerCase();
+    const entry = {
+      id: pathId,
+      path,
+      idx,
+      impact,
+      source,
+      target,
+      severity: pathSeverity(path),
+      hopCount: Math.max(path.nodes.length - 1, 0),
+      narrative: getPathNarrative(path),
+      namespaces,
+      edgeKinds,
+      targetKind: target?.kind || '',
+      mitreIds,
+      relatedFindings,
+      searchText,
+    };
+    pathsById[pathId] = entry;
+    (pathsByImpact[impact.type] ||= []).push(entry);
+    pathRows.push(entry);
+  });
+
+  Object.values(pathsByImpact).forEach(items => {
+    items.sort((a, b) => {
+      if (b.impact.score !== a.impact.score) return b.impact.score - a.impact.score;
+      return a.path.nodes.length - b.path.nodes.length;
+    });
+  });
+  pathRows.sort((a, b) => {
+    if (b.impact.score !== a.impact.score) return b.impact.score - a.impact.score;
+    return a.path.nodes.length - b.path.nodes.length;
+  });
+
+  dataLayer.pathsById = pathsById;
+  dataLayer.pathsByImpact = pathsByImpact;
+  dataLayer.pathRows = pathRows;
+  dataLayer.actionsByNode = buildActionsByNode();
+}
+
+function getFootholdSourceIds() {
+  const foothold = dataLayer.foothold || {};
+  return [foothold.podId, foothold.workloadId, foothold.serviceAccountId, foothold.identityId].filter(Boolean);
+}
+
+function getBriefingFilterState() {
+  const query = getCurrentRouteQuery();
+  return {
+    q: query.q || '',
+    impact: query.impact || '',
+    ns: query.ns || '',
+    target: query.target || '',
+  };
+}
+
+function getBriefingFilterOptions() {
+  const rows = dataLayer.pathRows || [];
+  const namespaces = [...new Set(rows.flatMap(row => row.namespaces))].sort();
+  const targetKinds = [...new Set(rows.map(row => row.targetKind).filter(Boolean))].sort();
+  return { namespaces, targetKinds };
+}
+
+function getFilteredBriefingRows(filterState) {
+  return (dataLayer.pathRows || []).filter(row => {
+    if (filterState.impact && row.impact.type !== filterState.impact) return false;
+    if (filterState.ns && !row.namespaces.includes(filterState.ns)) return false;
+    if (filterState.target && row.targetKind !== filterState.target) return false;
+    if (filterState.q && !row.searchText.includes(filterState.q.toLowerCase())) return false;
+    return true;
+  });
+}
+
+function getBriefingImpactBuckets(filteredRows) {
+  const defs = [
+    { type: 'CLUSTER_ADMIN', label: 'Cluster-admin', desc: 'Paths to cluster-wide control.' },
+    { type: 'NODE_BREAKOUT', label: 'Node escape', desc: 'Host compromise and kubelet pivots.' },
+    { type: 'SECRET_EXFIL', label: 'Secret theft', desc: 'Direct credential and token access.' },
+    { type: 'CLOUD_ESCALATION', label: 'Cloud IAM', desc: 'Projected identity and role takeover.' },
+    { type: 'LATERAL_MOVE', label: 'Lateral movement', desc: 'Pivot into neighboring workloads.' },
+    { type: 'PRIVESC', label: 'Workload mutation', desc: 'Patch, bind, or mutate toward impact.' },
+  ];
+  return defs.map(def => ({
+    ...def,
+    count: filteredRows.filter(row => row.impact.type === def.type).length,
+  }));
+}
+
+function chainStampHtml(path) {
+  const maxNodes = 5;
+  const nodeIds = path.nodes || [];
+  const visible = nodeIds.slice(0, maxNodes);
+  const hidden = Math.max(nodeIds.length - visible.length, 0);
+  const parts = [];
+  visible.forEach((nodeId, idx) => {
+    const node = nodeById[nodeId];
+    const color = NODE_COLORS[node?.kind] || DEFAULT_NODE_COLOR;
+    const label = node?.name || nodeId;
+    parts.push(
+      `<span class="chain-stamp-node" style="border-color:${color}45;color:${color}" title="${escHtml(`${node?.kind || 'Node'} ${label}`)}">
+        <span>${escHtml(NODE_ICONS[node?.kind] || '•')}</span>
+        <span>${escHtml(label.split(':').pop())}</span>
+      </span>`
+    );
+    if (idx < visible.length - 1) parts.push('<span class="chain-stamp-arrow">›</span>');
+  });
+  if (hidden > 0) parts.push(`<span class="chain-stamp-node">+${hidden} more</span>`);
+  return parts.join('');
+}
+
+function mountVirtualList(containerEl, items, options) {
+  const {
+    rowHeight = 116,
+    overscan = 6,
+    renderRow,
+    emptyHtml = '<div class="brief-list-empty">No paths match the current filters.</div>',
+  } = options || {};
+
+  containerEl.innerHTML = '';
+  if (!items.length) {
+    containerEl.innerHTML = emptyHtml;
+    return;
+  }
+
+  const viewport = document.createElement('div');
+  viewport.className = 'brief-virtual-wrap';
+  const inner = document.createElement('div');
+  inner.className = 'brief-virtual-inner';
+  inner.style.height = `${items.length * rowHeight}px`;
+  viewport.appendChild(inner);
+  containerEl.appendChild(viewport);
+
+  function renderWindow() {
+    const height = viewport.clientHeight || 500;
+    const start = Math.max(Math.floor(viewport.scrollTop / rowHeight) - overscan, 0);
+    const end = Math.min(items.length, Math.ceil((viewport.scrollTop + height) / rowHeight) + overscan);
+    inner.innerHTML = '';
+    for (let i = start; i < end; i++) {
+      const row = document.createElement('div');
+      row.className = 'brief-path-row';
+      row.style.top = `${i * rowHeight}px`;
+      row.style.height = `${rowHeight}px`;
+      row.innerHTML = renderRow(items[i], i);
+      inner.appendChild(row);
+    }
+  }
+
+  viewport.addEventListener('scroll', renderWindow);
+  renderWindow();
+}
+
+function renderBriefing() {
+  const routeEl = document.getElementById('briefing-route');
+  if (!routeEl) return;
+  parkIdentityAnalyzer();
+
+  if (!graphData) {
+    routeEl.innerHTML = `
+      <div id="briefing-view">
+        <div class="brief-card brief-empty-card">
+          <div class="brief-empty-icon">📂</div>
+          <div class="brief-empty-title">Drop a k8scout JSON report</div>
+          <div class="brief-empty-sub">The new default landing route is path-first. Load a report to get next-best actions, impact buckets, and a ranked attack path list without starting the full graph simulation.</div>
+          <div class="brief-actions">
+            <button class="brief-btn primary" id="brief-open-btn">Open JSON</button>
+            <button class="brief-btn" id="brief-explore-btn">Open Explore</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.getElementById('brief-open-btn')?.addEventListener('click', () => fileInput.click());
+    document.getElementById('brief-explore-btn')?.addEventListener('click', () => route('/explore'));
+    return;
+  }
+
+  const filters = getBriefingFilterState();
+  const allRows = dataLayer.pathRows || [];
+  const filteredRows = getFilteredBriefingRows(filters);
+  const options = getBriefingFilterOptions();
+  const buckets = getBriefingImpactBuckets(allRows);
+
+  routeEl.innerHTML = `
+    <div id="briefing-view">
+      <div class="briefing-grid">
+        <div class="briefing-left">
+          <div class="brief-card">
+            <div class="brief-card-head">
+              <div class="brief-card-title">Impact Buckets</div>
+              <button class="brief-inline-btn" id="brief-clear-impact">Clear filter</button>
+            </div>
+            <div class="brief-card-body">
+              <div id="brief-impact-grid" class="impact-grid"></div>
+            </div>
+          </div>
+          <details class="brief-analyzer-collapse">
+            <summary>
+              <span>Analyze From A Different Identity</span>
+              <span class="brief-meta">Inline identity analyzer</span>
+            </summary>
+            <div class="brief-analyzer-collapse-body">
+              <div class="brief-analyzer-sub">Reuse the existing cluster-wide chain analyzer and AI narrative tooling here when you need to pivot off the initial foothold. It stays available, but no longer competes with the primary briefing scan path.</div>
+              <div id="brief-analyzer-slot" class="brief-analyzer-slot"></div>
+            </div>
+          </details>
+        </div>
+        <div class="briefing-main">
+          <div class="brief-card scroll-card" style="flex:1;">
+            <div class="brief-card-head">
+              <div>
+                <div class="brief-card-title">Top Attack Paths</div>
+                <div class="brief-meta">Virtualized list. The full graph stays behind Explore.</div>
+              </div>
+              <div class="brief-path-actions">
+                <button class="brief-btn" id="brief-open-json-inline">Open JSON</button>
+                <button class="brief-btn primary" id="brief-explore-inline">Explore full graph</button>
+              </div>
+            </div>
+            <div class="brief-filter-bar">
+              <input id="brief-search" class="brief-input" type="text" value="${escHtml(filters.q)}" placeholder="Search narrative, nodes, or edge kinds">
+              <select id="brief-namespace-filter" class="brief-select">
+                <option value="">All namespaces</option>
+                ${options.namespaces.map(ns => `<option value="${escHtml(ns)}"${filters.ns === ns ? ' selected' : ''}>${escHtml(ns)}</option>`).join('')}
+              </select>
+              <select id="brief-target-filter" class="brief-select">
+                <option value="">Target type</option>
+                ${options.targetKinds.map(kind => `<option value="${escHtml(kind)}"${filters.target === kind ? ' selected' : ''}>${escHtml(kind)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="brief-list-meta">
+              <span>${filteredRows.length} of ${allRows.length} paths</span>
+              <span>Route state is reflected in the URL.</span>
+            </div>
+            <div id="brief-path-list" class="brief-path-list-host"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const impactGrid = routeEl.querySelector('#brief-impact-grid');
+  if (impactGrid) {
+    impactGrid.innerHTML = buckets.map(bucket => `
+      <div class="impact-tile${filters.impact === bucket.type ? ' active' : ''}" data-impact="${bucket.type}">
+        <div class="impact-tile-head">
+          <div class="impact-tile-label">${escHtml(bucket.label)}</div>
+          <div class="impact-tile-count">${bucket.count}</div>
+        </div>
+        <div class="impact-tile-sub">${escHtml(bucket.desc)}</div>
+      </div>
+    `).join('');
+    impactGrid.querySelectorAll('[data-impact]').forEach(tile => {
+      tile.addEventListener('click', () => {
+        const impact = tile.dataset.impact;
+        updateRouteQuery({ impact: filters.impact === impact ? '' : impact }, '/briefing');
+      });
+    });
+  }
+
+  routeEl.querySelector('#brief-clear-impact')?.addEventListener('click', () => updateRouteQuery({ impact: '' }, '/briefing'));
+  routeEl.querySelector('#brief-open-json-inline')?.addEventListener('click', () => fileInput.click());
+  routeEl.querySelector('#brief-explore-inline')?.addEventListener('click', () => route('/explore'));
+
+  const wireInput = (id, key) => {
+    const el = routeEl.querySelector(id);
+    if (!el) return;
+    const handler = () => updateRouteQuery({ [key]: el.value.trim() }, '/briefing');
+    el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', handler);
+  };
+  wireInput('#brief-search', 'q');
+  wireInput('#brief-namespace-filter', 'ns');
+  wireInput('#brief-target-filter', 'target');
+  mountIdentityAnalyzer(routeEl.querySelector('#brief-analyzer-slot'));
+
+  const pathListHost = routeEl.querySelector('#brief-path-list');
+  mountVirtualList(pathListHost, filteredRows, {
+    rowHeight: window.innerWidth < 760 ? 116 : 106,
+    overscan: 8,
+    renderRow: row => `
+      <div class="brief-path-card" data-path-id="${row.id}">
+        <div class="brief-path-top">
+          <div>
+            <div class="brief-path-title">
+              <span class="sev-badge ${row.severity}">${row.severity}</span>
+              <span>${escHtml(row.impact.label)}</span>
+              <span class="mini-chip"><strong>Hops</strong> ${row.hopCount}</span>
+            </div>
+          </div>
+          <button class="brief-inline-btn" data-open-path="${row.id}">Open path</button>
+        </div>
+        <div class="chain-stamp">${chainStampHtml(row.path)}</div>
+      </div>
+    `,
+  });
+  pathListHost?.addEventListener('click', e => {
+    const openBtn = e.target.closest('[data-open-path]');
+    if (openBtn) {
+      e.stopPropagation();
+      route(`/path/${encodeURIComponent(openBtn.dataset.openPath)}`);
+      return;
+    }
+    const card = e.target.closest('.brief-path-card[data-path-id]');
+    if (card) route(`/path/${encodeURIComponent(card.dataset.pathId)}`);
+  });
+}
+
+function getPathRouteState() {
+  const query = getCurrentRouteQuery();
+  const hop = Math.max(0, parseInt(query.hop || '0', 10) || 0);
+  return { hop, focus: query.focus || '' };
+}
+
+function summarizeWhyItWorks(src, tgt, edgeKind) {
+  const inbound = (dataLayer.adjacency.in[src?.id] || []).filter(entry =>
+    ['grants', 'bound_to', 'granted_by', 'member_of', 'runs_as', 'mounts', 'authenticates_as'].includes(entry.kind)
+  );
+
+  if (edgeKind === 'runs_as') {
+    return `${src?.kind || 'Workload'} ${src?.name || '?'} runs as service account ${tgt?.name || '?'}, so compromising the workload yields that identity automatically.`;
+  }
+  if (edgeKind === 'mounts') {
+    return `${src?.kind || 'Workload'} ${src?.name || '?'} mounts ${tgt?.kind || 'resource'} ${tgt?.name || '?'}, exposing it from inside the workload context.`;
+  }
+  if (edgeKind === 'authenticates_as') {
+    return `${src?.kind || 'Secret'} ${src?.name || '?'} contains credentials that authenticate as ${tgt?.kind || 'identity'} ${tgt?.name || '?'}.`;
+  }
+  if (edgeKind === 'assumes_cloud_role') {
+    return `${src?.name || '?'} is mapped to cloud identity ${tgt?.name || '?'}, allowing the workload identity to inherit cloud permissions.`;
+  }
+  if (edgeKind === 'runs_on') {
+    return `${src?.name || '?'} is already positioned on node ${tgt?.name || '?'}, so a container escape or privileged host access lands on the host.`;
+  }
+  if (!inbound.length) {
+    return `${src?.kind || 'Node'} ${src?.name || '?'} has the ${edgeKind} relationship to ${tgt?.kind || 'target'} ${tgt?.name || '?'}, as confirmed in the attack graph.`;
+  }
+
+  const reasons = inbound.slice(0, 3).map(entry => {
+    const fromNode = nodeById[entry.from];
+    return `${fromNode?.kind || 'Upstream object'} ${fromNode?.name || entry.from} ${entry.kind.replace(/_/g, ' ')} ${src?.name || '?'}`;
+  });
+  return `${reasons.join('; ')}. That chain enables ${src?.name || '?'} to ${edgeKind.replace(/_/g, ' ')} ${tgt?.name || '?'}.`;
+}
+
+function getHopEvidence(srcId, tgtId) {
+  const srcFindings = dataLayer.findingsByNode[srcId] || [];
+  const tgtFindings = dataLayer.findingsByNode[tgtId] || [];
+  const seen = new Set();
+  return [...srcFindings, ...tgtFindings].filter(f => {
+    const key = f.id || f.title;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 4);
+}
+
+function getHopAlternatives(srcId, currentTargetId) {
+  return (dataLayer.actionsByNode[srcId] || [])
+    .filter(action => action.targetId !== currentTargetId)
+    .slice(0, 4);
+}
+
+function buildHopModels(pathEntry) {
+  const path = pathEntry.path;
+  return (path.edges || []).map((edgeKind, idx) => {
+    const src = nodeById[path.nodes[idx]];
+    const tgt = nodeById[path.nodes[idx + 1]];
+    const evidence = getHopEvidence(src?.id, tgt?.id);
+    const alternatives = getHopAlternatives(src?.id, tgt?.id);
+    const mitreIds = [...new Set(evidence.flatMap(f => f.mitre_ids || []))];
+    return {
+      idx,
+      src,
+      tgt,
+      edgeKind,
+      tier: EDGE_TIER[edgeKind] || 2,
+      weight: EDGE_WEIGHT[edgeKind] || 5,
+      whyItWorks: summarizeWhyItWorks(src, tgt, edgeKind),
+      evidence,
+      alternatives,
+      mitreIds,
+      info: ATTACK_CMD[edgeKind] ? ATTACK_CMD[edgeKind](src || {}, tgt || {}) : null,
+    };
+  });
+}
+
+function renderPhaseStrip(pathEntry) {
+  const phases = classifyPathPhases(pathEntry.path);
+  const defs = [
+    { key: 'initialAccess', label: 'Foothold', data: phases.initialAccess },
+    { key: 'credTheft', label: 'Credential Access', data: phases.credTheft },
+    { key: 'privEsc', label: 'Privilege Escalation', data: phases.privEsc },
+    { key: 'lateralMovement', label: 'Lateral Movement', data: phases.lateralMovement },
+    { key: 'impact', label: 'Impact', data: phases.impact },
+  ];
+  return defs.map(def => {
+    const node = nodeById[def.data.nodeId];
+    return `
+      <div class="phase-step${def.data.present ? ' active' : ''}">
+        <div class="phase-step-label">${escHtml(def.label)}</div>
+        <div class="phase-step-node">${node ? escHtml((node.name || node.id).split(':').pop()) : 'Not present'}</div>
+        <div class="phase-step-meta">${def.data.edgeKind ? escHtml(def.data.edgeKind) : (def.data.present ? 'Present in path' : 'No dedicated step')}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function buildScopedSubgraph(nodeIds, focusId) {
+  const focus = new Set(nodeIds.filter(Boolean));
+  const queue = [...focus];
+  const visited = new Set(focus);
+  const overflow = [];
+
+  while (queue.length && visited.size < 40) {
+    const cur = queue.shift();
+    const neighbors = [
+      ...(dataLayer.adjacency.out[cur] || []),
+      ...(dataLayer.adjacency.in[cur] || []),
+    ];
+    for (const entry of neighbors) {
+      const otherId = entry.from === cur ? entry.to : entry.from;
+      if (visited.has(otherId)) continue;
+      if (visited.size < 40) {
+        visited.add(otherId);
+        queue.push(otherId);
+      } else {
+        overflow.push(otherId);
+      }
+    }
+  }
+
+  if (focusId && !visited.has(focusId)) visited.add(focusId);
+  return {
+    nodeIds: [...visited],
+    overflowCount: Math.max(0, [...new Set(overflow)].length),
+  };
+}
+
+function renderSubgraphCard(containerEl, nodeIds, focusId, onNodeClick) {
+  if (!containerEl) return;
+  if (subgraphSimulation) {
+    subgraphSimulation.stop();
+    subgraphSimulation = null;
+  }
+
+  const scoped = buildScopedSubgraph(nodeIds, focusId);
+  const scopedNodes = scoped.nodeIds.map(id => ({ ...nodeById[id] })).filter(Boolean);
+  const nodeSet = new Set(scopedNodes.map(n => n.id));
+  const scopedEdges = (graphData?.edges || [])
+    .filter(edge => {
+      const from = edgeNodeId(edge.source || edge.from);
+      const to = edgeNodeId(edge.target || edge.to);
+      return nodeSet.has(from) && nodeSet.has(to);
+    })
+    .slice(0, 80)
+    .map(edge => ({
+      ...edge,
+      source: edgeNodeId(edge.source || edge.from),
+      target: edgeNodeId(edge.target || edge.to),
+    }));
+
+  containerEl.innerHTML = `
+    <div class="subgraph-svg-wrap"></div>
+    <div class="subgraph-overflow">${scoped.overflowCount > 0 ? `<span class="mini-chip">+${scoped.overflowCount} more hidden</span>` : ''}</div>
+  `;
+
+  const wrap = containerEl.querySelector('.subgraph-svg-wrap');
+  if (!scopedNodes.length || !scopedEdges.length) {
+    wrap.innerHTML = '<div class="subgraph-empty">No local subgraph available for this hop.</div>';
+    return;
+  }
+
+  const width = wrap.clientWidth || 320;
+  const height = wrap.clientHeight || 230;
+  const svg = d3.select(wrap).append('svg').attr('width', width).attr('height', height);
+  const nodes = scopedNodes.map(node => ({ ...node }));
+  const links = scopedEdges.map(edge => ({ ...edge }));
+  const nodeIndex = Object.fromEntries(nodes.map((node, idx) => [node.id, idx]));
+  links.forEach(link => {
+    link.source = nodeIndex[link.source];
+    link.target = nodeIndex[link.target];
+  });
+
+  svg.append('rect').attr('width', width).attr('height', height).attr('fill', 'transparent');
+  const linkSel = svg.append('g').selectAll('line')
+    .data(links)
+    .join('line')
+    .attr('stroke', edgeColor)
+    .attr('stroke-opacity', 0.55)
+    .attr('stroke-width', d => (EDGE_TIER[d.kind] || 2) === 1 ? 2.2 : 1.4);
+
+  const nodeSelLocal = svg.append('g').selectAll('g')
+    .data(nodes)
+    .join('g')
+    .style('cursor', 'pointer')
+    .on('click', (_, d) => onNodeClick?.(d.id));
+
+  nodeSelLocal.append('circle')
+    .attr('r', d => d.id === focusId ? 18 : 14)
+    .attr('fill', d => nodeColor(d))
+    .attr('fill-opacity', 0.88)
+    .attr('stroke', d => d.id === focusId ? '#fff' : 'rgba(255,255,255,.16)')
+    .attr('stroke-width', d => d.id === focusId ? 2.6 : 1.4);
+
+  nodeSelLocal.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('font-size', '9px')
+    .attr('fill', '#fff')
+    .text(d => NODE_ICONS[d.kind] || '?');
+
+  nodeSelLocal.append('text')
+    .attr('class', 'subgraph-node-label')
+    .attr('text-anchor', 'middle')
+    .attr('dy', 24)
+    .text(d => {
+      const label = (d.name || d.id || '').split(':').pop();
+      return label.length > 14 ? `${label.slice(0, 12)}…` : label;
+    });
+
+  subgraphSimulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id((_, i) => i).distance(62).strength(0.45))
+    .force('charge', d3.forceManyBody().strength(-210))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collide', d3.forceCollide().radius(d => (d.id === focusId ? 28 : 24)))
+    .stop();
+
+  for (let i = 0; i < 90; i++) subgraphSimulation.tick();
+
+  linkSel
+    .attr('x1', d => nodes[d.source.index ?? d.source].x)
+    .attr('y1', d => nodes[d.source.index ?? d.source].y)
+    .attr('x2', d => nodes[d.target.index ?? d.target].x)
+    .attr('y2', d => nodes[d.target.index ?? d.target].y);
+
+  nodeSelLocal.attr('transform', d => `translate(${d.x},${d.y})`);
+  subgraphSimulation.stop();
+  subgraphSimulation = null;
+}
+
+function renderPathView() {
+  const routeEl = document.getElementById('path-route');
+  if (!routeEl) return;
+  if (!graphData) {
+    routeEl.innerHTML = '';
+    return;
+  }
+
+  const pathEntry = dataLayer.pathsById[currentRoute?.params?.id];
+  if (!pathEntry) {
+    routeEl.innerHTML = `
+      <div id="path-view">
+        <div class="brief-card brief-empty-card">
+          <div class="brief-empty-icon">🧭</div>
+          <div class="brief-empty-title">Path not found</div>
+          <div class="brief-empty-sub">The requested path ID is missing from the current report. Return to Briefing and select a path again.</div>
+          <div class="brief-actions"><button class="brief-btn primary" id="path-missing-back">Back to Briefing</button></div>
+        </div>
+      </div>
+    `;
+    routeEl.querySelector('#path-missing-back')?.addEventListener('click', () => route('/briefing'));
+    return;
+  }
+
+  const pathState = getPathRouteState();
+  const hopModels = buildHopModels(pathEntry);
+  const selectedHop = hopModels[Math.min(pathState.hop, Math.max(hopModels.length - 1, 0))] || hopModels[0];
+  const focusId = pathState.focus || selectedHop?.src?.id || selectedHop?.tgt?.id || '';
+  const impact = pathEntry.impact;
+  const phasesHtml = renderPhaseStrip(pathEntry);
+  const pathWeight = (pathEntry.path.edges || []).reduce((sum, kind) => sum + (EDGE_WEIGHT[kind] || 5), 0);
+
+  routeEl.innerHTML = `
+    <div id="path-view">
+      <div class="path-back-row">
+        <button class="brief-btn" id="path-back-btn">Back to Briefing</button>
+        <button class="brief-btn primary" id="path-explore-btn">Open in Explore</button>
+      </div>
+      <div class="phase-strip">${phasesHtml}</div>
+      <div class="path-layout">
+        <div class="path-main">
+          <div class="brief-card" style="display:flex;flex-direction:column;min-height:0;flex:1;">
+            <div class="path-toolbar">
+              <div>
+                <div class="path-toolbar-title">${escHtml(pathEntry.narrative)}</div>
+                <div class="path-toolbar-sub">${escHtml(impact.label)} · ${pathEntry.hopCount} hops · ${pathEntry.severity} severity · total weight ${pathWeight.toFixed(1)}</div>
+              </div>
+              <div class="path-toolbar-actions">
+                <span class="sev-badge ${pathEntry.severity}">${pathEntry.severity}</span>
+                <span class="mini-chip"><strong>Target</strong> ${escHtml(pathEntry.target?.kind || '?')}</span>
+                <span class="mini-chip"><strong>MITRE</strong> ${pathEntry.mitreIds.length || 0}</span>
+              </div>
+            </div>
+            <div class="path-scroll">
+              <div id="path-storyboard" class="path-storyboard"></div>
+            </div>
+          </div>
+        </div>
+        <div class="path-rail">
+          <div class="path-rail-card">
+            <div class="subgraph-card-head">
+              <div class="path-rail-title" style="margin:0">Inline Subgraph</div>
+              <span class="mini-chip"><strong>Focus</strong> ${escHtml((nodeById[focusId]?.name || focusId || '').split(':').pop())}</span>
+            </div>
+            <div class="path-rail-body">
+              <div id="path-subgraph-card"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  routeEl.querySelector('#path-back-btn')?.addEventListener('click', () => route('/briefing'));
+  routeEl.querySelector('#path-explore-btn')?.addEventListener('click', () => route(`/explore?scope=${encodeURIComponent(`path:${pathEntry.id}`)}&path=${encodeURIComponent(pathEntry.id)}`));
+
+  const storyboard = routeEl.querySelector('#path-storyboard');
+  if (storyboard) {
+    storyboard.innerHTML = hopModels.map(hop => {
+      const actionInfo = hop.info || { action: hop.edgeKind, cmds: [`# ${hop.edgeKind}`] };
+      return `
+        <div class="hop-card${selectedHop?.idx === hop.idx ? ' active' : ''}" data-hop-idx="${hop.idx}" data-focus-id="${escHtml(hop.src?.id || hop.tgt?.id || '')}">
+          <div class="hop-head">
+            <div class="hop-head-top">
+              <div class="hop-title">
+                <span class="mini-chip" style="border-color:${NODE_COLORS[hop.src?.kind] || DEFAULT_NODE_COLOR}55;color:${NODE_COLORS[hop.src?.kind] || DEFAULT_NODE_COLOR}">${escHtml(NODE_ICONS[hop.src?.kind] || '•')} ${escHtml(hop.src?.kind || '?')}</span>
+                <span>${escHtml(hop.src?.name || hop.src?.id || '?')}</span>
+                <span class="mini-chip" style="border-color:${EDGE_COLORS[hop.edgeKind] || DEFAULT_EDGE_COLOR}55;color:${EDGE_COLORS[hop.edgeKind] || DEFAULT_EDGE_COLOR}">${escHtml(hop.edgeKind)}</span>
+                <span class="mini-chip" style="border-color:${NODE_COLORS[hop.tgt?.kind] || DEFAULT_NODE_COLOR}55;color:${NODE_COLORS[hop.tgt?.kind] || DEFAULT_NODE_COLOR}">${escHtml(NODE_ICONS[hop.tgt?.kind] || '•')} ${escHtml(hop.tgt?.kind || '?')}</span>
+                <span>${escHtml(hop.tgt?.name || hop.tgt?.id || '?')}</span>
+              </div>
+              <div class="hop-inline-row">
+                <span class="mini-chip"><strong>Weight</strong> ${hop.weight.toFixed(1)}</span>
+                <span class="mini-chip"><strong>Tier</strong> ${hop.tier}</span>
+              </div>
+            </div>
+          </div>
+          <div class="hop-body">
+            <div class="hop-primary-stack">
+              <div class="hop-section">
+                <div class="hop-section-title">Why It Works</div>
+                <div style="font-size:12px;color:var(--text);line-height:1.65;">${escHtml(hop.whyItWorks)}</div>
+              </div>
+              <div class="hop-section hop-copy-wrap">
+                <div class="hop-section-title">Attack Command</div>
+                <button class="hop-copy-btn" data-copy-cmd="${encodeURIComponent(actionInfo.cmds.join('\n'))}">Copy</button>
+                <div class="modal-cmd" style="margin:0;padding-right:54px;">${escHtml(actionInfo.cmds.join('\n'))}</div>
+              </div>
+            </div>
+            <details class="hop-extra-details">
+              <summary>
+                <span>Supporting Detail</span>
+                <span class="hop-extra-summary">
+                  <span class="mini-chip"><strong>Evidence</strong> ${hop.evidence.length}</span>
+                  <span class="mini-chip"><strong>Alternatives</strong> ${hop.alternatives.length}</span>
+                  <span class="mini-chip"><strong>MITRE</strong> ${hop.mitreIds.length}</span>
+                </span>
+              </summary>
+              <div class="hop-extra-body">
+                <div class="hop-section">
+                  <div class="hop-section-title">Evidence</div>
+                  <div class="hop-evidence-list">
+                    ${hop.evidence.length ? hop.evidence.map(f => `
+                      <div class="hop-evidence-item">
+                        <strong>${escHtml(f.severity || '?')} · ${escHtml(f.title || f.rule_id || 'Finding')}</strong><br>
+                        ${escHtml((f.description || '').slice(0, 180))}
+                      </div>
+                    `).join('') : '<div class="hop-evidence-item">No directly overlapping findings for this hop.</div>'}
+                  </div>
+                </div>
+                <div class="hop-section">
+                  <div class="hop-section-title">Alternative Pivots</div>
+                  <details class="hop-alt-toggle">
+                    <summary style="cursor:pointer;color:var(--accent);font-size:11px;">${hop.alternatives.length} other moves from ${escHtml(hop.src?.name || '?')}</summary>
+                    <div class="hop-alt-list" style="margin-top:10px;">
+                      ${hop.alternatives.length ? hop.alternatives.map(alt => `
+                        <div class="hop-alt-item">
+                          <strong>${escHtml(alt.edgeKind)}</strong> → ${escHtml(alt.target?.kind || '?')} ${escHtml(alt.target?.name || alt.targetId)}
+                          <div style="margin-top:6px;"><button class="brief-inline-btn" data-alt-path="${alt.pathId}">Focus this path</button></div>
+                        </div>
+                      `).join('') : '<div class="hop-alt-item">No alternative pivots cached for this actor.</div>'}
+                    </div>
+                  </details>
+                </div>
+                <div class="hop-section">
+                  <div class="hop-section-title">MITRE / Tags</div>
+                  <div class="hop-inline-row">
+                    <span class="mini-chip"><strong>Edge</strong> ${escHtml(hop.edgeKind)}</span>
+                    ${(hop.mitreIds.length ? hop.mitreIds : ['No MITRE tags']).map(id => `<span class="mitre-chip">${escHtml(id)}</span>`).join('')}
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    storyboard.querySelectorAll('[data-hop-idx]').forEach(card => {
+      card.addEventListener('click', e => {
+        if (e.target.closest('[data-copy-cmd]') || e.target.closest('[data-alt-path]') || e.target.closest('summary')) return;
+        updateRouteQuery({ hop: card.dataset.hopIdx, focus: card.dataset.focusId || '' }, currentRoute.path);
+      });
+    });
+    storyboard.querySelectorAll('[data-copy-cmd]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(decodeURIComponent(btn.dataset.copyCmd));
+        btn.textContent = 'Copied';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+      });
+    });
+    storyboard.querySelectorAll('[data-alt-path]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        route(`/path/${encodeURIComponent(btn.dataset.altPath)}`);
+      });
+    });
+  }
+
+  renderSubgraphCard(routeEl.querySelector('#path-subgraph-card'), [selectedHop?.src?.id, selectedHop?.tgt?.id], focusId, nodeId => {
+    updateRouteQuery({ focus: nodeId }, currentRoute.path);
+  });
+}
+
+const FULL_GRAPH_WARNING_THRESHOLD = 500;
+
+function useFullGraphData() {
+  if (dataLayer.fullGraph) graphData = dataLayer.fullGraph;
+}
+
+function getExploreRouteState() {
+  const query = getCurrentRouteQuery();
+  return {
+    scope: query.scope || '',
+    confirm: query.confirm === '1',
+    pathId: query.path || '',
+  };
+}
+
+function isPathFocusedExploreMode() {
+  const state = getExploreRouteState();
+  return currentRoute?.name === 'explore' && state.scope.startsWith('path:') && !!state.pathId;
+}
+
+function getScopedExplorePathIndex() {
+  if (!isPathFocusedExploreMode()) return -1;
+  const entry = dataLayer.pathsById[currentRoute?.query?.path];
+  if (!entry) return -1;
+  const pathSig = entry.path.nodes.join('→');
+  return computedPaths.findIndex(path => path.nodes.join('→') === pathSig);
+}
+
+function updateExploreScopedChrome() {
+  const pathFocused = isPathFocusedExploreMode();
+  document.body.dataset.exploreMode = pathFocused ? 'path-focus' : '';
+  if (!pathFocused) return;
+  document.querySelectorAll('.tab').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === 'paths'));
+  document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.toggle('active', panel.id === 'tab-paths'));
+}
+
+function buildScopedGraph(nodeIds) {
+  const set = new Set(nodeIds.filter(Boolean));
+  const nodes = dataLayer.nodes.filter(node => set.has(node.id)).map(node => ({ ...node }));
+  const edges = dataLayer.edges
+    .filter(edge => {
+      const from = edgeNodeId(edge.source || edge.from);
+      const to = edgeNodeId(edge.target || edge.to);
+      return set.has(from) && set.has(to);
+    })
+    .map(edge => ({ ...edge }));
+  const findings = (dataLayer.findings || []).filter(finding =>
+    (finding.affected_nodes || []).some(nodeId => set.has(nodeId)) || finding.id === dataLayer.pathsById[getExploreRouteState().pathId]?.path?._findingId
+  );
+  return { nodes, edges, findings };
+}
+
+function buildPathNeighborhoodGraph(pathId) {
+  const entry = dataLayer.pathsById[pathId];
+  if (!entry) return null;
+  const visited = new Set(entry.path.nodes);
+  let frontier = new Set(entry.path.nodes);
+
+  for (let depth = 0; depth < 2; depth++) {
+    const next = new Set();
+    frontier.forEach(nodeId => {
+      const steps = [
+        ...(dataLayer.adjacency.out[nodeId] || []),
+        ...(dataLayer.adjacency.in[nodeId] || []),
+      ];
+      steps.forEach(step => {
+        const neighborId = step.from === nodeId ? step.to : step.from;
+        if (!visited.has(neighborId)) {
+          visited.add(neighborId);
+          next.add(neighborId);
+        }
+      });
+    });
+    frontier = next;
+  }
+
+  return buildScopedGraph([...visited]);
+}
+
+function buildNamespaceGraph(namespace) {
+  const baseIds = new Set(
+    dataLayer.nodes.filter(node => node.namespace === namespace).map(node => node.id)
+  );
+  const expanded = new Set(baseIds);
+  dataLayer.edges.forEach(edge => {
+    const from = edgeNodeId(edge.source || edge.from);
+    const to = edgeNodeId(edge.target || edge.to);
+    const fromNode = nodeById[from];
+    const toNode = nodeById[to];
+    if (baseIds.has(from) || baseIds.has(to)) {
+      if (!fromNode?.namespace || fromNode.namespace === namespace) expanded.add(from);
+      if (!toNode?.namespace || toNode.namespace === namespace) expanded.add(to);
+    }
+  });
+  return buildScopedGraph([...expanded]);
+}
+
+function renderExploreGate(title, subtitle, contentHtml, actionsHtml = '') {
+  const gate = document.getElementById('explore-gate');
+  const toolbar = document.getElementById('toolbar');
+  const main = document.getElementById('main');
+  if (!gate || !toolbar || !main) return;
+  gate.classList.add('visible');
+  toolbar.style.display = 'none';
+  main.style.display = 'none';
+  gate.innerHTML = `
+    <div class="explore-gate-card">
+      <div class="explore-gate-title">${escHtml(title)}</div>
+      <div class="explore-gate-sub">${escHtml(subtitle)}</div>
+      ${contentHtml}
+      ${actionsHtml ? `<div class="explore-gate-actions">${actionsHtml}</div>` : ''}
+    </div>
+  `;
+}
+
+function hideExploreGate() {
+  const gate = document.getElementById('explore-gate');
+  const toolbar = document.getElementById('toolbar');
+  const main = document.getElementById('main');
+  if (!gate || !toolbar || !main) return;
+  gate.classList.remove('visible');
+  gate.innerHTML = '';
+  toolbar.style.display = '';
+  main.style.display = '';
+}
+
+function updateExploreToolbar() {
+  if (!exploreScopeBtn || !exploreFullToggleBtn) return;
+  const inExplore = currentRoute?.name === 'explore' && !!graphData;
+  exploreScopeBtn.style.display = inExplore ? '' : 'none';
+  exploreFullToggleBtn.style.display = inExplore ? '' : 'none';
+  if (!inExplore) return;
+
+  const scope = getExploreRouteState().scope || '';
+  if (scope.startsWith('ns:')) {
+    exploreScopeBtn.textContent = `🧭 ${scope.slice(3)}`;
+  } else if (scope.startsWith('path:')) {
+    exploreScopeBtn.textContent = '🧭 Path Scope';
+  } else if (scope === 'full') {
+    exploreScopeBtn.textContent = '🧭 Full Scope';
+  } else {
+    exploreScopeBtn.textContent = '🧭 Scope';
+  }
+  exploreFullToggleBtn.textContent = dataLayer.nodes.length > FULL_GRAPH_WARNING_THRESHOLD ? '⚠ Full Graph' : '⬡ Full Graph';
+}
+
+function destroyExplore() {
+  if (simulation) {
+    simulation.stop();
+    simulation = null;
+  }
+  if (zoomBehavior) {
+    svg.on('.zoom', null);
+    zoomBehavior = null;
+  }
+  clearPathHighlight();
+  clearSelection();
+  hideExploreGate();
+  hullLayer.selectAll('*').remove();
+  linksLayer.selectAll('*').remove();
+  nodesLayer.selectAll('*').remove();
+  d3.select('#minimap-svg').selectAll('circle.mm-node').remove();
+  d3.select('#minimap-vp').attr('x', 0).attr('y', 0).attr('width', 0).attr('height', 0);
+  nodePosMap = {};
+  linkSel = null;
+  nodeSel = null;
+  document.body.dataset.exploreMode = '';
+}
+
+function renderExploreScopePicker() {
+  hideLoading();
+  const namespaces = [...new Set(dataLayer.nodes.map(node => node.namespace).filter(Boolean))].sort();
+  updateExploreToolbar();
+  renderExploreGate(
+    'Choose Explore Scope',
+    'Explore is now opt-in. Start with a namespace-scoped graph, or explicitly load the full cluster graph if you need the entire topology.',
+    `<div class="explore-gate-grid">
+      ${namespaces.map(ns => {
+        const nodeCount = dataLayer.nodes.filter(node => node.namespace === ns).length;
+        return `<button class="explore-ns-btn" data-explore-ns="${escHtml(ns)}"><span class="label">${escHtml(ns)}</span><span class="meta">${nodeCount} namespaced nodes</span></button>`;
+      }).join('')}
+    </div>`,
+    `
+      <button class="brief-btn" id="explore-back-briefing">Back to Briefing</button>
+      <button class="brief-btn primary" id="explore-full-btn">Load full cluster graph${dataLayer.nodes.length > FULL_GRAPH_WARNING_THRESHOLD ? ' (warning)' : ''}</button>
+    `
+  );
+
+  document.querySelectorAll('[data-explore-ns]').forEach(btn => {
+    btn.addEventListener('click', () => updateRouteQuery({ scope: `ns:${btn.dataset.exploreNs}`, confirm: '' }, '/explore'));
+  });
+  document.getElementById('explore-back-briefing')?.addEventListener('click', () => route('/briefing'));
+  document.getElementById('explore-full-btn')?.addEventListener('click', () => updateRouteQuery({ scope: 'full', confirm: '' }, '/explore'));
+}
+
+function renderFullGraphWarning() {
+  hideLoading();
+  updateExploreToolbar();
+  renderExploreGate(
+    'Full Cluster Graph Warning',
+    `This report contains ${dataLayer.nodes.length} nodes. Loading the full graph can be noisy and slower than a scoped Explore session.`,
+    '<div class="brief-list-empty" style="padding:0;text-align:left;">Use namespace scope for day-to-day work, or continue if you explicitly need the full cluster topology.</div>',
+    `
+      <button class="brief-btn" id="explore-warning-back">Choose namespace instead</button>
+      <button class="brief-btn primary" id="explore-warning-continue">Load full graph</button>
+    `
+  );
+  document.getElementById('explore-warning-back')?.addEventListener('click', () => route('/explore'));
+  document.getElementById('explore-warning-continue')?.addEventListener('click', () => updateRouteQuery({ confirm: '1' }, '/explore'));
+}
+
+function applyExploreRouteState() {
+  if (!graphData || currentRoute?.name !== 'explore') return;
+  const pathId = currentRoute?.query?.path;
+  if (!pathId || !dataLayer.pathsById[pathId]) return;
+  const entry = dataLayer.pathsById[pathId];
+  activePathIdx = null;
+  const pathSig = entry.path.nodes.join('→');
+  const scopedIdx = computedPaths.findIndex(path => path.nodes.join('→') === pathSig);
+  if (scopedIdx >= 0) {
+    activePathIdx = scopedIdx;
+    clearSelection();
+    highlightPath(computedPaths[scopedIdx]);
+    document.querySelectorAll('.path-card').forEach(c => c.classList.remove('active'));
+    const card = document.querySelector(`.path-card[data-path-idx="${scopedIdx}"]`);
+    if (card) card.classList.add('active');
+  }
+}
+
+function ensureExploreGraph() {
+  if (!dataLayer.fullGraph) {
+    hideLoading();
+    return;
+  }
+  if (subgraphSimulation) {
+    subgraphSimulation.stop();
+    subgraphSimulation = null;
+  }
+
+  const state = getExploreRouteState();
+  if (!state.scope) {
+    renderExploreScopePicker();
+    return;
+  }
+
+  if (state.scope === 'full' && dataLayer.nodes.length > FULL_GRAPH_WARNING_THRESHOLD && !state.confirm) {
+    renderFullGraphWarning();
+    return;
+  }
+
+  let scopedGraph = null;
+  if (state.scope.startsWith('path:')) {
+    const pathId = state.scope.slice(5);
+    scopedGraph = buildPathNeighborhoodGraph(pathId);
+  } else if (state.scope.startsWith('ns:')) {
+    scopedGraph = buildNamespaceGraph(state.scope.slice(3));
+  } else if (state.scope === 'full') {
+    scopedGraph = buildScopedGraph(dataLayer.nodes.map(node => node.id));
+  }
+
+  if (!scopedGraph || !scopedGraph.nodes.length) {
+    renderExploreScopePicker();
+    return;
+  }
+
+  hideExploreGate();
+  graphData = scopedGraph;
+  goalNodeSet = buildGoalNodeSetFromFindings(scopedGraph.findings);
+  updateExploreScopedChrome();
+  renderSidebar();
+  computeAttackPaths();
+  importFindingPaths();
+  renderGraph();
+  applyRbacVisibility();
+  renderAttackPaths();
+  updateStats();
+  updateExploreToolbar();
+  applyExploreRouteState();
+}
+
+function renderCurrentRoute() {
+  renderFootholdHeader();
+  if (currentRoute?.name === 'explore') {
+    parkIdentityAnalyzer();
+    ensureExploreGraph();
+    return;
+  }
+  parkIdentityAnalyzer();
+  destroyExplore();
+  if (subgraphSimulation) {
+    subgraphSimulation.stop();
+    subgraphSimulation = null;
+  }
+  useFullGraphData();
+  updateExploreToolbar();
+  if (currentRoute?.name === 'path') {
+    renderPathView();
+    return;
+  }
+  renderBriefing();
+}
+
+onRouteChange(renderCurrentRoute);
+renderCurrentRoute();
 
 /* ================================================================
    DATA INGESTION
    ================================================================ */
 function ingestData(raw, nodes, edges) {
+  resetTransientState();
+  dataVersion += 1;
   rawGraphData = raw;   // store for AI prompt access to cluster_objects
   const g = raw.graph || raw;
   const simNodes = nodes.map(n => ({...n}));
   const simEdges = edges.map(e => ({...e}));
   const findings = raw.risk_findings || g.risk_findings || raw.findings || g.findings || [];
-
-  nodeById = {};
-  simNodes.forEach(n => { nodeById[n.id] = n; });
+  dataLayer = buildDataLayerIndices(raw, simNodes, simEdges, findings);
+  nodeById = dataLayer.nodeById;
 
   window._findings = {};
   findings.forEach(f => { window._findings[f.id || f.title] = f; });
@@ -3529,20 +5349,19 @@ function ingestData(raw, nodes, edges) {
 
   // Clear any stale path highlight from a previous data load.
   if (nodeSel) clearPathHighlight();
+  if (simulation) simulation.stop();
 
   dropOverlay.classList.add('hidden');
-  renderSidebar();
-  renderGraph();
-  applyRbacVisibility();
   computeAttackPaths();
   importFindingPaths();
+  rebuildPathIndices();
   // Refresh after path computation adds more goal info
   goalNodeSet = buildGoalNodeSetFromFindings(findings);
-  refreshGoalNodeVisuals();
-  renderAttackPaths();
-  updateStats();
+  renderFootholdHeader();
+  renderCurrentRoute();
+  if (currentRoute?.name !== 'explore') hideLoading();
   // Refresh GOD panel if open
-  if (document.getElementById('god-panel').classList.contains('visible')) {
+  if (document.getElementById('god-panel').classList.contains('visible') || document.getElementById('god-panel').classList.contains('embedded')) {
     populateGodSASelector();
     renderGodPanel();
   }
@@ -3551,18 +5370,6 @@ function ingestData(raw, nodes, edges) {
 /* ================================================================
    ATTACK PATH COMPUTATION (BFS)
    ================================================================ */
-const ATTACK_EDGE_KINDS = new Set([
-  'grants','bound_to','runs_as','mounts',
-  'can_exec','can_impersonate','can_create','can_patch',
-  'can_delete','can_get','can_list','can_portforward','member_of',
-  'can_escalate','can_bind',
-  'inferred',           // backend-emitted inferred escalation edges (e.g. create bindings → cluster-admin)
-  'granted_by',         // SA → binding reverse edge enabling workload→SA→binding→role traversal
-  'runs_on',            // pod → node (container escape)
-  'authenticates_as',   // secret → SA (token theft)
-  'assumes_cloud_role', // SA → cloud identity (cloud role assumption)
-]);
-
 function edgeNodeId(val) {
   if (!val) return null;
   if (typeof val === 'object') return val.id;
@@ -3958,6 +5765,8 @@ function renderAttackPaths() {
     return;
   }
   container.innerHTML = '';
+  const pathFocused = isPathFocusedExploreMode();
+  const focusedPathIdx = getScopedExplorePathIndex();
 
   // Annotate paths with impact info and sort by impact score desc
   const annotated = computedPaths.map((path, idx) => {
@@ -3976,12 +5785,15 @@ function renderAttackPaths() {
     if (b.impact.score !== a.impact.score) return b.impact.score - a.impact.score;
     return a.weight - b.weight;
   });
+  const visibleAnnotated = pathFocused
+    ? (focusedPathIdx >= 0 ? annotated.filter(item => item.idx === focusedPathIdx) : annotated.slice(0, 1))
+    : annotated;
 
   // Group by severity
   const SEV_ORDER = ['CRITICAL','HIGH','MEDIUM','LOW'];
   const groups = {};
   SEV_ORDER.forEach(s => { groups[s] = []; });
-  annotated.forEach(item => { (groups[item.sev] || groups['LOW']).push(item); });
+  visibleAnnotated.forEach(item => { (groups[item.sev] || groups['LOW']).push(item); });
 
   SEV_ORDER.forEach(sev => {
     const items = groups[sev];
@@ -3990,15 +5802,18 @@ function renderAttackPaths() {
     const groupEl = document.createElement('div');
     groupEl.className = 'sev-group';
 
-    const header = document.createElement('div');
-    header.className = 'sev-group-header';
-    header.dataset.sev = sev;
-    const sevEmoji = { CRITICAL:'🔴', HIGH:'🟠', MEDIUM:'🟡', LOW:'🟢' }[sev] || '';
-    header.innerHTML = `${sevEmoji} ${sev}<span class="sev-count">${items.length} path${items.length!==1?'s':''}</span><span class="sev-chevron">▾</span>`;
-    header.addEventListener('click', () => header.classList.toggle('collapsed'));
-
     const itemsEl = document.createElement('div');
     itemsEl.className = 'sev-group-items';
+
+    if (!pathFocused) {
+      const header = document.createElement('div');
+      header.className = 'sev-group-header';
+      header.dataset.sev = sev;
+      const sevEmoji = { CRITICAL:'🔴', HIGH:'🟠', MEDIUM:'🟡', LOW:'🟢' }[sev] || '';
+      header.innerHTML = `${sevEmoji} ${sev}<span class="sev-count">${items.length} path${items.length!==1?'s':''}</span><span class="sev-chevron">▾</span>`;
+      header.addEventListener('click', () => header.classList.toggle('collapsed'));
+      groupEl.appendChild(header);
+    }
 
     items.forEach(({ path, idx, impact, weight }) => {
       const target = nodeById[path.nodes[path.nodes.length-1]];
@@ -4009,6 +5824,7 @@ function renderAttackPaths() {
 
       const card = document.createElement('div');
       card.className = 'path-card';
+      if (pathFocused) card.classList.add('active');
       card.dataset.pathIdx = idx;
       card.dataset.impact  = impact.type;
 
@@ -4116,6 +5932,13 @@ function renderAttackPaths() {
 
       card.addEventListener('click', e => {
         if (e.target.closest('.copy-btn')) return;
+        if (pathFocused) {
+          document.querySelectorAll('.path-card').forEach(c => c.classList.remove('active'));
+          card.classList.add('active');
+          activePathIdx = idx;
+          highlightPath(path);
+          return;
+        }
         const isActive = card.classList.contains('active');
         document.querySelectorAll('.path-card').forEach(c => c.classList.remove('active'));
         if (!isActive) {
@@ -4132,7 +5955,6 @@ function renderAttackPaths() {
       itemsEl.appendChild(card);
     });
 
-    groupEl.appendChild(header);
     groupEl.appendChild(itemsEl);
     container.appendChild(groupEl);
   });
@@ -4171,13 +5993,6 @@ window.copyCmd = function(btn) {
 /* ================================================================
    D3 FORCE GRAPH
    ================================================================ */
-const svg        = d3.select('#graph');
-const svgDefs    = svg.select('#svg-defs');
-const zoomLayer  = svg.select('#zoom-layer');
-const hullLayer  = svg.select('#hull-layer');
-const linksLayer = svg.select('#links-layer');
-const nodesLayer = svg.select('#nodes-layer');
-
 // Set up glow filters and gradients
 function setupFilters() {
   svgDefs.selectAll('*').remove();
@@ -4371,8 +6186,6 @@ function edgePath(d) {
   const my = (y1+y2)/2 + dx * curvature;
   return `M${x1.toFixed(1)},${y1.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
 }
-
-let linkSel, nodeSel;
 
 function renderGraph() {
   linksLayer.selectAll('*').remove();
@@ -4929,6 +6742,15 @@ function selectNode(id) {
   nodesLayer.selectAll('polygon.host-shape')
     .classed('dimmed',      d => !neighborIds.has(d.id))
     .classed('path-active', false);
+  nodesLayer.selectAll('circle.target-ring')
+    .style('display', d => neighborIds.has(d.id) ? null : 'none')
+    .style('opacity', d => neighborIds.has(d.id) ? null : 0);
+  nodesLayer.selectAll('circle.score-ring')
+    .style('display', d => neighborIds.has(d.id) ? null : 'none')
+    .style('opacity', d => neighborIds.has(d.id) ? null : 0);
+  nodesLayer.selectAll('text.score-badge-text')
+    .style('display', d => neighborIds.has(d.id) ? null : 'none')
+    .style('opacity', d => neighborIds.has(d.id) ? null : 0);
   linksLayer.selectAll('path.edge-path')
     .classed('dimmed', d => {
       const sid = edgeNodeId(d.source), tid = edgeNodeId(d.target);
@@ -4954,6 +6776,9 @@ function clearSelection() {
   selectedNodeId = null;
   nodesLayer.selectAll('circle.node-circle').classed('dimmed',false).classed('highlighted',false).classed('path-active',false).classed('path-start',false).classed('path-end',false);
   nodesLayer.selectAll('polygon.host-shape').classed('dimmed',false).classed('path-active',false).classed('path-start',false).classed('path-end',false);
+  nodesLayer.selectAll('circle.target-ring').style('display', null).style('opacity', null);
+  nodesLayer.selectAll('circle.score-ring').style('display', null).style('opacity', null);
+  nodesLayer.selectAll('text.score-badge-text').style('display', null).style('opacity', null);
   linksLayer.selectAll('path.edge-path').classed('dimmed',false).classed('highlighted',false).classed('path-active',false);
   // Hide all edge mid-labels when selection is cleared
   linksLayer.selectAll('g.edge-mid-label').attr('display', 'none');
@@ -5000,6 +6825,16 @@ function highlightPath(path) {
     .classed('path-active', d => pathNodeSet.has(d.id))
     .classed('path-start',  d => d.id === startId)
     .classed('path-end',    d => d.id === endId);
+
+  nodesLayer.selectAll('circle.target-ring')
+    .style('display', d => pathNodeSet.has(d.id) ? null : 'none')
+    .style('opacity', d => pathNodeSet.has(d.id) ? null : 0);
+  nodesLayer.selectAll('circle.score-ring')
+    .style('display', 'none')
+    .style('opacity', 0);
+  nodesLayer.selectAll('text.score-badge-text')
+    .style('display', 'none')
+    .style('opacity', 0);
 
   // Dim/highlight edges
   linksLayer.selectAll('path.edge-path')
@@ -5079,6 +6914,15 @@ function clearPathHighlight() {
   nodesLayer.selectAll('polygon.host-shape')
     .classed('dimmed',false).classed('path-active',false)
     .classed('path-start',false).classed('path-end',false);
+  nodesLayer.selectAll('circle.target-ring')
+    .style('display', null)
+    .style('opacity', null);
+  nodesLayer.selectAll('circle.score-ring')
+    .style('display', null)
+    .style('opacity', null);
+  nodesLayer.selectAll('text.score-badge-text')
+    .style('display', null)
+    .style('opacity', null);
   linksLayer.selectAll('path.edge-path').classed('dimmed',false).classed('highlighted',false).classed('path-active',false);
   linksLayer.selectAll('g.edge-mid-label').attr('display', 'none');
   nodesLayer.selectAll('text.path-step-num').remove();
@@ -5118,7 +6962,8 @@ function showChainStrip(path) {
     const chip = document.createElement('div');
     chip.className = `cs-node${isStart?' cs-start':''}${isEnd?' cs-end':''}`;
     chip.style.cssText = `background:${col}18;color:${col};border-color:${col}50`;
-    chip.innerHTML = `<span class="cs-node-num" style="background:${col}30">${isStart?'▶':(isEnd?'✖':i)}</span>${escHtml(label)}`;
+    const nodeIcon = escHtml(NODE_ICONS[node?.kind] || '•');
+    chip.innerHTML = `<span class="cs-node-num" style="background:${col}30">${nodeIcon}</span><span class="cs-node-label">${escHtml(label)}</span>`;
     if (isStart) chip.innerHTML += `<span class="cs-start-badge">START</span>`;
     if (isEnd)   chip.innerHTML += `<span class="cs-end-badge">TARGET</span>`;
     chip.title = nid;
@@ -5130,7 +6975,8 @@ function showChainStrip(path) {
       const edgeKind = (path.edges && path.edges[i]) ? path.edges[i] : '→';
       const arrow = document.createElement('div');
       arrow.className = 'cs-arrow';
-      arrow.innerHTML = `<span class="cs-edge-label">${escHtml(edgeKind.replace('can_',''))}</span><span class="cs-edge-icon">›</span>`;
+      const edgeLabel = edgeKind.replace('can_','').replace(/_/g,' ');
+      arrow.innerHTML = `<span class="cs-edge-label">${escHtml(edgeLabel)}</span><span class="cs-edge-icon">›</span>`;
       step.appendChild(arrow);
     }
 
