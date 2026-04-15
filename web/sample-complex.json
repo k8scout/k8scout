@@ -1,0 +1,682 @@
+{
+  "meta": {
+    "tool": "k8s-enum",
+    "version": "0.3.0",
+    "timestamp": "2026-04-04T08:30:00Z",
+    "cluster": "https://gke-fintech-prod.internal:6443",
+    "timeout_s": 60
+  },
+  "identity": {
+    "username": "system:serviceaccount:ci:github-actions",
+    "uid": "f1a2b3c4-d5e6-7890-fedc-ba9876543210",
+    "groups": ["system:serviceaccounts", "system:serviceaccounts:ci", "system:authenticated"],
+    "namespace": "ci",
+    "sa_name": "github-actions"
+  },
+  "permissions": {
+    "ssrr_by_namespace": {
+      "": [
+        {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["pods","nodes","namespaces","serviceaccounts","secrets"]},
+        {"verbs": ["create","patch","delete"], "api_groups": ["apps"], "resources": ["deployments","daemonsets","statefulsets"]},
+        {"verbs": ["create"], "api_groups": [""], "resources": ["pods/exec","pods/portforward"]},
+        {"verbs": ["get","list","watch","create","patch","delete"], "api_groups": ["rbac.authorization.k8s.io"], "resources": ["clusterroles","clusterrolebindings","roles","rolebindings"]},
+        {"verbs": ["impersonate"], "api_groups": [""], "resources": ["serviceaccounts","users","groups"]}
+      ],
+      "production": [
+        {"verbs": ["*"], "api_groups": ["*"], "resources": ["*"]}
+      ],
+      "payments": [
+        {"verbs": ["get","list","watch","create","patch"], "api_groups": [""], "resources": ["secrets","configmaps","pods"]},
+        {"verbs": ["create"], "api_groups": [""], "resources": ["pods/exec"]}
+      ],
+      "ci": [
+        {"verbs": ["*"], "api_groups": ["*"], "resources": ["*"]}
+      ]
+    }
+  },
+  "cluster_objects": {
+    "cluster_roles": [
+      {
+        "name": "cluster-admin",
+        "rules": [{"verbs": ["*"], "api_groups": ["*"], "resources": ["*"]}]
+      },
+      {
+        "name": "ci-deploy-master",
+        "rules": [
+          {"verbs": ["get","list","watch","create","patch","delete","update"], "api_groups": ["apps",""], "resources": ["deployments","daemonsets","statefulsets","pods","configmaps"]},
+          {"verbs": ["create"], "api_groups": [""], "resources": ["pods/exec","pods/portforward"]},
+          {"verbs": ["get","list","watch","create","patch","delete"], "api_groups": ["rbac.authorization.k8s.io"], "resources": ["clusterroles","clusterrolebindings","roles","rolebindings"]},
+          {"verbs": ["impersonate"], "api_groups": [""], "resources": ["serviceaccounts","users","groups"]},
+          {"verbs": ["get","list"], "api_groups": [""], "resources": ["secrets","serviceaccounts","namespaces","nodes"]}
+        ]
+      },
+      {
+        "name": "monitoring-viewer",
+        "rules": [
+          {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["pods","nodes","namespaces","secrets","configmaps","services","endpoints","serviceaccounts"]},
+          {"verbs": ["create"], "api_groups": [""], "resources": ["pods/exec","pods/portforward"]},
+          {"verbs": ["get","list","watch"], "api_groups": ["apps"], "resources": ["deployments","daemonsets","statefulsets"]},
+          {"verbs": ["get","list","watch"], "api_groups": ["rbac.authorization.k8s.io"], "resources": ["clusterroles","clusterrolebindings","roles","rolebindings"]}
+        ]
+      },
+      {
+        "name": "secret-exfil-role",
+        "rules": [
+          {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["secrets"]}
+        ]
+      },
+      {
+        "name": "node-reader",
+        "rules": [
+          {"verbs": ["get","list","watch"], "api_groups": [""], "resources": ["nodes","pods"]},
+          {"verbs": ["create"], "api_groups": [""], "resources": ["pods/exec"]}
+        ]
+      },
+      {
+        "name": "payments-admin",
+        "rules": [
+          {"verbs": ["*"], "api_groups": [""], "resources": ["*"]},
+          {"verbs": ["*"], "api_groups": ["apps"], "resources": ["deployments","statefulsets"]}
+        ]
+      }
+    ],
+    "cluster_role_bindings": [
+      {
+        "name": "github-actions-deploy",
+        "role_ref": {"kind": "ClusterRole", "name": "ci-deploy-master"},
+        "subjects": [{"kind": "ServiceAccount", "name": "github-actions", "namespace": "ci"}]
+      },
+      {
+        "name": "prometheus-cluster-view",
+        "role_ref": {"kind": "ClusterRole", "name": "monitoring-viewer"},
+        "subjects": [{"kind": "ServiceAccount", "name": "prometheus", "namespace": "monitoring"}]
+      },
+      {
+        "name": "velero-secret-reader",
+        "role_ref": {"kind": "ClusterRole", "name": "secret-exfil-role"},
+        "subjects": [{"kind": "ServiceAccount", "name": "velero", "namespace": "backup"}]
+      },
+      {
+        "name": "kubelet-node-read",
+        "role_ref": {"kind": "ClusterRole", "name": "node-reader"},
+        "subjects": [{"kind": "ServiceAccount", "name": "node-agent", "namespace": "kube-system"}]
+      },
+      {
+        "name": "payments-svc-admin",
+        "role_ref": {"kind": "ClusterRole", "name": "payments-admin"},
+        "subjects": [{"kind": "ServiceAccount", "name": "payments-processor", "namespace": "payments"}]
+      }
+    ],
+    "roles": [
+      {
+        "name": "istio-sidecar-inject",
+        "namespace": "production",
+        "rules": [
+          {"verbs": ["get","list","watch","patch","create"], "api_groups": [""], "resources": ["pods","configmaps","secrets"]},
+          {"verbs": ["create"], "api_groups": [""], "resources": ["pods/exec"]}
+        ]
+      },
+      {
+        "name": "vault-agent-role",
+        "namespace": "production",
+        "rules": [
+          {"verbs": ["get","create","update"], "api_groups": [""], "resources": ["secrets","serviceaccounts/token"]}
+        ]
+      },
+      {
+        "name": "backup-reader",
+        "namespace": "payments",
+        "rules": [
+          {"verbs": ["get","list"], "api_groups": [""], "resources": ["secrets","configmaps","pods"]}
+        ]
+      }
+    ],
+    "role_bindings": [
+      {
+        "name": "istio-inject-bind",
+        "namespace": "production",
+        "role_ref": {"kind": "Role", "name": "istio-sidecar-inject"},
+        "subjects": [{"kind": "ServiceAccount", "name": "istio-pilot", "namespace": "istio-system"}]
+      },
+      {
+        "name": "vault-bind",
+        "namespace": "production",
+        "role_ref": {"kind": "Role", "name": "vault-agent-role"},
+        "subjects": [{"kind": "ServiceAccount", "name": "vault-agent", "namespace": "production"}]
+      },
+      {
+        "name": "payments-backup-bind",
+        "namespace": "payments",
+        "role_ref": {"kind": "Role", "name": "backup-reader"},
+        "subjects": [{"kind": "ServiceAccount", "name": "velero", "namespace": "backup"}]
+      }
+    ]
+  },
+  "graph": {
+    "nodes": [
+      { "id": "identity:system:serviceaccount:ci:github-actions",        "kind": "Identity",        "name": "system:serviceaccount:ci:github-actions",   "risk_score": 9.8 },
+
+      { "id": "sa:ci:github-actions",          "kind": "ServiceAccount", "name": "github-actions",         "namespace": "ci",         "risk_score": 9.5 },
+      { "id": "sa:monitoring:prometheus",       "kind": "ServiceAccount", "name": "prometheus",             "namespace": "monitoring", "risk_score": 8.0 },
+      { "id": "sa:backup:velero",               "kind": "ServiceAccount", "name": "velero",                 "namespace": "backup",     "risk_score": 7.5 },
+      { "id": "sa:production:vault-agent",      "kind": "ServiceAccount", "name": "vault-agent",            "namespace": "production", "risk_score": 7.0 },
+      { "id": "sa:payments:payments-processor", "kind": "ServiceAccount", "name": "payments-processor",     "namespace": "payments",   "risk_score": 9.0 },
+      { "id": "sa:istio-system:istio-pilot",    "kind": "ServiceAccount", "name": "istio-pilot",            "namespace": "istio-system","risk_score": 8.5 },
+      { "id": "sa:kube-system:node-agent",      "kind": "ServiceAccount", "name": "node-agent",             "namespace": "kube-system","risk_score": 7.0 },
+      { "id": "sa:production:app-backend",      "kind": "ServiceAccount", "name": "app-backend",            "namespace": "production", "risk_score": 5.0 },
+      { "id": "sa:production:worker",           "kind": "ServiceAccount", "name": "worker",                 "namespace": "production", "risk_score": 4.0 },
+      { "id": "sa:kube-system:default",         "kind": "ServiceAccount", "name": "default",                "namespace": "kube-system","risk_score": 2.0 },
+
+      { "id": "cr:cluster-admin",               "kind": "ClusterRole",    "name": "cluster-admin",                                     "risk_score": 10.0 },
+      { "id": "cr:ci-deploy-master",            "kind": "ClusterRole",    "name": "ci-deploy-master",                                  "risk_score": 9.2 },
+      { "id": "cr:monitoring-viewer",           "kind": "ClusterRole",    "name": "monitoring-viewer",                                 "risk_score": 7.8 },
+      { "id": "cr:secret-exfil-role",           "kind": "ClusterRole",    "name": "secret-exfil-role",                                 "risk_score": 7.0 },
+      { "id": "cr:node-reader",                 "kind": "ClusterRole",    "name": "node-reader",                                       "risk_score": 6.5 },
+      { "id": "cr:payments-admin",              "kind": "ClusterRole",    "name": "payments-admin",                                    "risk_score": 9.0 },
+
+      { "id": "r:production:istio-sidecar-inject","kind": "Role",         "name": "istio-sidecar-inject",   "namespace": "production", "risk_score": 7.5 },
+      { "id": "r:production:vault-agent-role",   "kind": "Role",          "name": "vault-agent-role",       "namespace": "production", "risk_score": 6.5 },
+      { "id": "r:payments:backup-reader",        "kind": "Role",          "name": "backup-reader",          "namespace": "payments",   "risk_score": 5.0 },
+
+      { "id": "crb:github-actions-deploy",      "kind": "ClusterRoleBinding","name": "github-actions-deploy",                          "risk_score": 9.2 },
+      { "id": "crb:prometheus-cluster-view",    "kind": "ClusterRoleBinding","name": "prometheus-cluster-view",                        "risk_score": 7.8 },
+      { "id": "crb:velero-secret-reader",       "kind": "ClusterRoleBinding","name": "velero-secret-reader",                           "risk_score": 7.0 },
+      { "id": "crb:kubelet-node-read",          "kind": "ClusterRoleBinding","name": "kubelet-node-read",                              "risk_score": 6.5 },
+      { "id": "crb:payments-svc-admin",         "kind": "ClusterRoleBinding","name": "payments-svc-admin",                             "risk_score": 9.0 },
+      { "id": "rb:production:istio-inject-bind","kind": "RoleBinding",    "name": "istio-inject-bind",      "namespace": "production", "risk_score": 7.5 },
+      { "id": "rb:production:vault-bind",       "kind": "RoleBinding",    "name": "vault-bind",             "namespace": "production", "risk_score": 6.5 },
+      { "id": "rb:payments:payments-backup-bind","kind": "RoleBinding",   "name": "payments-backup-bind",   "namespace": "payments",   "risk_score": 5.0 },
+
+      { "id": "workload:ci:ci-runner",          "kind": "Workload",       "name": "ci-runner",              "namespace": "ci",         "risk_score": 9.0,
+        "metadata": {"privileged": "true", "host_network": "true", "automount_sa_token": "true"} },
+      { "id": "workload:monitoring:prometheus-deploy","kind": "Workload",  "name": "prometheus-deploy",      "namespace": "monitoring", "risk_score": 7.5,
+        "metadata": {"host_pid": "true", "automount_sa_token": "true"} },
+      { "id": "workload:production:app-backend-deploy","kind": "Workload", "name": "app-backend-deploy",    "namespace": "production", "risk_score": 5.5,
+        "metadata": {"automount_sa_token": "true"} },
+      { "id": "workload:production:worker-deploy","kind": "Workload",      "name": "worker-deploy",          "namespace": "production", "risk_score": 4.5 },
+      { "id": "workload:payments:payment-api",  "kind": "Workload",       "name": "payment-api",            "namespace": "payments",   "risk_score": 8.5,
+        "metadata": {"privileged": "true", "automount_sa_token": "true"} },
+      { "id": "workload:istio-system:pilot-deploy","kind": "Workload",    "name": "pilot-deploy",           "namespace": "istio-system","risk_score": 8.0 },
+      { "id": "workload:backup:velero-deploy",  "kind": "Workload",       "name": "velero-deploy",          "namespace": "backup",     "risk_score": 7.0 },
+
+      { "id": "pod:ci:ci-runner-abc12",         "kind": "Pod",            "name": "ci-runner-abc12",        "namespace": "ci",         "risk_score": 9.0,
+        "metadata": {"node": "node-01", "phase": "Running", "privileged": "true"} },
+      { "id": "pod:monitoring:prometheus-x9j2p","kind": "Pod",            "name": "prometheus-x9j2p",       "namespace": "monitoring", "risk_score": 7.5,
+        "metadata": {"node": "node-02", "phase": "Running", "host_pid": "true"} },
+      { "id": "pod:production:app-backend-p7k8","kind": "Pod",            "name": "app-backend-p7k8",       "namespace": "production", "risk_score": 5.0,
+        "metadata": {"node": "node-03", "phase": "Running"} },
+      { "id": "pod:payments:payment-api-q2w1x", "kind": "Pod",           "name": "payment-api-q2w1x",      "namespace": "payments",   "risk_score": 8.5,
+        "metadata": {"node": "node-03", "phase": "Running", "privileged": "true"} },
+      { "id": "pod:istio-system:pilot-r4t5y",   "kind": "Pod",           "name": "pilot-r4t5y",            "namespace": "istio-system","risk_score": 8.0,
+        "metadata": {"node": "node-01", "phase": "Running"} },
+
+      { "id": "secret:ci:gh-token",             "kind": "Secret",         "name": "gh-token",               "namespace": "ci",         "risk_score": 8.0 },
+      { "id": "secret:ci:dockerhub-creds",      "kind": "Secret",         "name": "dockerhub-creds",        "namespace": "ci",         "risk_score": 6.0 },
+      { "id": "secret:production:db-password",  "kind": "Secret",         "name": "db-password",            "namespace": "production", "risk_score": 8.5 },
+      { "id": "secret:production:jwt-signing-key","kind": "Secret",       "name": "jwt-signing-key",        "namespace": "production", "risk_score": 9.0 },
+      { "id": "secret:payments:stripe-api-key", "kind": "Secret",         "name": "stripe-api-key",         "namespace": "payments",   "risk_score": 9.5 },
+      { "id": "secret:payments:pci-tls-cert",   "kind": "Secret",         "name": "pci-tls-cert",           "namespace": "payments",   "risk_score": 8.0 },
+      { "id": "secret:kube-system:admin-kubeconfig","kind": "Secret",     "name": "admin-kubeconfig",       "namespace": "kube-system","risk_score": 10.0 },
+      { "id": "secret:production:vault-token",  "kind": "Secret",         "name": "vault-token",            "namespace": "production", "risk_score": 8.5 },
+      { "id": "secret:backup:s3-backup-creds",  "kind": "Secret",         "name": "s3-backup-creds",        "namespace": "backup",     "risk_score": 7.0 },
+      { "id": "secret:monitoring:alertmanager-webhook","kind": "Secret",  "name": "alertmanager-webhook",   "namespace": "monitoring", "risk_score": 5.0 },
+
+      { "id": "ns:ci",                          "kind": "Namespace",      "name": "ci",                                                "risk_score": 5.0 },
+      { "id": "ns:production",                  "kind": "Namespace",      "name": "production",                                        "risk_score": 6.0 },
+      { "id": "ns:payments",                    "kind": "Namespace",      "name": "payments",                                          "risk_score": 7.0 },
+      { "id": "ns:monitoring",                  "kind": "Namespace",      "name": "monitoring",                                        "risk_score": 4.0 },
+      { "id": "ns:backup",                      "kind": "Namespace",      "name": "backup",                                            "risk_score": 5.0 },
+      { "id": "ns:kube-system",                 "kind": "Namespace",      "name": "kube-system",                                       "risk_score": 4.0 },
+      { "id": "ns:istio-system",                "kind": "Namespace",      "name": "istio-system",                                      "risk_score": 5.0 },
+
+      { "id": "node:node-01",                   "kind": "Node",           "name": "node-01",                                           "risk_score": 3.0 },
+      { "id": "node:node-02",                   "kind": "Node",           "name": "node-02",                                           "risk_score": 2.5 },
+      { "id": "node:node-03",                   "kind": "Node",           "name": "node-03",                                           "risk_score": 2.5 }
+    ],
+    "edges": [
+      { "from": "identity:system:serviceaccount:ci:github-actions", "to": "sa:ci:github-actions",           "kind": "member_of" },
+
+      { "from": "sa:ci:github-actions",        "to": "crb:github-actions-deploy",                          "kind": "bound_to" },
+      { "from": "crb:github-actions-deploy",   "to": "cr:ci-deploy-master",                                "kind": "grants" },
+
+      { "from": "cr:ci-deploy-master",         "to": "workload:ci:ci-runner",                              "kind": "can_patch" },
+      { "from": "cr:ci-deploy-master",         "to": "workload:production:app-backend-deploy",             "kind": "can_patch" },
+      { "from": "cr:ci-deploy-master",         "to": "workload:production:worker-deploy",                  "kind": "can_patch" },
+      { "from": "cr:ci-deploy-master",         "to": "workload:payments:payment-api",                      "kind": "can_patch" },
+      { "from": "cr:ci-deploy-master",         "to": "workload:monitoring:prometheus-deploy",              "kind": "can_patch" },
+      { "from": "cr:ci-deploy-master",         "to": "workload:istio-system:pilot-deploy",                 "kind": "can_patch" },
+      { "from": "cr:ci-deploy-master",         "to": "pod:ci:ci-runner-abc12",                             "kind": "can_exec" },
+      { "from": "cr:ci-deploy-master",         "to": "pod:production:app-backend-p7k8",                    "kind": "can_exec" },
+      { "from": "cr:ci-deploy-master",         "to": "pod:payments:payment-api-q2w1x",                     "kind": "can_exec" },
+      { "from": "cr:ci-deploy-master",         "to": "pod:monitoring:prometheus-x9j2p",                    "kind": "can_exec" },
+      { "from": "cr:ci-deploy-master",         "to": "pod:istio-system:pilot-r4t5y",                       "kind": "can_exec" },
+      { "from": "cr:ci-deploy-master",         "to": "secret:ci:gh-token",                                 "kind": "can_get" },
+      { "from": "cr:ci-deploy-master",         "to": "secret:ci:dockerhub-creds",                          "kind": "can_get" },
+      { "from": "cr:ci-deploy-master",         "to": "secret:kube-system:admin-kubeconfig",                "kind": "can_get" },
+      { "from": "cr:ci-deploy-master",         "to": "secret:production:db-password",                      "kind": "can_get" },
+      { "from": "cr:ci-deploy-master",         "to": "secret:production:jwt-signing-key",                  "kind": "can_get" },
+      { "from": "cr:ci-deploy-master",         "to": "secret:payments:stripe-api-key",                     "kind": "can_get" },
+      { "from": "cr:ci-deploy-master",         "to": "cr:cluster-admin",                                   "kind": "can_escalate_to" },
+      { "from": "cr:ci-deploy-master",         "to": "crb:payments-svc-admin",                             "kind": "can_patch" },
+      { "from": "cr:ci-deploy-master",         "to": "sa:production:app-backend",                          "kind": "can_impersonate", "inferred": true },
+      { "from": "cr:ci-deploy-master",         "to": "sa:payments:payments-processor",                     "kind": "can_impersonate", "inferred": true },
+      { "from": "cr:ci-deploy-master",         "to": "sa:monitoring:prometheus",                           "kind": "can_impersonate", "inferred": true },
+      { "from": "cr:ci-deploy-master",         "to": "sa:istio-system:istio-pilot",                        "kind": "can_impersonate", "inferred": true },
+
+      { "from": "sa:monitoring:prometheus",    "to": "crb:prometheus-cluster-view",                        "kind": "bound_to" },
+      { "from": "crb:prometheus-cluster-view", "to": "cr:monitoring-viewer",                               "kind": "grants" },
+      { "from": "cr:monitoring-viewer",        "to": "secret:production:db-password",                      "kind": "can_get" },
+      { "from": "cr:monitoring-viewer",        "to": "secret:production:jwt-signing-key",                  "kind": "can_get" },
+      { "from": "cr:monitoring-viewer",        "to": "secret:kube-system:admin-kubeconfig",                "kind": "can_get" },
+      { "from": "cr:monitoring-viewer",        "to": "secret:payments:stripe-api-key",                     "kind": "can_get" },
+      { "from": "cr:monitoring-viewer",        "to": "secret:monitoring:alertmanager-webhook",              "kind": "can_get" },
+      { "from": "cr:monitoring-viewer",        "to": "pod:production:app-backend-p7k8",                    "kind": "can_exec" },
+      { "from": "cr:monitoring-viewer",        "to": "pod:payments:payment-api-q2w1x",                     "kind": "can_exec" },
+
+      { "from": "sa:backup:velero",            "to": "crb:velero-secret-reader",                           "kind": "bound_to" },
+      { "from": "crb:velero-secret-reader",    "to": "cr:secret-exfil-role",                               "kind": "grants" },
+      { "from": "cr:secret-exfil-role",        "to": "secret:production:db-password",                      "kind": "can_list" },
+      { "from": "cr:secret-exfil-role",        "to": "secret:production:jwt-signing-key",                  "kind": "can_list" },
+      { "from": "cr:secret-exfil-role",        "to": "secret:payments:stripe-api-key",                     "kind": "can_list" },
+      { "from": "cr:secret-exfil-role",        "to": "secret:kube-system:admin-kubeconfig",                "kind": "can_list" },
+      { "from": "sa:backup:velero",            "to": "rb:payments:payments-backup-bind",                   "kind": "bound_to" },
+      { "from": "rb:payments:payments-backup-bind","to": "r:payments:backup-reader",                       "kind": "grants" },
+      { "from": "r:payments:backup-reader",    "to": "secret:payments:stripe-api-key",                     "kind": "can_get" },
+      { "from": "r:payments:backup-reader",    "to": "secret:payments:pci-tls-cert",                       "kind": "can_get" },
+
+      { "from": "sa:payments:payments-processor","to": "crb:payments-svc-admin",                           "kind": "bound_to" },
+      { "from": "crb:payments-svc-admin",      "to": "cr:payments-admin",                                  "kind": "grants" },
+      { "from": "cr:payments-admin",           "to": "secret:payments:stripe-api-key",                     "kind": "can_get" },
+      { "from": "cr:payments-admin",           "to": "secret:payments:pci-tls-cert",                       "kind": "can_get" },
+      { "from": "cr:payments-admin",           "to": "secret:production:db-password",                      "kind": "can_get" },
+      { "from": "cr:payments-admin",           "to": "workload:payments:payment-api",                      "kind": "can_patch" },
+      { "from": "cr:payments-admin",           "to": "pod:payments:payment-api-q2w1x",                     "kind": "can_exec" },
+
+      { "from": "sa:istio-system:istio-pilot", "to": "rb:production:istio-inject-bind",                    "kind": "bound_to" },
+      { "from": "rb:production:istio-inject-bind","to": "r:production:istio-sidecar-inject",               "kind": "grants" },
+      { "from": "r:production:istio-sidecar-inject","to": "secret:production:db-password",                 "kind": "can_get" },
+      { "from": "r:production:istio-sidecar-inject","to": "secret:production:jwt-signing-key",             "kind": "can_get" },
+      { "from": "r:production:istio-sidecar-inject","to": "secret:production:vault-token",                 "kind": "can_get" },
+      { "from": "r:production:istio-sidecar-inject","to": "pod:production:app-backend-p7k8",               "kind": "can_exec" },
+      { "from": "r:production:istio-sidecar-inject","to": "workload:production:app-backend-deploy",        "kind": "can_patch" },
+
+      { "from": "sa:production:vault-agent",   "to": "rb:production:vault-bind",                           "kind": "bound_to" },
+      { "from": "rb:production:vault-bind",    "to": "r:production:vault-agent-role",                      "kind": "grants" },
+      { "from": "r:production:vault-agent-role","to": "secret:production:vault-token",                     "kind": "can_get" },
+      { "from": "r:production:vault-agent-role","to": "secret:production:jwt-signing-key",                 "kind": "can_get" },
+
+      { "from": "sa:kube-system:node-agent",   "to": "crb:kubelet-node-read",                              "kind": "bound_to" },
+      { "from": "crb:kubelet-node-read",       "to": "cr:node-reader",                                     "kind": "grants" },
+      { "from": "cr:node-reader",              "to": "node:node-01",                                       "kind": "can_get" },
+      { "from": "cr:node-reader",              "to": "node:node-02",                                       "kind": "can_get" },
+      { "from": "cr:node-reader",              "to": "node:node-03",                                       "kind": "can_get" },
+      { "from": "cr:node-reader",              "to": "pod:production:app-backend-p7k8",                    "kind": "can_exec" },
+      { "from": "cr:node-reader",              "to": "pod:payments:payment-api-q2w1x",                     "kind": "can_exec" },
+
+      { "from": "workload:ci:ci-runner",       "to": "sa:ci:github-actions",                               "kind": "runs_as" },
+      { "from": "workload:monitoring:prometheus-deploy","to": "sa:monitoring:prometheus",                   "kind": "runs_as" },
+      { "from": "workload:production:app-backend-deploy","to": "sa:production:app-backend",                 "kind": "runs_as" },
+      { "from": "workload:production:worker-deploy","to": "sa:production:worker",                           "kind": "runs_as" },
+      { "from": "workload:payments:payment-api","to": "sa:payments:payments-processor",                     "kind": "runs_as" },
+      { "from": "workload:istio-system:pilot-deploy","to": "sa:istio-system:istio-pilot",                   "kind": "runs_as" },
+      { "from": "workload:backup:velero-deploy","to": "sa:backup:velero",                                   "kind": "runs_as" },
+
+      { "from": "pod:ci:ci-runner-abc12",      "to": "workload:ci:ci-runner",                              "kind": "owned_by" },
+      { "from": "pod:monitoring:prometheus-x9j2p","to": "workload:monitoring:prometheus-deploy",            "kind": "owned_by" },
+      { "from": "pod:production:app-backend-p7k8","to": "workload:production:app-backend-deploy",          "kind": "owned_by" },
+      { "from": "pod:payments:payment-api-q2w1x","to": "workload:payments:payment-api",                    "kind": "owned_by" },
+      { "from": "pod:istio-system:pilot-r4t5y","to": "workload:istio-system:pilot-deploy",                 "kind": "owned_by" },
+
+      { "from": "workload:ci:ci-runner",       "to": "secret:ci:gh-token",                                 "kind": "mounts" },
+      { "from": "workload:ci:ci-runner",       "to": "secret:ci:dockerhub-creds",                          "kind": "mounts" },
+      { "from": "workload:production:app-backend-deploy","to": "secret:production:db-password",            "kind": "mounts" },
+      { "from": "workload:production:app-backend-deploy","to": "secret:production:jwt-signing-key",        "kind": "mounts" },
+      { "from": "workload:payments:payment-api","to": "secret:payments:stripe-api-key",                    "kind": "mounts" },
+      { "from": "workload:payments:payment-api","to": "secret:payments:pci-tls-cert",                      "kind": "mounts" },
+      { "from": "workload:backup:velero-deploy","to": "secret:backup:s3-backup-creds",                     "kind": "mounts" },
+
+      { "from": "pod:ci:ci-runner-abc12",      "to": "node:node-01",                                       "kind": "runs_on" },
+      { "from": "pod:monitoring:prometheus-x9j2p","to": "node:node-02",                                    "kind": "runs_on" },
+      { "from": "pod:production:app-backend-p7k8","to": "node:node-03",                                    "kind": "runs_on" },
+      { "from": "pod:payments:payment-api-q2w1x","to": "node:node-03",                                     "kind": "runs_on" },
+      { "from": "pod:istio-system:pilot-r4t5y","to": "node:node-01",                                       "kind": "runs_on" },
+
+      { "from": "pod:ci:ci-runner-abc12",      "to": "node:node-01",                                       "kind": "can_exec", "inferred": true },
+      { "from": "pod:monitoring:prometheus-x9j2p","to": "node:node-02",                                    "kind": "can_exec", "inferred": true },
+      { "from": "pod:payments:payment-api-q2w1x","to": "node:node-03",                                     "kind": "can_exec", "inferred": true },
+
+      { "from": "sa:ci:github-actions",        "to": "cr:cluster-admin",                                   "kind": "can_escalate_to", "inferred": true },
+      { "from": "sa:monitoring:prometheus",    "to": "cr:cluster-admin",                                   "kind": "can_escalate_to", "inferred": true },
+
+      { "from": "ns:ci",                       "to": "sa:ci:github-actions",                               "kind": "member_of" },
+      { "from": "ns:monitoring",               "to": "sa:monitoring:prometheus",                           "kind": "member_of" },
+      { "from": "ns:backup",                   "to": "sa:backup:velero",                                   "kind": "member_of" },
+      { "from": "ns:production",               "to": "sa:production:app-backend",                          "kind": "member_of" },
+      { "from": "ns:production",               "to": "sa:production:worker",                               "kind": "member_of" },
+      { "from": "ns:production",               "to": "sa:production:vault-agent",                          "kind": "member_of" },
+      { "from": "ns:payments",                 "to": "sa:payments:payments-processor",                     "kind": "member_of" },
+      { "from": "ns:istio-system",             "to": "sa:istio-system:istio-pilot",                        "kind": "member_of" },
+      { "from": "ns:kube-system",              "to": "sa:kube-system:node-agent",                          "kind": "member_of" }
+    ]
+  },
+  "risk_findings": [
+    {
+      "id": "f-001",
+      "rule_id": "PRIVESC-RBAC-WRITE-CLUSTER-ADMIN",
+      "severity": "CRITICAL",
+      "score": 10.0,
+      "title": "CI SA can create ClusterRoleBinding to grant cluster-admin to any subject",
+      "description": "The github-actions ServiceAccount holds ci-deploy-master which grants create/patch on clusterrolebindings cluster-wide. An attacker can create a new ClusterRoleBinding granting cluster-admin to github-actions itself, achieving full cluster takeover in a single API call.",
+      "evidence": [
+        "ClusterRoleBinding github-actions-deploy → ClusterRole ci-deploy-master",
+        "ClusterRole ci-deploy-master: verbs=[get,list,watch,create,patch,delete] resources=[clusterrolebindings] apiGroups=[rbac.authorization.k8s.io]",
+        "ClusterRole cluster-admin exists: verbs=[*] resources=[*]"
+      ],
+      "mitigation": "Remove all RBAC write verbs from ci-deploy-master. Use a dedicated RBAC controller with audit logging. Never grant clusterrolebinding write to CI identities.",
+      "affected_nodes": [
+        "sa:ci:github-actions",
+        "crb:github-actions-deploy",
+        "cr:ci-deploy-master",
+        "cr:cluster-admin"
+      ]
+    },
+    {
+      "id": "f-002",
+      "rule_id": "PRIVESC-IMPERSONATE-PAYMENTS-SA",
+      "severity": "CRITICAL",
+      "score": 9.8,
+      "title": "CI SA can impersonate payments-processor to access PCI secrets",
+      "description": "ci-deploy-master grants impersonate on serviceaccounts cluster-wide. By impersonating payments-processor, an attacker gains access to stripe-api-key and pci-tls-cert secrets in the payments namespace, directly violating PCI DSS controls.",
+      "evidence": [
+        "ClusterRole ci-deploy-master: verbs=[impersonate] resources=[serviceaccounts]",
+        "ServiceAccount payments:payments-processor bound to payments-admin ClusterRole",
+        "payments-admin grants get on secrets: payments/stripe-api-key, payments/pci-tls-cert"
+      ],
+      "mitigation": "Remove impersonate verb from ci-deploy-master entirely. If service-account impersonation is required, scope it to specific SA names using resourceNames field.",
+      "affected_nodes": [
+        "sa:ci:github-actions",
+        "cr:ci-deploy-master",
+        "sa:payments:payments-processor",
+        "crb:payments-svc-admin",
+        "cr:payments-admin",
+        "secret:payments:stripe-api-key",
+        "secret:payments:pci-tls-cert"
+      ]
+    },
+    {
+      "id": "f-003",
+      "rule_id": "SECRET-EXFIL-ADMIN-KUBECONFIG",
+      "severity": "CRITICAL",
+      "score": 9.5,
+      "title": "CI SA can read kube-system admin kubeconfig secret",
+      "description": "ci-deploy-master includes get on secrets cluster-wide without namespace scoping. The admin-kubeconfig secret in kube-system contains full cluster-admin credentials, granting permanent out-of-band cluster access beyond Kubernetes RBAC.",
+      "evidence": [
+        "ClusterRole ci-deploy-master: verbs=[get,list] resources=[secrets] — no namespace restriction",
+        "Secret kube-system/admin-kubeconfig exists (risk_score 10.0)"
+      ],
+      "mitigation": "Delete admin-kubeconfig from kube-system. Restrict secret get to specific namespaces using RoleBindings instead of ClusterRoleBindings.",
+      "affected_nodes": [
+        "sa:ci:github-actions",
+        "cr:ci-deploy-master",
+        "secret:kube-system:admin-kubeconfig"
+      ]
+    },
+    {
+      "id": "f-004",
+      "rule_id": "SECRET-EXFIL-JWT-SIGNING-KEY",
+      "severity": "CRITICAL",
+      "score": 9.2,
+      "title": "Multiple SAs can read JWT signing key — full auth bypass",
+      "description": "The production/jwt-signing-key secret is accessible to three separate SAs (ci:github-actions via ci-deploy-master, monitoring:prometheus via monitoring-viewer, and istio-system:istio-pilot via istio-sidecar-inject role). Possession of this key allows forging valid JWTs for any user.",
+      "evidence": [
+        "ClusterRole ci-deploy-master: can_get secret:production:jwt-signing-key",
+        "ClusterRole monitoring-viewer: can_get secret:production:jwt-signing-key",
+        "Role production/istio-sidecar-inject: can_get secret:production:jwt-signing-key"
+      ],
+      "mitigation": "Store JWT signing keys in Vault or an external KMS, not as Kubernetes secrets. Rotate the key immediately if any of these SAs is compromised.",
+      "affected_nodes": [
+        "secret:production:jwt-signing-key",
+        "sa:ci:github-actions",
+        "sa:monitoring:prometheus",
+        "sa:istio-system:istio-pilot"
+      ]
+    },
+    {
+      "id": "f-005",
+      "rule_id": "LATERAL-EXEC-PAYMENT-POD",
+      "severity": "CRITICAL",
+      "score": 9.0,
+      "title": "CI SA can exec into privileged payment-api pod",
+      "description": "github-actions can exec into payment-api-q2w1x which runs privileged with automounted SA token. From inside the pod, an attacker has the payments-processor token (cluster-scoped admin on payments namespace) and host-level access via privileged flag.",
+      "evidence": [
+        "ClusterRole ci-deploy-master: verbs=[create] resources=[pods/exec]",
+        "Pod payments/payment-api-q2w1x: phase=Running, privileged=true",
+        "Workload payments/payment-api: runs_as payments-processor SA",
+        "payments-processor bound to payments-admin (wildcard permissions in payments namespace)"
+      ],
+      "mitigation": "Remove pods/exec from ci-deploy-master. Drop privileged flag from payment-api pod spec. Enforce PodSecurityAdmission restricted policy on payments namespace.",
+      "affected_nodes": [
+        "sa:ci:github-actions",
+        "cr:ci-deploy-master",
+        "pod:payments:payment-api-q2w1x",
+        "sa:payments:payments-processor",
+        "secret:payments:stripe-api-key"
+      ]
+    },
+    {
+      "id": "f-006",
+      "rule_id": "LATERAL-EXEC-PROMETHEUS-HOSTPID",
+      "severity": "HIGH",
+      "score": 8.5,
+      "title": "Exec into prometheus pod exposes host process namespace",
+      "description": "prometheus-deploy runs with hostPID=true. Exec into the pod gives visibility into all host processes, enabling /proc-based credential dumping, signal injection into kubelet, and container escape via nsenter.",
+      "evidence": [
+        "Workload monitoring/prometheus-deploy: hostPID=true",
+        "Pod monitoring/prometheus-x9j2p: phase=Running, node=node-02",
+        "ClusterRole ci-deploy-master: can_exec pod:monitoring:prometheus-x9j2p"
+      ],
+      "mitigation": "Remove hostPID from prometheus deployment. Use PodMonitor/ServiceMonitor resources instead of direct process inspection. Apply restricted PSA on monitoring namespace.",
+      "affected_nodes": [
+        "workload:monitoring:prometheus-deploy",
+        "pod:monitoring:prometheus-x9j2p",
+        "node:node-02"
+      ]
+    },
+    {
+      "id": "f-007",
+      "rule_id": "PRIVESC-RBAC-WRITE-PATCH-CRB",
+      "severity": "HIGH",
+      "score": 8.2,
+      "title": "CI SA can patch existing ClusterRoleBindings to add subjects",
+      "description": "In addition to creating new bindings, ci-deploy-master allows patching existing ClusterRoleBindings. An attacker can add github-actions as a subject to any existing high-privilege binding (e.g. payments-svc-admin) without creating new RBAC objects, evading creation-only audit rules.",
+      "evidence": [
+        "ClusterRole ci-deploy-master: verbs=[patch] resources=[clusterrolebindings]",
+        "ClusterRoleBinding payments-svc-admin bound to payments-admin (wildcard payments namespace)"
+      ],
+      "mitigation": "Remove patch from RBAC resources in ci-deploy-master. Treat patch on RBAC objects as equivalent to escalation risk.",
+      "affected_nodes": [
+        "sa:ci:github-actions",
+        "cr:ci-deploy-master",
+        "crb:payments-svc-admin",
+        "cr:payments-admin"
+      ]
+    },
+    {
+      "id": "f-008",
+      "rule_id": "SECRET-EXFIL-VELERO-STRIPE",
+      "severity": "HIGH",
+      "score": 8.0,
+      "title": "Velero backup SA can read Stripe API key via two separate bindings",
+      "description": "The velero SA is doubly-privileged: it holds both the cluster-scoped secret-exfil-role (list all secrets globally) and the namespaced backup-reader role in payments (get on specific payment secrets). Either binding alone is enough to extract the Stripe API key.",
+      "evidence": [
+        "ClusterRoleBinding velero-secret-reader → secret-exfil-role: list secrets cluster-wide",
+        "RoleBinding payments/payments-backup-bind → backup-reader: get payments/stripe-api-key",
+        "Secret payments/stripe-api-key: risk_score 9.5"
+      ],
+      "mitigation": "Remove secret-exfil-role ClusterRoleBinding from velero. Scope backup permissions to non-sensitive namespaces only. Use Velero's built-in BSL encryption instead of direct secret access.",
+      "affected_nodes": [
+        "sa:backup:velero",
+        "crb:velero-secret-reader",
+        "cr:secret-exfil-role",
+        "rb:payments:payments-backup-bind",
+        "secret:payments:stripe-api-key"
+      ]
+    },
+    {
+      "id": "f-009",
+      "rule_id": "LATERAL-ISTIO-PATCH-PRODUCTION",
+      "severity": "HIGH",
+      "score": 7.8,
+      "title": "Istio pilot SA can patch production deployments and exec into pods",
+      "description": "The istio-sidecar-inject role grants patch on pods and deployments in the production namespace, plus pods/exec. A compromised istio-pilot container can modify any production workload's spec to inject malicious sidecars or environment variables.",
+      "evidence": [
+        "Role production/istio-sidecar-inject: verbs=[patch,create] resources=[pods,deployments]",
+        "Role production/istio-sidecar-inject: verbs=[create] resources=[pods/exec]",
+        "Workload production/app-backend-deploy exists (sa: app-backend)"
+      ],
+      "mitigation": "Switch to Istio ambient mesh mode or webhook-based injection that doesn't require per-pod RBAC. Scope sidecar-inject role to only the specific resource names required.",
+      "affected_nodes": [
+        "sa:istio-system:istio-pilot",
+        "rb:production:istio-inject-bind",
+        "r:production:istio-sidecar-inject",
+        "workload:production:app-backend-deploy",
+        "pod:production:app-backend-p7k8"
+      ]
+    },
+    {
+      "id": "f-010",
+      "rule_id": "CONFIG-PRIVILEGED-CI-CONTAINER",
+      "severity": "HIGH",
+      "score": 7.5,
+      "title": "CI runner pod is privileged with host network access",
+      "description": "ci-runner-abc12 runs privileged with hostNetwork=true on node-01. This gives the CI process direct access to the node's network interfaces, enabling ARP spoofing, traffic interception for other pods on the node, and kubelet API access via localhost.",
+      "evidence": [
+        "Workload ci/ci-runner: privileged=true, host_network=true",
+        "Pod ci/ci-runner-abc12: node=node-01, phase=Running"
+      ],
+      "mitigation": "Remove privileged and hostNetwork from CI runner. Use a rootless container runtime (gVisor/Kata). Run CI builds in an isolated node pool with network policies.",
+      "affected_nodes": [
+        "workload:ci:ci-runner",
+        "pod:ci:ci-runner-abc12",
+        "node:node-01"
+      ]
+    },
+    {
+      "id": "f-011",
+      "rule_id": "MULTI-HOP-CI-TO-PAYMENTS-NODE",
+      "severity": "CRITICAL",
+      "score": 9.7,
+      "title": "Multi-hop: CI SA → exec payments pod → node-03 breakout",
+      "description": "Full attack chain: (1) github-actions execs into privileged payment-api-q2w1x pod on node-03; (2) privileged pod mounts host filesystem at /proc/1/root; (3) attacker writes SSH key or kubelet credential to node-03; (4) achieves persistent node-level access independent of Kubernetes API.",
+      "evidence": [
+        "CI SA → can_exec pod:payments:payment-api-q2w1x",
+        "payment-api-q2w1x: privileged=true, node=node-03",
+        "Node node-03 also runs pod:production:app-backend-p7k8 — cross-workload lateral movement possible"
+      ],
+      "mitigation": "Patch the three independent controls: (1) remove pods/exec from CI, (2) drop privileged from payment-api, (3) separate payment and production workloads onto dedicated node pools with taints.",
+      "affected_nodes": [
+        "sa:ci:github-actions",
+        "cr:ci-deploy-master",
+        "pod:payments:payment-api-q2w1x",
+        "node:node-03",
+        "pod:production:app-backend-p7k8"
+      ]
+    },
+    {
+      "id": "f-012",
+      "rule_id": "SECRET-VAULT-TOKEN-ISTIO",
+      "severity": "HIGH",
+      "score": 7.2,
+      "title": "Vault agent token readable by istio-pilot",
+      "description": "The istio-sidecar-inject role grants get on all secrets in production, including production/vault-token used by the vault-agent sidecar. Stealing this token grants access to Vault's secrets engine, bypassing Kubernetes RBAC entirely.",
+      "evidence": [
+        "Role production/istio-sidecar-inject: verbs=[get] resources=[secrets] namespace=production",
+        "Secret production/vault-token exists (risk_score 8.5)",
+        "Secret production/vault-token mounted by vault-agent workload"
+      ],
+      "mitigation": "Use Vault agent's Kubernetes auth method with short-lived tokens. Configure Vault policies to restrict the token's TTL to < 60s. Remove blanket secrets get from istio role.",
+      "affected_nodes": [
+        "sa:istio-system:istio-pilot",
+        "r:production:istio-sidecar-inject",
+        "secret:production:vault-token",
+        "sa:production:vault-agent"
+      ]
+    },
+    {
+      "id": "f-013",
+      "rule_id": "MULTI-HOP-PROMETHEUS-TO-CLUSTER-ADMIN",
+      "severity": "CRITICAL",
+      "score": 9.3,
+      "title": "Multi-hop: prometheus SA → read admin-kubeconfig → full cluster takeover",
+      "description": "prometheus holds monitoring-viewer which includes get on kube-system secrets. The admin-kubeconfig secret in kube-system contains cluster-admin credentials. Using these credentials outside Kubernetes RBAC (e.g. direct kubectl with the extracted kubeconfig) grants permanent unrestricted access.",
+      "evidence": [
+        "ClusterRole monitoring-viewer: get secrets cluster-wide including kube-system",
+        "Secret kube-system/admin-kubeconfig: risk_score 10.0",
+        "monitoring-viewer also grants exec into production and payment pods for persistence"
+      ],
+      "mitigation": "Delete admin-kubeconfig from kube-system. Restrict monitoring-viewer to read-only on non-sensitive namespaces only. Never store admin credentials as cluster secrets.",
+      "affected_nodes": [
+        "sa:monitoring:prometheus",
+        "crb:prometheus-cluster-view",
+        "cr:monitoring-viewer",
+        "secret:kube-system:admin-kubeconfig",
+        "cr:cluster-admin"
+      ]
+    },
+    {
+      "id": "f-014",
+      "rule_id": "CONFIG-AUTOMOUNT-PAYMENT-POD",
+      "severity": "MEDIUM",
+      "score": 6.5,
+      "title": "Payment API pod auto-mounts SA token with wildcard namespace permissions",
+      "description": "payment-api-q2w1x auto-mounts the payments-processor token which has wildcard permissions in the payments namespace. Any container compromise (e.g. via a vulnerable payment library) immediately gives the attacker full payments namespace access.",
+      "evidence": [
+        "Workload payments/payment-api: automount_sa_token=true",
+        "SA payments-processor bound to payments-admin: verbs=[*] resources=[*] namespace=payments"
+      ],
+      "mitigation": "Set automountServiceAccountToken: false on the payment-api Deployment. Create a minimal SA for the payment app with only the specific resources it needs.",
+      "affected_nodes": [
+        "workload:payments:payment-api",
+        "sa:payments:payments-processor",
+        "crb:payments-svc-admin"
+      ]
+    },
+    {
+      "id": "f-015",
+      "rule_id": "CONFIG-AUTOMOUNT-PROD-BACKEND",
+      "severity": "MEDIUM",
+      "score": 5.5,
+      "title": "Production app-backend auto-mounts SA token with production secret access",
+      "description": "app-backend-deploy auto-mounts app-backend SA token. While app-backend has limited direct permissions, the pod also has db-password and jwt-signing-key mounted as volumes — container compromise gives immediate access to both without needing to abuse RBAC.",
+      "evidence": [
+        "Workload production/app-backend-deploy: automount_sa_token=true",
+        "Workload production/app-backend-deploy: mounts secret:production:db-password, secret:production:jwt-signing-key"
+      ],
+      "mitigation": "Set automountServiceAccountToken: false. Inject secrets via Vault agent sidecar with short-lived leases rather than static Kubernetes secrets.",
+      "affected_nodes": [
+        "workload:production:app-backend-deploy",
+        "sa:production:app-backend",
+        "secret:production:db-password",
+        "secret:production:jwt-signing-key"
+      ]
+    },
+    {
+      "id": "f-016",
+      "rule_id": "PRIV-S3-BACKUP-CREDS",
+      "severity": "MEDIUM",
+      "score": 6.0,
+      "title": "Velero S3 backup credentials accessible — potential data exfiltration",
+      "description": "The s3-backup-creds secret is mounted by the velero workload and contains AWS credentials for the backup S3 bucket. These credentials likely have read access to all historical backups of cluster secrets, providing a historical view of credentials that may have since been rotated.",
+      "evidence": [
+        "Workload backup/velero-deploy: mounts secret:backup:s3-backup-creds",
+        "Secret backup/s3-backup-creds: risk_score 7.0"
+      ],
+      "mitigation": "Use IAM Roles for Service Accounts (IRSA) or Workload Identity instead of static S3 credentials. Scope the IAM role to write-only on the backup bucket.",
+      "affected_nodes": [
+        "sa:backup:velero",
+        "workload:backup:velero-deploy",
+        "secret:backup:s3-backup-creds"
+      ]
+    }
+  ]
+}
