@@ -1,55 +1,86 @@
-# k8scout
+<p align="center">
+  <img width="400" alt="k8scout logo" src="https://github.com/user-attachments/assets/046170e0-974d-4eca-911b-1000b0478b3b" />
+</p>
+A single-binary Kubernetes attack path engine for authorized security assessments. Drop it into a compromised pod, run it, and get a map of every realistic escalation path from your current foothold to cluster-admin, node access, secret theft, and cloud IAM roles.
 
-A single-binary Kubernetes security reconnaissance tool for authorized assessments. Drop it into a cluster, run it, and get a complete picture of every identity's effective permissions — plus an interactive graph of every privilege escalation path an attacker could exploit.
-
-> **Intended use**: Penetration testing engagements, internal security reviews, and cluster hardening audits. Always obtain proper authorization before running against any cluster.
+> **Intended use**: Penetration testing engagements, red team operations, internal security reviews, and cluster hardening audits. Always obtain proper authorization before running against any cluster.
 
 ---
 
-## What it does
+## The idea
 
-Kubernetes RBAC is notoriously hard to reason about. ClusterRoles, RoleBindings, aggregated roles, group memberships — reading YAML doesn't tell you what a specific identity can *actually* do at runtime.
+You have RCE in a Kubernetes pod. Now what?
 
-k8scout solves this by:
+k8scout answers that question. It automatically discovers what the compromised pod's service account can do, maps out the RBAC graph, and traces multi-step attack paths from your exact foothold to high-value targets.
 
-1. **Identifying who you are** — TokenReview to resolve the current username, UID, and group memberships
-2. **Enumerating effective permissions** — SelfSubjectRulesReview per namespace, plus 22 targeted SelfSubjectAccessReview spot-checks for high-risk verb/resource pairs
-3. **Mapping the full RBAC graph** — all ServiceAccounts (with cloud identity annotations), RoleBindings, ClusterRoles, and their relationships
-4. **Discovering workloads** — Pods, Deployments, DaemonSets, StatefulSets, Jobs, CronJobs, and their security postures
-5. **Enumerating admission webhooks** — MutatingWebhookConfigurations and ValidatingWebhookConfigurations
-6. **Detecting cloud identity bindings** — IRSA (AWS), Azure Workload Identity, GKE Workload Identity on service accounts
-7. **Finding escalation paths** — 24 inference rules that combine permissions, workload configs, cloud bindings, and webhook posture to surface real attack vectors
-8. **Tagging MITRE ATT&CK techniques** — every finding mapped to ATT&CK for Containers technique IDs
-9. **Generating a report** — JSON output for pipelines, human-readable text summary, optional AI-powered executive narrative
-10. **Interactive attack graph** — load the JSON into `web/graph.html` for a full D3.js visualization with the built-in Attack Chain Analyzer
+It works in two modes:
+
+- **Offensive mode** (default) — run from inside a compromised pod. Discovers your identity, permissions, and all reachable escalation paths from your current position.
+- **Reviewer mode** (`--reviewer-mode`) — run with a read-only SA to audit the full cluster attack surface for all identities.
+
+---
+
+## What it finds
+
+k8scout builds a weighted permission graph and runs Dijkstra-based pathfinding to discover realistic multi-step attack chains:
+
+- **Pod to cluster-admin** — through RBAC bindings, workload mutation, or CRB creation
+- **Container escape to node** — via privileged containers, hostPID, hostNetwork, dangerous capabilities, or hostPath mounts
+- **Lateral movement** — exec into other pods, steal their SA tokens, pivot through their permissions
+- **Secret and credential theft** — mounted SA tokens, secrets, configmaps with leaked credentials
+- **Cloud IAM escalation** — IRSA (AWS), GKE Workload Identity, Azure Workload Identity
+- **Impersonation chains** — SA-to-SA takeover through impersonation permissions
+- **Workload mutation** — patch a deployment to change its SA, then inherit that SA's permissions
+- **Webhook injection** — mutating webhook control to inject into future workloads
+
+Every finding includes MITRE ATT&CK technique IDs, a risk score, and step-by-step attack path with the actual graph nodes involved.
 
 ---
 
 ## Quick start
 
-**From your local machine** (uses `~/.kube/config` or `$KUBECONFIG`):
+### From a compromised pod (primary use case)
 
 ```bash
-k8scout --format text --all-namespaces --out results.json
+# Copy the binary into the pod
+kubectl cp k8scout-linux-amd64 <ns>/<pod>:/tmp/k8scout
+
+# Run it
+kubectl exec -it <ns>/<pod> -- chmod +x /tmp/k8scout
+kubectl exec -it <ns>/<pod> -- /tmp/k8scout --out /tmp/result.json
+
+# Pull the results
+kubectl cp <ns>/<pod>:/tmp/result.json ./result.json
 ```
 
-**Target a single namespace**:
+The binary auto-detects it's running in-cluster, identifies the pod and SA, and starts pathfinding from your exact foothold.
+
+### From your local machine
 
 ```bash
-k8scout --namespace production --format text
+# Uses ~/.kube/config or $KUBECONFIG
+k8scout --all-namespaces --out result.json
+
+# Target a single namespace
+k8scout --namespace production --out result.json
 ```
 
-**With AI-generated risk summary**:
+### Reviewer mode (full cluster audit)
+
+```bash
+# Deploy the read-only RBAC and job
+kubectl apply -f deploy/rbac.yaml
+kubectl apply -f deploy/job.yaml
+
+# Or run directly with reviewer permissions
+k8scout --reviewer-mode --all-namespaces --out result.json
+```
+
+### With AI narrative
 
 ```bash
 export OPENAI_API_KEY="sk-..."
-k8scout --all-namespaces --out results.json
-```
-
-**Debug mode** (verbose logging):
-
-```bash
-k8scout --log-level debug --namespace dev
+k8scout --all-namespaces --out result.json
 ```
 
 ---
@@ -58,19 +89,14 @@ k8scout --log-level debug --namespace dev
 
 ### Pre-built binaries
 
-Download the latest release from the [Releases](../../releases) page. All binaries are statically linked — no dependencies, just copy and run.
+Download from the [Releases](../../releases) page. All binaries are statically linked with no dependencies.
 
 | Binary | Platform |
 |---|---|
 | `k8scout-linux-amd64` | Linux x86-64 |
-| `k8scout-linux-arm64` | Linux ARM64 (Graviton, Ampere) |
+| `k8scout-linux-arm64` | Linux ARM64 |
 | `k8scout-darwin-amd64` | macOS Intel |
 | `k8scout-darwin-arm64` | macOS Apple Silicon |
-
-```bash
-chmod +x k8scout-linux-amd64
-./k8scout-linux-amd64 --all-namespaces
-```
 
 ### Build from source
 
@@ -79,242 +105,125 @@ Requires Go 1.22+.
 ```bash
 git clone https://github.com/hac01/k8scout
 cd k8scout
-
-# Build for your local machine
-make build
-
-# Build a static Linux binary (for in-cluster deployment)
-make build-linux
-
-# Build all four release targets at once
-make build-all
-
-# Build multi-arch Docker image
-make docker-build
+make build          # native binary
+make build-linux    # static Linux amd64 binary
+make build-all      # all four release targets
 ```
-
-**Available build targets:**
-
-| Target | Output |
-|---|---|
-| `make build` | Native binary for current OS/arch |
-| `make build-linux` | `k8scout-linux-amd64` — static ELF |
-| `make build-linux-arm64` | `k8scout-linux-arm64` — static ELF |
-| `make build-darwin` | `k8scout-darwin-amd64` |
-| `make build-darwin-arm64` | `k8scout-darwin-arm64` |
-| `make build-all` | All four release binaries |
-
----
-
-## CLI reference
-
-```
-Usage: k8scout [flags]
-
-Flags:
-  --out string            Output file for JSON report (default "k8scout-result.json")
-  --namespace string      Enumerate a single namespace instead of all
-  --all-namespaces        Enumerate every accessible namespace (default true)
-  --format string         Output format: text or json (default "text")
-  --timeout int           Timeout per Kubernetes API call in seconds (default 60)
-  --log-level string      Logging verbosity: debug | info | warn | error (default "info")
-  --kubeconfig string     Path to kubeconfig (auto-detected if not set)
-  --openai-key string     OpenAI API key (or set OPENAI_API_KEY env var)
-  --openai-model string   OpenAI model for narrative generation (default "gpt-4o")
-  --skip-ssar             Skip the 22 SelfSubjectAccessReview spot-checks
-  --skip-ai               Skip AI narrative generation (default true)
-  --reviewer-mode         Enumerate all service accounts in the cluster (requires broader RBAC)
-  --version               Print version and exit
-```
-
-**Kubeconfig resolution order**: `--kubeconfig` flag → `$KUBECONFIG` env → `~/.kube/config` → in-cluster service account token.
-
----
-
-## Deploying inside a cluster
-
-For the realistic attacker perspective — enumerate permissions from inside the cluster:
-
-```bash
-# Create RBAC resources and run the Job
-kubectl apply -f deploy/rbac.yaml
-kubectl apply -f deploy/job.yaml
-
-# Watch progress
-make logs
-
-# Pull results when done
-make results
-```
-
-The Job runs as UID 65534 (nobody), read-only root filesystem, all Linux capabilities dropped, seccomp set to RuntimeDefault. Auto-cleans up 1 hour after completion.
-
----
-
-## The web UI — Attack Chain Analyzer
-
-Load your JSON report into `web/graph.html` in any browser (drag-and-drop, no server needed).
-
-### Three panels
-
-- **Findings & Attack Paths** — findings sorted by severity with MITRE ATT&CK badges, each with inline kubectl exploitation commands showing which identity to operate as. The Attack Paths tab runs BFS from your identity through the permission graph to high-value targets.
-- **Permission graph** — force-directed D3.js graph with namespace hulls, risk score rings, and glow effects on critical nodes. Cross-namespace edges are highlighted in orange.
-- **Node detail** — click any node for full metadata, risk score, blast radius, related findings, and all connections.
-
-### Toolbar features
-
-| Button | Function |
-|---|---|
-| `Open JSON` | Load a scan result |
-| `Diff` | Load a second scan to compare against the first |
-| `Cross-NS` | Toggle cross-namespace edge highlighting |
-| `Export Report` | Download a self-contained HTML pentest report |
-| `⛓` | Open Attack Chain Analyzer |
-
-### Attack Chain Analyzer (⛓)
-
-Select any service account from the dropdown to see a step-by-step attack chain built from its actual graph edges — specific kubectl commands using real resource names and real identities.
-
-**AI modes** (requires OpenAI API key):
-
-| Mode | What it generates |
-|---|---|
-| **AI Chain** | GPT-synthesized multi-hop attack chain with kubectl commands, pivot analysis, and second-order paths |
-| **Blue Team** | Falco rules, Kubernetes audit policy entries, and Sigma rules for SIEM correlation |
-| **Compare All SAs** | Ranks the top 5 riskiest service accounts in one prompt, explains attack chains for the top 2 |
-| **Get Fix** (per finding) | Minimal RBAC change to remediate the finding, kubectl command, patched YAML, and side-effect analysis |
-
-**Attack path playback** — click ▶ Play on any AI chain to step through the attack path animated on the graph (2s per step).
-
-**Diff / Delta mode** — load a second JSON to see new findings, removed findings, new nodes, new edges, and risk score changes highlighted on the graph.
-
-**Keyboard shortcuts**: `/` search · `F` fit · `+`/`-` zoom · `Esc` clear
-
----
-
-## Risk findings and inference rules
-
-24 rules run against the collected data and permission graph. All findings include MITRE ATT&CK for Containers technique IDs.
-
-| Rule ID | Severity | Score | MITRE | What it catches |
-|---|---|---|---|---|
-| PRIVESC-CLUSTER-ADMIN-BINDING | CRITICAL | 10.0 | T1078.001 | Non-system identity bound to cluster-admin |
-| PRIVESC-CREATE-CLUSTERROLEBINDING | CRITICAL | 10.0 | T1078.001 | Can create ClusterRoleBindings |
-| PRIVESC-IMPERSONATE | CRITICAL | 9.8 | T1550 | Can impersonate users or service accounts |
-| ESCAPE-NODE-COMPROMISE | CRITICAL | 9.8 | T1611 | hostPath to critical node paths + exec access |
-| PRIVESC-MUTATING-WEBHOOK | CRITICAL | 9.5 | T1610 | Can patch MutatingWebhookConfigurations |
-| CLOUD-IRSA-ESCALATION | CRITICAL | 9.5 | T1078.004 | SA with cloud IAM annotation bound to workload |
-| PRIVESC-CREATE-ROLEBINDING | CRITICAL | 9.5 | T1078.001 | Can create RoleBindings |
-| PRIVESC-PATCH-CLUSTERROLES | CRITICAL | 9.5 | T1078.001 | Can modify ClusterRoles directly |
-| PRIVESC-CREATE-SA-TOKEN | CRITICAL | 9.0 | T1078.001 | Can mint tokens for any service account |
-| PRIV-GET-SECRETS | CRITICAL | 9.0 | T1552.007 | Can read Secret values |
-| TAKEOVER-PATCH-DAEMONSET | HIGH | 8.5 | T1610 | Can modify DaemonSets → code on every node |
-| CONFIG-PRIVILEGED-CONTAINER | HIGH | 8.5 | T1611 | Privileged containers in the cluster |
-| EXFIL-HELM-RELEASE | HIGH | 8.0 | T1552.007 | Helm release secrets accessible (may contain credentials) |
-| CLOUD-PROJECTED-TOKEN-AUDIENCE | HIGH | 8.0 | T1078.004 | Projected SA token with non-Kubernetes audience (Vault, AWS STS, etc.) |
-| CONFIG-WILDCARD-VERBS | HIGH | 8.0 | T1078.001 | Wildcard verbs or resources granted |
-| CONFIG-HOST-NAMESPACE | HIGH | 8.0 | T1611 | Pods using hostPID or hostNetwork |
-| TAKEOVER-PATCH-DEPLOYMENT | HIGH | 8.0 | T1610 | Can patch Deployments → workload takeover |
-| ESCAPE-CREATE-POD | HIGH | 8.0 | T1610 | Can create Pods → node escape vectors |
-| RUNTIME-EXEC-PODS | HIGH | 7.8 | T1609 | Can exec into running Pods |
-| CONFIG-HOSTPATH-MOUNT | HIGH | 7.5 | T1611 | Sensitive host paths mounted (categorized by danger level) |
-| PRIV-LIST-SECRETS | HIGH | 7.5 | T1552.007 | Can list Secret names across namespaces |
-| RUNTIME-PORTFORWARD | MEDIUM | 5.5 | T1609 | Can port-forward to Pods |
-| CONFIG-SECRETS-IN-ENV | MEDIUM | 5.0 | T1552.007 | Secrets exposed as environment variables |
-| CONFIG-AUTOMOUNT-SA-TOKEN | LOW | 3.5 | T1552.007 | SA tokens auto-mounted in workloads |
-
----
-
-## Cloud identity detection
-
-k8scout detects service accounts annotated for cross-cloud IAM bindings:
-
-| Cloud | Annotation | Rule |
-|---|---|---|
-| AWS EKS (IRSA) | `eks.amazonaws.com/role-arn` | CLOUD-IRSA-ESCALATION |
-| Azure Workload Identity | `azure.workload.identity/client-id` | CLOUD-IRSA-ESCALATION |
-| GKE Workload Identity | `iam.gke.io/gcp-service-account` | CLOUD-IRSA-ESCALATION |
-
-When any of these SAs is bound to a running workload, the finding flags the cross-cloud escalation path — an attacker with exec access to that pod can obtain cloud provider credentials.
-
-Projected service account tokens with non-Kubernetes audiences (`vault`, `sts.amazonaws.com`, etc.) are also flagged, as these tokens are valid outside the cluster.
-
----
-
-## Output structure
-
-```json
-{
-  "meta": { "tool": "k8scout", "version": "...", "timestamp": "...", "cluster": "..." },
-  "identity": { "username": "system:serviceaccount:dev:ci-runner", "groups": [...] },
-  "permissions": {
-    "ssrr_by_namespace": { "dev": [...] },
-    "ssar_checks": [{ "verb": "list", "resource": "secrets", "allowed": true }]
-  },
-  "cluster_objects": {
-    "namespaces": [...],
-    "workloads": [...],
-    "secrets_meta": [...],
-    "webhooks": [{ "name": "...", "kind": "Mutating", "failure_policy": "Fail" }]
-  },
-  "graph": { "nodes": [...], "edges": [...] },
-  "risk_findings": [{
-    "rule_id": "PRIVESC-CLUSTER-ADMIN-BINDING",
-    "severity": "CRITICAL",
-    "score": 10.0,
-    "mitre_ids": ["T1078.001"],
-    "affected_nodes": ["..."],
-    "evidence": "..."
-  }],
-  "ai_narrative": { "summary": "...", "mitigations": ["..."], "model_used": "gpt-4o" }
-}
-```
-
-Secret values are never read — only names and key names are collected unless the identity has confirmed GET permission.
-
----
-
-## RBAC requirements
-
-The tool's service account needs read-only access. `deploy/rbac.yaml` creates the appropriate ClusterRole:
-
-- `namespaces`, `nodes`: get, list
-- `serviceaccounts`, `secrets` (names only), `configmaps`: get, list
-- `pods`, `deployments`, `daemonsets`, `statefulsets`, `jobs`, `cronjobs`: get, list
-- `roles`, `rolebindings`, `clusterroles`, `clusterrolebindings`: get, list
-- `mutatingwebhookconfigurations`, `validatingwebhookconfigurations`: get, list
-
-SelfSubjectRulesReview and SelfSubjectAccessReview are always permitted in Kubernetes — used to check what the running identity can do.
 
 ---
 
 ## How it works
 
 ```
-k8scout
- ├─ Build Kubernetes client (kubeconfig or in-cluster)
- ├─ Resolve target namespaces
- ├─ Enumerate (10 collection passes)
- │   ├─ Identity (TokenReview)
- │   ├─ Namespaces
- │   ├─ Permissions per namespace (SelfSubjectRulesReview)
- │   ├─ 22 spot-checks (SelfSubjectAccessReview)
- │   ├─ RBAC (ClusterRoles, RoleBindings, ServiceAccounts + cloud annotations)
- │   ├─ Workloads (Deployments, DaemonSets, StatefulSets, Jobs, CronJobs)
- │   ├─ Pods
- │   ├─ Secrets metadata (names + key names only; values when GET confirmed)
- │   ├─ Nodes
- │   └─ Admission webhooks (Mutating + Validating)
- ├─ Build permission graph (5 passes)
- │   ├─ Pass 1: SSRR/SSAR → permission edges
- │   ├─ Pass 2: RBAC binding expansion
- │   ├─ Pass 3: Workload → SA mappings
- │   ├─ Pass 4: Volume mount edges
- │   └─ Pass 5: Inferred edges (from 24 inference rules)
- ├─ Run inference engine → RiskFindings (with MITRE ATT&CK IDs)
- ├─ (Optional) Generate AI narrative
- └─ Write output (text to stdout, JSON to file)
+k8scout (running inside compromised pod)
+ |
+ ├── 1. Detect foothold
+ │     Pod name (HOSTNAME), SA (TokenReview), Node (downward API)
+ │
+ ├── 2. Discover permissions
+ │     SSRR per namespace + ~30 concurrent SSAR spot-checks
+ │     (always permitted, no RBAC needed)
+ │
+ ├── 3. Enumerate cluster objects (graceful degradation if denied)
+ │     Namespaces, RBAC, Workloads, Pods, Secrets, Nodes, Webhooks
+ │
+ ├── 4. Build attack graph
+ │     Nodes: pods, SAs, roles, bindings, secrets, workloads, nodes, cloud identities
+ │     Edges: runs_as, mounts, authenticates_as, can_exec, can_patch,
+ │            can_impersonate, runs_on, assumes_cloud_role, granted_by, ...
+ │
+ ├── 5. Find attack paths (Dijkstra from foothold to high-value targets)
+ │     Weighted by attacker effort — cheapest (most realistic) paths first
+ │     Targets: cluster-admin, nodes, SA tokens, cloud IAM, privileged workloads
+ │
+ ├── 6. Run inference rules (24 rules with MITRE ATT&CK mapping)
+ │
+ ├── 7. Optional: AI risk narrative (GPT-4o)
+ │
+ └── 8. Output: text summary + JSON report
 ```
+
+Even with a minimal SA that can't list pods or RBAC objects, the tool synthesizes the foothold graph from identity data alone and discovers what's reachable through SSRR/SSAR permissions.
+
+---
+
+## Attack graph visualization
+
+Load the JSON report into `web/graph.html` in any browser (drag-and-drop, no server needed).
+
+- **Attack Paths tab** — ranked by risk score, each showing the full multi-hop chain from foothold to target
+- **Force-directed graph** — all nodes and edges with color-coded categories and risk score rings
+- **Focus mode** — dims structural noise to highlight attack-relevant nodes
+- **RBAC toggle** — hides RBAC nodes but automatically shows them when part of an active attack path
+- **Node detail** — click any node for metadata, connections, and related findings
+- **Export** — download a self-contained HTML pentest report
+
+---
+
+## CLI reference
+
+```
+k8scout [flags]
+
+Flags:
+  --out string            Output JSON file path (default "k8scout-result.json")
+  --namespace string      Enumerate a single namespace
+  --all-namespaces        Enumerate all accessible namespaces (default true)
+  --format string         Output format: text | json (default "text")
+  --timeout int           Per-request timeout in seconds (default 60)
+  --log-level string      debug | info | warn | error (default "info")
+  --kubeconfig string     Path to kubeconfig (auto-detected if not set)
+  --reviewer-mode         Full cluster RBAC audit for all identities
+  --stealth               Skip SSRR/SSAR to reduce audit log footprint
+  --skip-ssar             Skip SSAR spot-checks only
+  --openai-key string     OpenAI API key (or OPENAI_API_KEY env var)
+  --openai-model string   OpenAI model (default "gpt-4o")
+  --skip-ai               Skip AI narrative generation
+```
+
+---
+
+## RBAC requirements
+
+**When running from a compromised pod**: No special RBAC needed. SSRR and SSAR are always permitted. The tool gracefully degrades if the SA can't list cluster objects — it still discovers permissions and generates findings from what's available.
+
+**For full enumeration** (recommended for the k8scout SA): read-only access defined in `deploy/rbac.yaml`:
+
+- `namespaces`, `nodes`: get, list
+- `serviceaccounts`, `secrets` (metadata only), `configmaps`: get, list
+- `pods`, `deployments`, `daemonsets`, `statefulsets`, `jobs`, `cronjobs`: get, list
+- `roles`, `rolebindings`, `clusterroles`, `clusterrolebindings`: get, list
+- `mutatingwebhookconfigurations`, `validatingwebhookconfigurations`: get, list
+
+Secret values are never read unless the identity has confirmed GET permission via SSAR.
+
+---
+
+## Edge types and weights
+
+The attack graph uses weighted edges where lower weight = easier for the attacker = more dangerous:
+
+| Weight | Category | Examples |
+|--------|----------|---------|
+| 0.1 | Structural / automatic | `runs_as` (pod→SA), `granted_by`, `bound_to` |
+| 0.2–0.5 | Passive access | `assumes_cloud_role`, `mounts`, `authenticates_as` |
+| 1.0–1.5 | Active exploitation | `can_exec`, `runs_on` (escape), `can_impersonate` |
+| 2.0–3.0 | API mutation | `can_patch`, `can_create`, `can_delete` |
+
+The pathfinder uses these weights to rank paths by realism — a 2-hop token theft (weight 0.8) ranks higher than a 3-hop workload mutation chain (weight 2.3).
+
+---
+
+## Deploying as a Job
+
+```bash
+kubectl apply -f deploy/rbac.yaml    # read-only SA + ClusterRole
+kubectl apply -f deploy/job.yaml     # hardened Job (non-root, read-only fs, no caps)
+make logs                            # tail output
+make results                         # copy result JSON from pod
+```
+
+The Job runs as UID 65534 (nobody), read-only root filesystem, all Linux capabilities dropped, seccomp RuntimeDefault. Auto-cleans up after 1 hour.
 
 ---
 
