@@ -1,5 +1,6 @@
-# k8scout
-
+<p align="center">
+  <img width="400" alt="k8scout logo" src="https://github.com/user-attachments/assets/046170e0-974d-4eca-911b-1000b0478b3b" />
+</p>
 A single-binary Kubernetes attack path engine for authorized security assessments. Drop it into a compromised pod, run it, and get a map of every realistic escalation path from your current foothold to cluster-admin, node access, secret theft, and cloud IAM roles.
 
 > **Intended use**: Penetration testing engagements, red team operations, internal security reviews, and cluster hardening audits. Always obtain proper authorization before running against any cluster.
