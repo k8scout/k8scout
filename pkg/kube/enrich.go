@@ -27,11 +27,6 @@ type DerivedIdentity struct {
 // excessive API calls on large clusters.
 const maxDerivedIdentities = 20
 
-// maxEnrichmentDepth limits how many levels of transitive enrichment we perform.
-// Depth 0 = enrich direct reachable SAs. Depth 1 = also enrich SAs discovered
-// through depth-0 enrichment. Typically 1 is sufficient.
-const maxEnrichmentDepth = 1
-
 // EnrichDerivedIdentities discovers ServiceAccounts reachable from the current
 // identity through workload takeover (patch), exec, impersonation, or token
 // creation, and runs SSRR as each one via impersonation to discover their
