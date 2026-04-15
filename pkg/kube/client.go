@@ -28,6 +28,11 @@ type Client struct {
 	log           *zap.Logger
 	serverVersion string
 	currentNS     string
+
+	// impersonationCache caches clientsets keyed by impersonated username.
+	// Creating a new clientset per SSRR call is expensive (TLS state, HTTP
+	// transport) and can trigger GC issues under memory pressure. Cache them.
+	impersonationCache map[string]kubernetes.Interface
 }
 
 // NewClient constructs a Client from kubeconfig or in-cluster config.
@@ -211,3 +216,85 @@ func (c *Client) WhoAmI(ctx context.Context) (username, uid string, groups []str
 
 // Clientset exposes the underlying kubernetes.Interface for collectors.
 func (c *Client) Clientset() kubernetes.Interface { return c.cs }
+
+// SSRRAs performs a SelfSubjectRulesReview while impersonating a given user.
+// This creates a temporary clientset with impersonation headers so the API server
+// evaluates SSRR as the target identity. Requires the caller to have
+// "impersonate" permission on the target user/serviceaccount.
+//
+// The username should be in Kubernetes format, e.g.:
+//
+//	"system:serviceaccount:<namespace>:<name>"
+func (c *Client) SSRRAs(ctx context.Context, username, namespace string) (*authzv1.SelfSubjectRulesReview, error) {
+	impCS, err := c.impersonatingClientset(username)
+	if err != nil {
+		return nil, err
+	}
+
+	review := &authzv1.SelfSubjectRulesReview{
+		Spec: authzv1.SelfSubjectRulesReviewSpec{Namespace: namespace},
+	}
+	return impCS.AuthorizationV1().SelfSubjectRulesReviews().Create(ctx, review, metav1.CreateOptions{})
+}
+
+// impersonatingClientset returns a cached clientset that impersonates the given
+// user. Creating a new clientset for every SSRR call allocates TLS transports
+// that churn the GC; caching avoids this.
+func (c *Client) impersonatingClientset(username string) (kubernetes.Interface, error) {
+	if c.impersonationCache == nil {
+		c.impersonationCache = make(map[string]kubernetes.Interface)
+	}
+	if cs, ok := c.impersonationCache[username]; ok {
+		return cs, nil
+	}
+
+	impCfg := rest.CopyConfig(c.restCfg)
+	impCfg.Impersonate = rest.ImpersonationConfig{
+		UserName: username,
+	}
+	impCfg.Timeout = c.timeout
+
+	cs, err := kubernetes.NewForConfig(impCfg)
+	if err != nil {
+		return nil, fmt.Errorf("creating impersonating clientset for %q: %w", username, err)
+	}
+	c.impersonationCache[username] = cs
+	return cs, nil
+}
+
+// SSRRWithToken performs a SelfSubjectRulesReview using a caller-supplied bearer
+// token. This authenticates as the token's owner (typically a ServiceAccount)
+// without requiring impersonation permission on the primary identity.
+//
+// Use this when a captured SA-token secret value can be replayed against the
+// API server to discover that SA's effective permissions directly.
+func (c *Client) SSRRWithToken(ctx context.Context, token, namespace string) (*authzv1.SelfSubjectRulesReview, error) {
+	// Cache token-based clientsets using "token:<first16chars>" as key to avoid
+	// creating hundreds of transports for the same captured token across namespaces.
+	cacheKey := "token:" + token
+	if len(token) > 16 {
+		cacheKey = "token:" + token[:16]
+	}
+	if c.impersonationCache == nil {
+		c.impersonationCache = make(map[string]kubernetes.Interface)
+	}
+	tokCS, ok := c.impersonationCache[cacheKey]
+	if !ok {
+		tokCfg := rest.AnonymousClientConfig(c.restCfg)
+		tokCfg.BearerToken = token
+		tokCfg.BearerTokenFile = ""
+		tokCfg.Timeout = c.timeout
+
+		var err error
+		tokCS, err = kubernetes.NewForConfig(tokCfg)
+		if err != nil {
+			return nil, fmt.Errorf("creating token-authenticated clientset: %w", err)
+		}
+		c.impersonationCache[cacheKey] = tokCS
+	}
+
+	review := &authzv1.SelfSubjectRulesReview{
+		Spec: authzv1.SelfSubjectRulesReviewSpec{Namespace: namespace},
+	}
+	return tokCS.AuthorizationV1().SelfSubjectRulesReviews().Create(ctx, review, metav1.CreateOptions{})
+}

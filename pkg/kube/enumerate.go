@@ -177,6 +177,34 @@ func Enumerate(ctx context.Context, c *Client, opts EnumerateOptions) (*Enumerat
 		NoiseLevel: "low",
 	})
 
+	// ── Active enrichment: derived identity permissions ──────────────────────
+	// When the current identity can impersonate other SAs, run SSRR as each
+	// reachable SA to discover their permissions. This enables multi-level
+	// attack path construction: pod → SA₁ → workload → SA₂ → SA₂'s targets.
+	if !opts.Stealth {
+		log.Info("running active enrichment for derived identities")
+		derived := EnrichDerivedIdentities(ctx, c, result, log)
+		result.DerivedIdentities = derived
+		enrichCount := 0
+		if derived != nil {
+			enrichCount = len(derived)
+		}
+		result.AuditFootprint = append(result.AuditFootprint, AuditEntry{
+			Action:     "SSRR via impersonation (derived identities)",
+			Count:      enrichCount,
+			Skipped:    false,
+			NoiseLevel: "high",
+		})
+	} else {
+		log.Info("stealth mode: skipping active enrichment")
+		result.AuditFootprint = append(result.AuditFootprint, AuditEntry{
+			Action:     "SSRR via impersonation (derived identities)",
+			Count:      0,
+			Skipped:    true,
+			NoiseLevel: "high",
+		})
+	}
+
 	return result, nil
 }
 
