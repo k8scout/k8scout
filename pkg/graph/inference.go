@@ -38,6 +38,18 @@ type RiskFinding struct {
 	// PathWeight is the cumulative attacker-effort weight of the attack path.
 	// Lower weight = easier/more realistic path. Zero for non-traversal findings.
 	PathWeight float64 `json:"path_weight,omitempty"`
+	// AttackStages describes the progressive escalation stages in a multi-hop path.
+	// Each stage represents a distinct level of access gained during the attack.
+	// Nil for single-step findings.
+	AttackStages []AttackStage `json:"attack_stages,omitempty"`
+}
+
+// AttackStage describes one stage of a progressive attack chain.
+type AttackStage struct {
+	Stage       int    `json:"stage"`       // 0 = initial foothold, 1 = first pivot, 2+ = derived access
+	Label       string `json:"label"`       // e.g. "Initial Foothold", "Workload Takeover", "Credential Theft"
+	NodeID      string `json:"node_id"`     // the node that anchors this stage
+	Description string `json:"description"` // what access is gained at this stage
 }
 
 // inferenceRule defines a single detection rule applied to the graph + raw data.
@@ -2472,6 +2484,12 @@ func goalKindMITRE(kind GoalKind) []string {
 		return []string{"T1610"} // Deploy Container
 	case CloudEscalation:
 		return []string{"T1078.004"} // Valid Accounts: Cloud Accounts
+	case EnumerationVantage:
+		return []string{"T1613"} // Container and Resource Discovery
+	case CredentialAccess:
+		return []string{"T1552.007"} // Unsecured Credentials: Container API
+	case StrongerFoothold:
+		return []string{"T1610"} // Deploy Container
 	default:
 		return nil
 	}
@@ -2541,6 +2559,180 @@ func pathAffectedNodes(path AttackPath) []string {
 		ids[i] = step.Node.ID
 	}
 	return ids
+}
+
+// classifyPathStages analyzes an attack path and returns the progressive stages
+// of the attack. Each stage represents a distinct pivot or escalation point:
+//
+//	Stage 0: Initial foothold (pod, workload, or identity)
+//	Stage 1+: Each new SA, identity, or capability gained along the path
+//
+// Stages are identified by transitions between node roles:
+//   - Pod/Workload → SA transition = new identity gained
+//   - SA → capability edge = new capability gained
+//   - Secret + authenticates_as = credential theft
+//   - Cloud identity = cloud escalation
+func classifyPathStages(path AttackPath) []AttackStage {
+	if len(path) == 0 {
+		return nil
+	}
+
+	var stages []AttackStage
+	stageNum := 0
+
+	// Stage 0: the starting node.
+	startNode := path[0].Node
+	stages = append(stages, AttackStage{
+		Stage:       0,
+		Label:       stageLabel(startNode.Kind, true),
+		NodeID:      startNode.ID,
+		Description: fmt.Sprintf("Start: %s %s", startNode.Kind, startNode.Name),
+	})
+
+	prevSA := "" // track the last SA we "became"
+	if startNode.Kind == KindServiceAccount {
+		prevSA = startNode.ID
+	}
+
+	for i := 1; i < len(path); i++ {
+		step := path[i]
+		node := step.Node
+		edge := step.Edge
+
+		if edge == nil {
+			continue
+		}
+
+		switch {
+		// Gaining a new SA identity (via runs_as, authenticates_as, or impersonate).
+		case node.Kind == KindServiceAccount && node.ID != prevSA &&
+			(edge.Kind == EdgeRunsAs || edge.Kind == EdgeAuthenticatesAs || edge.Kind == EdgeCanImpersonate):
+			stageNum++
+			label := "Identity Pivot"
+			desc := fmt.Sprintf("Gain SA identity: %s", node.Name)
+			if edge.Kind == EdgeAuthenticatesAs {
+				label = "Credential Theft"
+				desc = fmt.Sprintf("Steal SA token → become %s", node.Name)
+			} else if edge.Kind == EdgeCanImpersonate {
+				label = "Impersonation"
+				desc = fmt.Sprintf("Impersonate SA %s", node.Name)
+			}
+			stages = append(stages, AttackStage{
+				Stage: stageNum, Label: label,
+				NodeID: node.ID, Description: desc,
+			})
+			prevSA = node.ID
+
+		// Workload takeover via patch/create.
+		case (node.Kind == KindWorkload || node.Kind == KindPod) &&
+			(edge.Kind == EdgeCanPatch || edge.Kind == EdgeCanCreate || edge.Kind == EdgeCanExec):
+			stageNum++
+			label := "Workload Takeover"
+			desc := fmt.Sprintf("%s %s/%s", edge.Kind, node.Namespace, node.Name)
+			if edge.Kind == EdgeCanExec {
+				label = "Lateral Movement"
+				desc = fmt.Sprintf("Exec into %s/%s", node.Namespace, node.Name)
+			}
+			stages = append(stages, AttackStage{
+				Stage: stageNum, Label: label,
+				NodeID: node.ID, Description: desc,
+			})
+
+		// Container escape to host.
+		case node.Kind == KindNode && edge.Kind == EdgeRunsOn:
+			stageNum++
+			stages = append(stages, AttackStage{
+				Stage: stageNum, Label: "Container Escape",
+				NodeID: node.ID, Description: fmt.Sprintf("Escape to node %s", node.Name),
+			})
+
+		// Node pivot: stealing SA tokens of co-located pods via host access.
+		// Emitted when the previous step landed on a node and we traverse a
+		// host-access can_get edge (node-derived expansion in builder Pass 9).
+		case node.Kind == KindServiceAccount && edge.Kind == EdgeCanGet &&
+			i > 0 && path[i-1].Node.Kind == KindNode:
+			stageNum++
+			stages = append(stages, AttackStage{
+				Stage: stageNum, Label: "Node Pivot",
+				NodeID:      node.ID,
+				Description: fmt.Sprintf("Steal SA token from co-located pod → %s/%s", node.Namespace, node.Name),
+			})
+			prevSA = node.ID
+
+		// Visibility Gain / Namespace Discovery: reaching a resource-type node
+		// via a list/get capability expands recon reach.
+		case strings.HasPrefix(node.ID, "resource:") &&
+			(edge.Kind == EdgeCanList || edge.Kind == EdgeCanGet):
+			stageNum++
+			label := "Visibility Gain"
+			resName := node.ID[strings.LastIndex(node.ID, ":")+1:]
+			if resName == "namespaces" {
+				label = "Namespace Discovery"
+			}
+			stages = append(stages, AttackStage{
+				Stage: stageNum, Label: label,
+				NodeID:      node.ID,
+				Description: fmt.Sprintf("%s %s", edge.Kind, resName),
+			})
+
+		// Credential Pivot: reaching a secret via a can_get capability before
+		// the terminal step (so mid-path credential access is distinguished
+		// from the final "Data Access" step).
+		case node.Kind == KindSecret && edge.Kind == EdgeCanGet && i != len(path)-1:
+			stageNum++
+			stages = append(stages, AttackStage{
+				Stage: stageNum, Label: "Credential Pivot",
+				NodeID:      node.ID,
+				Description: fmt.Sprintf("Read secret %s/%s → fresh credentials", node.Namespace, node.Name),
+			})
+
+		// Cloud role assumption.
+		case node.Kind == KindCloudIdentity && edge.Kind == EdgeAssumesCloudRole:
+			stageNum++
+			stages = append(stages, AttackStage{
+				Stage: stageNum, Label: "Cloud Escalation",
+				NodeID: node.ID, Description: fmt.Sprintf("Assume cloud role %s", node.Name),
+			})
+
+		// Reaching a high-value target (cluster-admin, secret, etc.) via capability edge.
+		case i == len(path)-1:
+			stageNum++
+			label := "Target Reached"
+			desc := fmt.Sprintf("Access %s %s", node.Kind, node.Name)
+			if edge.Kind == EdgeCanGet || edge.Kind == EdgeCanList {
+				label = "Data Access"
+				desc = fmt.Sprintf("Read %s %s/%s", node.Kind, node.Namespace, node.Name)
+			} else if node.Kind == KindClusterRole && node.Name == "cluster-admin" {
+				label = "Cluster Admin"
+				desc = "Full cluster control via cluster-admin"
+			}
+			stages = append(stages, AttackStage{
+				Stage: stageNum, Label: label,
+				NodeID: node.ID, Description: desc,
+			})
+		}
+	}
+
+	return stages
+}
+
+// stageLabel returns a human-readable label for the starting node kind.
+func stageLabel(kind NodeKind, isStart bool) string {
+	if !isStart {
+		return string(kind)
+	}
+	switch kind {
+	case KindPod:
+		return "Initial Foothold (Pod)"
+	case KindWorkload:
+		return "Initial Foothold (Workload)"
+	case KindServiceAccount:
+		return "SA Entry Point"
+	case KindIdentity:
+		return "Identity Entry Point"
+	default:
+		return "Entry Point"
+	}
 }
 
 // isDuplicatePath returns true if the path's terminal node is already covered
@@ -2822,6 +3014,8 @@ func inferMultiHopFindings(g *Graph, r *kube.EnumerationResult, existing []RiskF
 				shape := ClassifyPath(sp.Path)
 				score := ScoreByShape(shape, goal.BaseScore, numHops)
 
+				stages := classifyPathStages(sp.Path)
+
 				findings = append(findings, RiskFinding{
 					RuleID:   "MULTIHOP-ESCALATION",
 					Severity: severityFromScore(score),
@@ -2834,6 +3028,7 @@ func inferMultiHopFindings(g *Graph, r *kube.EnumerationResult, existing []RiskF
 					MITREIDs:      goalKindMITRE(goal.GoalKind),
 					AttackPath:    sp.Path,
 					PathWeight:    sp.Weight,
+					AttackStages:  stages,
 					Mitigation: fmt.Sprintf("Break the attack path by removing at least one edge. "+
 						"Review permissions and workload configurations along: %s",
 						formatPathDescription(sp.Path)),
@@ -2845,6 +3040,7 @@ func inferMultiHopFindings(g *Graph, r *kube.EnumerationResult, existing []RiskF
 					zap.String("goal_kind", string(goal.GoalKind)),
 					zap.String("goal_node", goal.NodeID),
 					zap.Int("hops", numHops),
+					zap.Int("stages", len(stages)),
 					zap.Float64("score", score),
 					zap.Float64("weight", sp.Weight))
 			}
@@ -2936,6 +3132,8 @@ func inferReviewerMultiHopFindings(g *Graph, r *kube.EnumerationResult, existing
 				shape := ClassifyPath(sp.Path)
 				score := ScoreByShape(shape, goal.BaseScore, numHops)
 
+				stages := classifyPathStages(sp.Path)
+
 				findings = append(findings, RiskFinding{
 					RuleID:   "MULTIHOP-ESCALATION",
 					Severity: severityFromScore(score),
@@ -2951,6 +3149,7 @@ func inferReviewerMultiHopFindings(g *Graph, r *kube.EnumerationResult, existing
 					MITREIDs:      goalKindMITRE(goal.GoalKind),
 					AttackPath:    sp.Path,
 					PathWeight:    sp.Weight,
+					AttackStages:  stages,
 					Mitigation: fmt.Sprintf(
 						"Break the attack path by removing at least one edge. "+
 							"Review permissions and workload configurations along: %s",
@@ -2964,6 +3163,7 @@ func inferReviewerMultiHopFindings(g *Graph, r *kube.EnumerationResult, existing
 					zap.String("goal_kind", string(goal.GoalKind)),
 					zap.String("goal_node", goal.NodeID),
 					zap.Int("hops", numHops),
+					zap.Int("stages", len(stages)),
 					zap.Float64("score", score),
 					zap.Float64("weight", sp.Weight))
 			}

@@ -2,7 +2,11 @@ package graph
 
 import (
 	"fmt"
+	"strings"
 	"testing"
+
+	"github.com/hac01/k8scout/pkg/kube"
+	"go.uber.org/zap/zaptest"
 )
 
 // TestAttackPath_PodToNodeEscape validates chain 1:
@@ -533,3 +537,472 @@ func TestPathShape_FullChainWithNewEdges(t *testing.T) {
 		})
 	}
 }
+
+// TestTransitiveSAEdges validates that emitTransitiveSAEdges creates direct
+// SA→target capability edges by resolving the RBAC chain.
+func TestTransitiveSAEdges(t *testing.T) {
+	g := &Graph{
+		Nodes: []Node{
+			{ID: "sa:default:app", Kind: KindServiceAccount, Name: "app", Namespace: "default"},
+			{ID: "crb:app-binding", Kind: KindClusterRoleBinding, Name: "app-binding"},
+			{ID: "clusterrole:secret-reader", Kind: KindClusterRole, Name: "secret-reader"},
+			{ID: "secret:default:db-creds", Kind: KindSecret, Name: "db-creds", Namespace: "default"},
+			{ID: "node:worker-1", Kind: KindNode, Name: "worker-1"},
+		},
+		Edges: []Edge{
+			{From: "sa:default:app", To: "crb:app-binding", Kind: EdgeGrantedBy},
+			{From: "crb:app-binding", To: "clusterrole:secret-reader", Kind: EdgeBoundTo},
+			{From: "clusterrole:secret-reader", To: "secret:default:db-creds", Kind: EdgeCanGet},
+			{From: "clusterrole:secret-reader", To: "node:worker-1", Kind: EdgeCanList},
+		},
+	}
+
+	log := zaptest.NewLogger(t)
+	emitTransitiveSAEdges(g, log)
+
+	// Should have 2 new transitive edges: SA→secret (can_get) and SA→node (can_list).
+	transitiveCount := 0
+	for _, e := range g.Edges {
+		if e.From == "sa:default:app" && strings.HasPrefix(e.Reason, "transitive:") {
+			transitiveCount++
+		}
+	}
+	if transitiveCount != 2 {
+		t.Errorf("want 2 transitive edges from SA, got %d", transitiveCount)
+		for _, e := range g.Edges {
+			if e.From == "sa:default:app" {
+				t.Logf("  edge: %s → %s (%s) reason=%s", e.From, e.To, e.Kind, e.Reason)
+			}
+		}
+	}
+
+	// Build index and verify path from SA→secret is 1 hop (direct).
+	g.BuildIndex()
+	paths := g.FindWeightedPaths("sa:default:app", "secret:default:db-creds", 8, 5)
+	if len(paths) == 0 {
+		t.Fatal("no path found from SA to secret after transitive edges")
+	}
+	if len(paths[0].Path) != 2 {
+		t.Errorf("want 2-step path (SA→secret), got %d steps", len(paths[0].Path))
+	}
+}
+
+// TestMultiLevelChain validates that a realistic multi-level attack chain
+// is discoverable: pod → SA → identity → patch workload → SA₂ → secret.
+func TestMultiLevelChain(t *testing.T) {
+	g := &Graph{
+		Nodes: []Node{
+			{ID: "pod:ns:foothold", Kind: KindPod, Name: "foothold", Namespace: "ns"},
+			{ID: "sa:ns:weak-sa", Kind: KindServiceAccount, Name: "weak-sa", Namespace: "ns"},
+			{ID: "identity:system:serviceaccount:ns:weak-sa", Kind: KindIdentity, Name: "system:serviceaccount:ns:weak-sa"},
+			{ID: "workload:ns:target-deploy", Kind: KindWorkload, Name: "target-deploy", Namespace: "ns"},
+			{ID: "sa:ns:powerful-sa", Kind: KindServiceAccount, Name: "powerful-sa", Namespace: "ns"},
+			{ID: "crb:power-binding", Kind: KindClusterRoleBinding, Name: "power-binding"},
+			{ID: "clusterrole:secret-admin", Kind: KindClusterRole, Name: "secret-admin"},
+			{ID: "secret:ns:crown-jewels", Kind: KindSecret, Name: "crown-jewels", Namespace: "ns"},
+		},
+		Edges: []Edge{
+			{From: "pod:ns:foothold", To: "sa:ns:weak-sa", Kind: EdgeRunsAs},
+			{From: "sa:ns:weak-sa", To: "identity:system:serviceaccount:ns:weak-sa", Kind: EdgeRunsAs},
+			{From: "identity:system:serviceaccount:ns:weak-sa", To: "workload:ns:target-deploy", Kind: EdgeCanPatch},
+			{From: "workload:ns:target-deploy", To: "sa:ns:powerful-sa", Kind: EdgeRunsAs},
+			{From: "sa:ns:powerful-sa", To: "crb:power-binding", Kind: EdgeGrantedBy},
+			{From: "crb:power-binding", To: "clusterrole:secret-admin", Kind: EdgeBoundTo},
+			{From: "clusterrole:secret-admin", To: "secret:ns:crown-jewels", Kind: EdgeCanGet},
+		},
+	}
+
+	log := zaptest.NewLogger(t)
+	emitTransitiveSAEdges(g, log)
+	g.BuildIndex()
+
+	// Should find multi-level path.
+	paths := g.FindWeightedPaths("pod:ns:foothold", "secret:ns:crown-jewels", 12, 5)
+	if len(paths) == 0 {
+		t.Fatal("no multi-level path found from foothold to secret")
+	}
+
+	// With transitive edges, shortest should be 6 steps (pod→SA→identity→workload→SA₂→secret).
+	shortest := paths[0]
+	if len(shortest.Path) > 6 {
+		t.Errorf("want ≤6-step shortest path, got %d steps", len(shortest.Path))
+		for _, step := range shortest.Path {
+			if step.Edge != nil {
+				t.Logf("  %s → [%s] → %s", step.Edge.From, step.Edge.Kind, step.Node.ID)
+			} else {
+				t.Logf("  START: %s", step.Node.ID)
+			}
+		}
+	}
+
+	// Weight: runs_as(0.1) + runs_as(0.1) + can_patch(2.0) + runs_as(0.1) + can_get(1.0) = 3.3
+	expectedWeight := 3.3
+	if shortest.Weight < expectedWeight-0.5 || shortest.Weight > expectedWeight+0.5 {
+		t.Errorf("want weight ~%.1f, got %.2f", expectedWeight, shortest.Weight)
+	}
+
+	// Classify path stages.
+	stages := classifyPathStages(shortest.Path)
+	if len(stages) < 3 {
+		t.Errorf("want ≥3 attack stages, got %d", len(stages))
+		for _, s := range stages {
+			t.Logf("  stage %d: %s — %s", s.Stage, s.Label, s.Description)
+		}
+	}
+	if len(stages) > 0 && stages[0].Label != "Initial Foothold (Pod)" {
+		t.Errorf("stage 0 label = %q, want 'Initial Foothold (Pod)'", stages[0].Label)
+	}
+}
+
+// TestDerivedFootholdEdges validates that emitDerivedFootholdEdges creates
+// edges for SAs reachable through workload takeover.
+func TestDerivedFootholdEdges(t *testing.T) {
+	g := &Graph{
+		Nodes: []Node{
+			{ID: "identity:system:serviceaccount:ns:my-sa", Kind: KindIdentity, Name: "system:serviceaccount:ns:my-sa"},
+			{ID: "workload:ns:target", Kind: KindWorkload, Name: "target", Namespace: "ns"},
+			{ID: "sa:ns:target-sa", Kind: KindServiceAccount, Name: "target-sa", Namespace: "ns"},
+			{ID: "pod:ns:victim", Kind: KindPod, Name: "victim", Namespace: "ns"},
+			{ID: "sa:ns:victim-sa", Kind: KindServiceAccount, Name: "victim-sa", Namespace: "ns"},
+		},
+		Edges: []Edge{
+			{From: "identity:system:serviceaccount:ns:my-sa", To: "workload:ns:target", Kind: EdgeCanPatch},
+			{From: "workload:ns:target", To: "sa:ns:target-sa", Kind: EdgeRunsAs},
+			{From: "identity:system:serviceaccount:ns:my-sa", To: "pod:ns:victim", Kind: EdgeCanExec},
+			{From: "pod:ns:victim", To: "sa:ns:victim-sa", Kind: EdgeRunsAs},
+		},
+	}
+
+	result := &kube.EnumerationResult{
+		Identity: kube.IdentityInfo{
+			Username: "system:serviceaccount:ns:my-sa",
+		},
+	}
+
+	log := zaptest.NewLogger(t)
+	emitDerivedFootholdEdges(g, result, log)
+
+	derivedEdges := 0
+	for _, e := range g.Edges {
+		if strings.Contains(e.Reason, "derived foothold") {
+			derivedEdges++
+		}
+	}
+	if derivedEdges < 1 {
+		t.Errorf("want ≥1 derived foothold edges, got %d", derivedEdges)
+	}
+
+	// Check SA nodes are marked as derived footholds.
+	for i := range g.Nodes {
+		n := &g.Nodes[i]
+		if n.ID == "sa:ns:target-sa" || n.ID == "sa:ns:victim-sa" {
+			if n.Metadata == nil || n.Metadata["derived_foothold"] != "true" {
+				t.Errorf("SA %s should be marked as derived foothold", n.ID)
+			}
+		}
+	}
+}
+
+// TestDerivedSSRREdges validates that emitDerivedSSRREdges creates concrete
+// capability edges for SAs whose permissions were discovered via impersonation.
+func TestDerivedSSRREdges(t *testing.T) {
+	g := &Graph{
+		Nodes: []Node{
+			{ID: "pod:ns:foothold", Kind: KindPod, Name: "foothold", Namespace: "ns"},
+			{ID: "sa:ns:weak-sa", Kind: KindServiceAccount, Name: "weak-sa", Namespace: "ns"},
+			{ID: "identity:system:serviceaccount:ns:weak-sa", Kind: KindIdentity, Name: "system:serviceaccount:ns:weak-sa"},
+			{ID: "workload:ns:target", Kind: KindWorkload, Name: "target", Namespace: "ns"},
+			{ID: "sa:ns:powerful-sa", Kind: KindServiceAccount, Name: "powerful-sa", Namespace: "ns"},
+			{ID: "secret:ns:crown-jewels", Kind: KindSecret, Name: "crown-jewels", Namespace: "ns"},
+			{ID: "clusterrole:cluster-admin", Kind: KindClusterRole, Name: "cluster-admin"},
+		},
+		Edges: []Edge{
+			{From: "pod:ns:foothold", To: "sa:ns:weak-sa", Kind: EdgeRunsAs},
+			{From: "sa:ns:weak-sa", To: "identity:system:serviceaccount:ns:weak-sa", Kind: EdgeRunsAs},
+			{From: "identity:system:serviceaccount:ns:weak-sa", To: "workload:ns:target", Kind: EdgeCanPatch},
+			{From: "workload:ns:target", To: "sa:ns:powerful-sa", Kind: EdgeRunsAs},
+			// Note: NO RBAC edges — powerful-sa has no bindings in the graph.
+			// This simulates the scenario where RBAC objects can't be enumerated.
+		},
+	}
+
+	// Simulate enrichment data: powerful-sa was discovered to have get secrets permission.
+	result := &kube.EnumerationResult{
+		Identity: kube.IdentityInfo{
+			Username: "system:serviceaccount:ns:weak-sa",
+		},
+		ClusterObjects: kube.ClusterObjects{
+			SecretsMeta: []kube.SecretMeta{
+				{Name: "crown-jewels", Namespace: "ns", Type: "Opaque"},
+			},
+		},
+		DerivedIdentities: []kube.DerivedIdentity{
+			{
+				SAName:    "powerful-sa",
+				Namespace: "ns",
+				Username:  "system:serviceaccount:ns:powerful-sa",
+				How:       "patch workload ns/target",
+				SSRRRules: map[string][]kube.PolicyRule{
+					"ns": {
+						{Verbs: []string{"get", "list"}, Resources: []string{"secrets"}, APIGroups: []string{""}},
+						{Verbs: []string{"create", "patch"}, Resources: []string{"clusterrolebindings"}, APIGroups: []string{"rbac.authorization.k8s.io"}},
+					},
+				},
+			},
+		},
+	}
+
+	log := zaptest.NewLogger(t)
+	emitDerivedSSRREdges(g, result, log)
+	g.BuildIndex()
+
+	// powerful-sa should now have edges to the secret and cluster-admin.
+	var secretEdge, adminEdge bool
+	for _, e := range g.Edges {
+		if e.From == "sa:ns:powerful-sa" && e.To == "secret:ns:crown-jewels" && e.Kind == EdgeCanGet {
+			secretEdge = true
+		}
+		if e.From == "sa:ns:powerful-sa" && e.To == "clusterrole:cluster-admin" && e.Kind == EdgeCanCreate {
+			adminEdge = true
+		}
+	}
+	if !secretEdge {
+		t.Error("want enriched edge: powerful-sa → secret:ns:crown-jewels (can_get)")
+	}
+	if !adminEdge {
+		t.Error("want enriched edge: powerful-sa → clusterrole:cluster-admin (can_create)")
+	}
+
+	// Full chain should now be discoverable.
+	paths := g.FindWeightedPaths("pod:ns:foothold", "secret:ns:crown-jewels", 12, 5)
+	if len(paths) == 0 {
+		t.Fatal("no path found from foothold to secret after enrichment")
+	}
+
+	// Verify the path goes through the enriched SA.
+	found := false
+	for _, step := range paths[0].Path {
+		if step.Node.ID == "sa:ns:powerful-sa" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("shortest path should traverse through enriched SA powerful-sa")
+		for _, step := range paths[0].Path {
+			t.Logf("  step: %s", step.Node.ID)
+		}
+	}
+
+	t.Logf("path found: %d hops, weight %.2f", len(paths[0].Path)-1, paths[0].Weight)
+	for _, step := range paths[0].Path {
+		if step.Edge != nil {
+			t.Logf("  %s → [%s] → %s", step.Edge.From, step.Edge.Kind, step.Node.ID)
+		} else {
+			t.Logf("  START: %s", step.Node.ID)
+		}
+	}
+}
+
+// TestStageClassification validates stage classification for different chain shapes.
+func TestStageClassification(t *testing.T) {
+	tests := []struct {
+		name       string
+		path       AttackPath
+		wantStages int
+		wantFirst  string
+	}{
+		{
+			name: "pod → SA → identity → workload → SA₂ → secret",
+			path: AttackPath{
+				{Node: &Node{ID: "pod:ns:foot", Kind: KindPod, Name: "foot"}, Hop: 0},
+				{Node: &Node{ID: "sa:ns:sa1", Kind: KindServiceAccount, Name: "sa1"}, Edge: &Edge{Kind: EdgeRunsAs}, Hop: 1},
+				{Node: &Node{ID: "id:sa1", Kind: KindIdentity, Name: "sa1"}, Edge: &Edge{Kind: EdgeRunsAs}, Hop: 2},
+				{Node: &Node{ID: "wl:ns:target", Kind: KindWorkload, Name: "target", Namespace: "ns"}, Edge: &Edge{Kind: EdgeCanPatch}, Hop: 3},
+				{Node: &Node{ID: "sa:ns:sa2", Kind: KindServiceAccount, Name: "sa2"}, Edge: &Edge{Kind: EdgeRunsAs}, Hop: 4},
+				{Node: &Node{ID: "secret:ns:db", Kind: KindSecret, Name: "db", Namespace: "ns"}, Edge: &Edge{Kind: EdgeCanGet}, Hop: 5},
+			},
+			wantStages: 5,
+			wantFirst:  "Initial Foothold (Pod)",
+		},
+		{
+			name: "pod → node (container escape)",
+			path: AttackPath{
+				{Node: &Node{ID: "pod:ns:priv", Kind: KindPod, Name: "priv"}, Hop: 0},
+				{Node: &Node{ID: "node:worker", Kind: KindNode, Name: "worker"}, Edge: &Edge{Kind: EdgeRunsOn}, Hop: 1},
+			},
+			wantStages: 2,
+			wantFirst:  "Initial Foothold (Pod)",
+		},
+		{
+			name: "SA → cloud identity",
+			path: AttackPath{
+				{Node: &Node{ID: "sa:ns:cloud-sa", Kind: KindServiceAccount, Name: "cloud-sa"}, Hop: 0},
+				{Node: &Node{ID: "cloud:aws:role", Kind: KindCloudIdentity, Name: "ProdRole"}, Edge: &Edge{Kind: EdgeAssumesCloudRole}, Hop: 1},
+			},
+			wantStages: 2,
+			wantFirst:  "SA Entry Point",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stages := classifyPathStages(tt.path)
+			if len(stages) != tt.wantStages {
+				t.Errorf("want %d stages, got %d", tt.wantStages, len(stages))
+				for _, s := range stages {
+					t.Logf("  stage %d: %s — %s (%s)", s.Stage, s.Label, s.Description, s.NodeID)
+				}
+			}
+			if len(stages) > 0 && stages[0].Label != tt.wantFirst {
+				t.Errorf("first stage label = %q, want %q", stages[0].Label, tt.wantFirst)
+			}
+		})
+	}
+}
+
+// TestWeakFootholdChain_TokenTheftWithoutImpersonation validates a chain
+// starting from a low-privilege SA that reads a mounted SA-token secret
+// (via the secret itself being in the pod's filesystem) and authenticates
+// as the higher-privilege SA — no impersonation required.
+func TestWeakFootholdChain_TokenTheftWithoutImpersonation(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{
+			{ID: "pod:app:worker", Kind: KindPod, Name: "worker", Namespace: "app"},
+			{ID: "sa:app:worker", Kind: KindServiceAccount, Name: "worker", Namespace: "app"},
+			{ID: "secret:app:admin-token", Kind: KindSecret, Name: "admin-token", Namespace: "app",
+				Metadata: map[string]string{"type": "kubernetes.io/service-account-token", "sa_name": "admin-sa"}},
+			{ID: "sa:app:admin-sa", Kind: KindServiceAccount, Name: "admin-sa", Namespace: "app"},
+			{ID: "crb:admin-cluster-admin", Kind: KindClusterRoleBinding, Name: "admin-cluster-admin"},
+			{ID: "clusterrole:cluster-admin", Kind: KindClusterRole, Name: "cluster-admin"},
+		},
+		Edges: []Edge{
+			{From: "pod:app:worker", To: "sa:app:worker", Kind: EdgeRunsAs},
+			{From: "pod:app:worker", To: "secret:app:admin-token", Kind: EdgeMounts},
+			{From: "secret:app:admin-token", To: "sa:app:admin-sa", Kind: EdgeAuthenticatesAs},
+			{From: "sa:app:admin-sa", To: "crb:admin-cluster-admin", Kind: EdgeGrantedBy},
+			{From: "crb:admin-cluster-admin", To: "clusterrole:cluster-admin", Kind: EdgeBoundTo},
+		},
+	}
+	g.BuildIndex()
+
+	paths := g.FindWeightedPaths("pod:app:worker", "clusterrole:cluster-admin", 8, 10)
+	if len(paths) == 0 {
+		t.Fatal("expected a token-theft chain from weak foothold to cluster-admin")
+	}
+	got := pathNodeIDs(paths[0].Path)
+	if !containsStr(got, "secret:app:admin-token") || !containsStr(got, "sa:app:admin-sa") {
+		t.Fatalf("path did not traverse mounted SA-token → admin-sa: %v", got)
+	}
+}
+
+// TestWeakFootholdChain_NodeEscapeStealsColocatedSAToken validates:
+//
+//	privileged pod → node → [can_get] → co-located pod's SA → cluster-admin
+func TestWeakFootholdChain_NodeEscapeStealsColocatedSAToken(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{
+			{ID: "pod:default:privileged", Kind: KindPod, Name: "privileged", Namespace: "default",
+				Metadata: map[string]string{"privileged_containers": "main"}},
+			{ID: "node:worker-1", Kind: KindNode, Name: "worker-1"},
+			{ID: "sa:kube-system:kube-proxy", Kind: KindServiceAccount, Name: "kube-proxy", Namespace: "kube-system"},
+			{ID: "crb:kube-proxy-admin", Kind: KindClusterRoleBinding, Name: "kube-proxy-admin"},
+			{ID: "clusterrole:cluster-admin", Kind: KindClusterRole, Name: "cluster-admin"},
+		},
+		Edges: []Edge{
+			{From: "pod:default:privileged", To: "node:worker-1", Kind: EdgeRunsOn,
+				Reason: "container escape: privileged pod"},
+			{From: "node:worker-1", To: "sa:kube-system:kube-proxy", Kind: EdgeCanGet,
+				Reason: "host access: steal SA token from pod on this node"},
+			{From: "sa:kube-system:kube-proxy", To: "crb:kube-proxy-admin", Kind: EdgeGrantedBy},
+			{From: "crb:kube-proxy-admin", To: "clusterrole:cluster-admin", Kind: EdgeBoundTo},
+		},
+	}
+	g.BuildIndex()
+
+	paths := g.FindWeightedPaths("pod:default:privileged", "clusterrole:cluster-admin", 8, 10)
+	if len(paths) == 0 {
+		t.Fatal("expected node-escape chain to cluster-admin")
+	}
+	got := pathNodeIDs(paths[0].Path)
+	want := []string{
+		"pod:default:privileged",
+		"node:worker-1",
+		"sa:kube-system:kube-proxy",
+		"crb:kube-proxy-admin",
+		"clusterrole:cluster-admin",
+	}
+	if !equalSlices(got, want) {
+		t.Fatalf("path mismatch:\n  want: %v\n  got:  %v", want, got)
+	}
+
+	// Validate that the node pivot stage is classified.
+	stages := classifyPathStages(paths[0].Path)
+	foundNodePivot := false
+	foundEscape := false
+	for _, s := range stages {
+		if s.Label == "Node Pivot" {
+			foundNodePivot = true
+		}
+		if s.Label == "Container Escape" {
+			foundEscape = true
+		}
+	}
+	if !foundEscape {
+		t.Errorf("expected Container Escape stage, got %v", stages)
+	}
+	if !foundNodePivot {
+		t.Errorf("expected Node Pivot stage, got %v", stages)
+	}
+}
+
+// TestWeakFootholdChain_WorkloadTakeoverMountedSecretNewIdentity validates:
+//
+//	identity → [can_patch] → workload → [mounts] → secret → [authenticates_as] → SA₂ → admin
+func TestWeakFootholdChain_WorkloadTakeoverMountedSecretNewIdentity(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{
+			{ID: "identity:weak", Kind: KindIdentity, Name: "weak"},
+			{ID: "workload:default:app", Kind: KindWorkload, Name: "app", Namespace: "default"},
+			{ID: "secret:default:app-token", Kind: KindSecret, Name: "app-token", Namespace: "default",
+				Metadata: map[string]string{"type": "kubernetes.io/service-account-token", "sa_name": "app-sa"}},
+			{ID: "sa:default:app-sa", Kind: KindServiceAccount, Name: "app-sa", Namespace: "default"},
+			{ID: "crb:app-admin", Kind: KindClusterRoleBinding, Name: "app-admin"},
+			{ID: "clusterrole:cluster-admin", Kind: KindClusterRole, Name: "cluster-admin"},
+		},
+		Edges: []Edge{
+			{From: "identity:weak", To: "workload:default:app", Kind: EdgeCanPatch,
+				Reason: "patch deployment → inject code → run as workload's SA"},
+			{From: "workload:default:app", To: "secret:default:app-token", Kind: EdgeMounts},
+			{From: "secret:default:app-token", To: "sa:default:app-sa", Kind: EdgeAuthenticatesAs},
+			{From: "sa:default:app-sa", To: "crb:app-admin", Kind: EdgeGrantedBy},
+			{From: "crb:app-admin", To: "clusterrole:cluster-admin", Kind: EdgeBoundTo},
+		},
+	}
+	g.BuildIndex()
+
+	paths := g.FindWeightedPaths("identity:weak", "clusterrole:cluster-admin", 8, 10)
+	if len(paths) == 0 {
+		t.Fatal("expected workload-takeover → mounted secret → new identity chain")
+	}
+	got := pathNodeIDs(paths[0].Path)
+	if !containsStr(got, "workload:default:app") ||
+		!containsStr(got, "secret:default:app-token") ||
+		!containsStr(got, "sa:default:app-sa") {
+		t.Fatalf("path missing expected hops: %v", got)
+	}
+}
+
+// containsStr reports whether s contains target.
+func containsStr(s []string, target string) bool {
+	for _, x := range s {
+		if x == target {
+			return true
+		}
+	}
+	return false
+}
+
+// ensure fmt/strings imports stay used in this file even if tests evolve.
+var _ = fmt.Sprintf
+var _ = strings.Join

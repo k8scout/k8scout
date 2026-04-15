@@ -9,6 +9,9 @@ type EnumerationResult struct {
 	Permissions    PermissionsInfo
 	ClusterObjects ClusterObjects
 	AuditFootprint []AuditEntry `json:"audit_footprint,omitempty"`
+	// DerivedIdentities holds permissions discovered for SAs reachable through
+	// workload takeover, exec, or impersonation. Populated by active enrichment.
+	DerivedIdentities []DerivedIdentity `json:"derived_identities,omitempty"`
 }
 
 // AuditEntry records a single API call category for the stealth audit footprint report.

@@ -8,9 +8,10 @@ import (
 )
 
 // MaxAttackPathDepth is the maximum number of hops FindPaths will explore when
-// searching for attack paths. Configurable here so A1-3 and future callers share
-// the same default without re-defining it.
-const MaxAttackPathDepth = 8
+// searching for attack paths. Set to 12 to accommodate multi-level chains that
+// traverse RBAC intermediaries (pod → SA → binding → role → target) and
+// derived footholds (patch workload → SA₂ → SA₂'s targets).
+const MaxAttackPathDepth = 12
 
 // MaxPathsPerGoal caps the number of paths emitted per goal node to prevent
 // report flooding on densely connected graphs.
@@ -48,6 +49,24 @@ const (
 	// Distinct from IdentityTakeover: this detects the token injection mechanism
 	// rather than the SA annotation.
 	CloudEscalation GoalKind = "cloud_escalation"
+
+	// EnumerationVantage — an SA/identity that gains broader visibility into the
+	// cluster (list pods cluster-wide, list secrets, list nodes, etc.) compared
+	// to the starting foothold. Reaching this node expands reconnaissance reach
+	// without necessarily granting privileges.
+	EnumerationVantage GoalKind = "enumeration_vantage"
+
+	// CredentialAccess — a secret or token-bearing resource that yields fresh
+	// credentials (service-account token secret, dockerconfigjson, TLS key, etc.)
+	// even when values are not yet captured. Distinct from SecretAccess: this
+	// fires on type/keys alone, modelling the credential-access intermediate goal.
+	CredentialAccess GoalKind = "credential_access"
+
+	// StrongerFoothold — a workload or pod that, if taken over, would put the
+	// attacker in a materially better position than the current foothold
+	// (different namespace, privileged execution context, cluster-scoped
+	// workload like DaemonSet). Captures weak-foothold → strong-foothold pivots.
+	StrongerFoothold GoalKind = "stronger_foothold"
 )
 
 // GoalNode pairs a graph node with its high-value classification.
@@ -79,10 +98,42 @@ func HighValueTargets(g *Graph, r *kube.EnumerationResult) []GoalNode {
 		wlMap["workload:"+wl.Namespace+":"+wl.Name] = wl
 	}
 
+	// High-visibility resource types for EnumerationVantage detection.
+	vantageResources := map[string]float64{
+		"pods":       6.5,
+		"secrets":    7.0, // knowing secret names is already useful recon
+		"namespaces": 5.5,
+		"nodes":      6.5,
+		"services":   5.0,
+		"endpoints":  5.0,
+	}
+
 	var goals []GoalNode
 
 	for i := range g.Nodes {
 		n := &g.Nodes[i]
+
+		// ── EnumerationVantage (resource:<name>[:ns]) ─────────────────────────
+		// Fires before Kind-based cases because resource nodes share NodeKind
+		// values with concrete objects (e.g. resource:pods has Kind=KindPod).
+		if strings.HasPrefix(n.ID, "resource:") {
+			// resource:<res> or resource:<ns>:<res>
+			parts := strings.Split(strings.TrimPrefix(n.ID, "resource:"), ":")
+			resName := parts[len(parts)-1]
+			if score, ok := vantageResources[resName]; ok {
+				scope := "cluster-wide"
+				if len(parts) == 2 {
+					scope = "namespace " + parts[0]
+				}
+				goals = append(goals, GoalNode{
+					NodeID:      n.ID,
+					GoalKind:    EnumerationVantage,
+					Description: fmt.Sprintf("List/get %s (%s) — reconnaissance vantage point", resName, scope),
+					BaseScore:   score,
+				})
+			}
+			continue
+		}
 
 		switch {
 
@@ -125,7 +176,8 @@ func HighValueTargets(g *Graph, r *kube.EnumerationResult) []GoalNode {
 		// Secrets with captured values or SA-token type.
 		case n.Kind == KindSecret:
 			capturedValues := n.Metadata["has_captured_values"] == "true"
-			isSAToken := n.Metadata["type"] == "kubernetes.io/service-account-token"
+			secType := n.Metadata["type"]
+			isSAToken := secType == "kubernetes.io/service-account-token"
 			if capturedValues || isSAToken {
 				reason := "contains captured secret values"
 				if isSAToken && !capturedValues {
@@ -138,6 +190,14 @@ func HighValueTargets(g *Graph, r *kube.EnumerationResult) []GoalNode {
 					GoalKind:    SecretAccess,
 					Description: fmt.Sprintf("Secret %s/%s — %s", n.Namespace, n.Name, reason),
 					BaseScore:   8.5,
+				})
+			} else if credKind := credentialSecretKind(secType); credKind != "" {
+				// CredentialAccess: typed credential secret without captured values.
+				goals = append(goals, GoalNode{
+					NodeID:      n.ID,
+					GoalKind:    CredentialAccess,
+					Description: fmt.Sprintf("Secret %s/%s — %s (credential material)", n.Namespace, n.Name, credKind),
+					BaseScore:   7.0,
 				})
 			}
 
@@ -206,6 +266,18 @@ func HighValueTargets(g *Graph, r *kube.EnumerationResult) []GoalNode {
 					break // one CloudEscalation entry per workload
 				}
 			}
+
+			// StrongerFoothold: workloads that materially improve attacker position
+			// without already qualifying as WorkloadTakeover. Triggers on DaemonSets
+			// (cluster-scoped reach) or workloads in control-plane namespaces.
+			if !workloadIsTakeoverTarget(wl) && isStrongerFootholdWorkload(wl) {
+				goals = append(goals, GoalNode{
+					NodeID:      n.ID,
+					GoalKind:    StrongerFoothold,
+					Description: fmt.Sprintf("Workload %s/%s: %s", n.Namespace, n.Name, strongerFootholdReason(wl)),
+					BaseScore:   6.5,
+				})
+			}
 		}
 	}
 
@@ -256,6 +328,65 @@ func workloadTakeoverScore(wl kube.WorkloadInfo) float64 {
 		return 7.5
 	}
 	return 5.0 // read-only hostPath only
+}
+
+// credentialSecretKind maps a Kubernetes secret type to a short human label
+// when the type represents credential material. Returns "" when the type is
+// not credential-bearing.
+func credentialSecretKind(secType string) string {
+	switch secType {
+	case "kubernetes.io/dockerconfigjson", "kubernetes.io/dockercfg":
+		return "image-pull credential"
+	case "kubernetes.io/tls":
+		return "TLS key + cert"
+	case "kubernetes.io/ssh-auth":
+		return "SSH private key"
+	case "kubernetes.io/basic-auth":
+		return "username/password"
+	case "bootstrap.kubernetes.io/token":
+		return "cluster bootstrap token"
+	}
+	return ""
+}
+
+// controlPlaneNamespaces are namespaces where workload takeover yields outsized
+// lateral reach even without privileged containers.
+var controlPlaneNamespaces = map[string]bool{
+	"kube-system":          true,
+	"kube-public":          true,
+	"kube-node-lease":      true,
+	"openshift-operators":  true,
+	"openshift-system":     true,
+	"cert-manager":         true,
+	"ingress-nginx":        true,
+	"istio-system":         true,
+	"linkerd":              true,
+	"gatekeeper-system":    true,
+	"kyverno":              true,
+}
+
+// isStrongerFootholdWorkload returns true if the workload represents a
+// materially improved foothold: DaemonSet reach or control-plane namespace.
+func isStrongerFootholdWorkload(wl kube.WorkloadInfo) bool {
+	if wl.Kind == "DaemonSet" {
+		return true
+	}
+	if controlPlaneNamespaces[wl.Namespace] {
+		return true
+	}
+	return false
+}
+
+// strongerFootholdReason explains why a workload is a stronger foothold.
+func strongerFootholdReason(wl kube.WorkloadInfo) string {
+	var parts []string
+	if wl.Kind == "DaemonSet" {
+		parts = append(parts, "DaemonSet (runs on every node)")
+	}
+	if controlPlaneNamespaces[wl.Namespace] {
+		parts = append(parts, fmt.Sprintf("control-plane namespace %q", wl.Namespace))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // workloadTakeoverReason builds a short summary of why a workload qualifies as
