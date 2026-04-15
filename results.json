@@ -1,0 +1,291 @@
+{
+  "meta": {
+    "tool": "k8scout",
+    "version": "0.1.0",
+    "timestamp": "2026-03-22T22:12:04.202680833Z",
+    "cluster": "1.33",
+    "timeout_s": 60
+  },
+  "identity": {
+    "username": "",
+    "namespace": "attack-lab"
+  },
+  "permissions": {
+    "ssrr_by_namespace": {
+      "default": [
+        {
+          "verbs": [
+            "create"
+          ],
+          "api_groups": [
+            "authorization.k8s.io"
+          ],
+          "resources": [
+            "selfsubjectaccessreviews",
+            "selfsubjectrulesreviews"
+          ]
+        },
+        {
+          "verbs": [
+            "create"
+          ],
+          "api_groups": [
+            "authentication.k8s.io"
+          ],
+          "resources": [
+            "selfsubjectreviews"
+          ]
+        },
+        {
+          "verbs": [
+            "get"
+          ],
+          "non_resource_urls": [
+            "/healthz",
+            "/livez",
+            "/readyz",
+            "/version",
+            "/version/"
+          ]
+        },
+        {
+          "verbs": [
+            "get"
+          ],
+          "non_resource_urls": [
+            "/api",
+            "/api/*",
+            "/apis",
+            "/apis/*",
+            "/healthz",
+            "/livez",
+            "/openapi",
+            "/openapi/*",
+            "/readyz",
+            "/version",
+            "/version/"
+          ]
+        },
+        {
+          "verbs": [
+            "get"
+          ],
+          "non_resource_urls": [
+            "/.well-known/openid-configuration",
+            "/.well-known/openid-configuration/",
+            "/openid/v1/jwks",
+            "/openid/v1/jwks/"
+          ]
+        }
+      ]
+    },
+    "ssar_checks": [
+      {
+        "verb": "list",
+        "resource": "secrets",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "get",
+        "resource": "secrets",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "create",
+        "resource": "pods",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "delete",
+        "resource": "pods",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "get",
+        "resource": "pods",
+        "subresource": "log",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "create",
+        "resource": "pods",
+        "subresource": "exec",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "create",
+        "resource": "pods",
+        "subresource": "portforward",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "impersonate",
+        "resource": "users",
+        "allowed": false
+      },
+      {
+        "verb": "impersonate",
+        "resource": "serviceaccounts",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "create",
+        "resource": "rolebindings",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "create",
+        "resource": "clusterrolebindings",
+        "allowed": false
+      },
+      {
+        "verb": "patch",
+        "resource": "deployments",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "patch",
+        "resource": "daemonsets",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "patch",
+        "resource": "statefulsets",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "patch",
+        "resource": "pods",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "create",
+        "resource": "serviceaccounts",
+        "subresource": "token",
+        "namespace": "default",
+        "allowed": false
+      },
+      {
+        "verb": "list",
+        "resource": "nodes",
+        "allowed": false
+      },
+      {
+        "verb": "get",
+        "resource": "nodes",
+        "allowed": false
+      },
+      {
+        "verb": "create",
+        "resource": "namespaces",
+        "allowed": false
+      },
+      {
+        "verb": "delete",
+        "resource": "namespaces",
+        "allowed": false
+      },
+      {
+        "verb": "patch",
+        "resource": "clusterroles",
+        "allowed": false
+      },
+      {
+        "verb": "patch",
+        "resource": "clusterrolebindings",
+        "allowed": false
+      },
+      {
+        "verb": "escalate",
+        "resource": "clusterroles",
+        "allowed": false
+      },
+      {
+        "verb": "bind",
+        "resource": "clusterroles",
+        "allowed": false
+      },
+      {
+        "verb": "bind",
+        "resource": "clusterrolebindings",
+        "allowed": false
+      },
+      {
+        "verb": "get",
+        "resource": "configmaps",
+        "namespace": "default",
+        "allowed": false
+      }
+    ]
+  },
+  "cluster_objects": {},
+  "graph": {
+    "nodes": [
+      {
+        "id": "identity:",
+        "kind": "Identity",
+        "namespace": "attack-lab",
+        "name": "",
+        "risk_score": 0,
+        "metadata": {
+          "groups": ""
+        }
+      },
+      {
+        "id": "resource:default:selfsubjectaccessreviews",
+        "kind": "Workload",
+        "namespace": "default",
+        "name": "selfsubjectaccessreviews",
+        "risk_score": 0
+      },
+      {
+        "id": "resource:default:selfsubjectrulesreviews",
+        "kind": "Workload",
+        "namespace": "default",
+        "name": "selfsubjectrulesreviews",
+        "risk_score": 0
+      },
+      {
+        "id": "resource:default:selfsubjectreviews",
+        "kind": "Workload",
+        "namespace": "default",
+        "name": "selfsubjectreviews",
+        "risk_score": 0
+      }
+    ],
+    "edges": [
+      {
+        "from": "identity:",
+        "to": "resource:default:selfsubjectaccessreviews",
+        "kind": "can_create",
+        "reason": "SSRR rule in namespace \"default\""
+      },
+      {
+        "from": "identity:",
+        "to": "resource:default:selfsubjectrulesreviews",
+        "kind": "can_create",
+        "reason": "SSRR rule in namespace \"default\""
+      },
+      {
+        "from": "identity:",
+        "to": "resource:default:selfsubjectreviews",
+        "kind": "can_create",
+        "reason": "SSRR rule in namespace \"default\""
+      }
+    ]
+  },
+  "risk_findings": null
+}
