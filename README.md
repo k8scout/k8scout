@@ -62,6 +62,8 @@ kubectl exec -it <ns>/<pod> -- /tmp/k8scout --out /tmp/result.json
 
 # Pull the results
 kubectl cp <ns>/<pod>:/tmp/result.json ./result.json
+
+# This flow works exactly like this in you're revshell!
 ```
 
 The binary auto-detects it's running in-cluster, identifies the pod and SA, and starts pathfinding from your exact foothold.
