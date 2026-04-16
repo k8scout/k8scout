@@ -1,6 +1,12 @@
 <p align="center">
   <img width="400" alt="k8scout logo" src="https://github.com/user-attachments/assets/046170e0-974d-4eca-911b-1000b0478b3b" />
 </p>
+<p align="center">
+  <img alt="GitHub stars" src="https://img.shields.io/github/stars/k8scout/k8scout?style=flat" />
+  <img alt="GitHub forks" src="https://img.shields.io/github/forks/k8scout/k8scout?style=flat" />
+  <img alt="GitHub issues" src="https://img.shields.io/github/issues/k8scout/k8scout?style=flat" />
+  <img alt="GitHub license" src="https://img.shields.io/github/license/k8scout/k8scout" />
+</p>
 
 > **Beta** — A single-binary Kubernetes attack path engine for authorized security assessments.
 
@@ -203,34 +209,6 @@ Flags:
 - `mutatingwebhookconfigurations`, `validatingwebhookconfigurations`: get, list
 
 Secret values are never read unless the identity has confirmed GET permission via SSAR.
-
----
-
-## Edge types and weights
-
-The attack graph uses weighted edges where lower weight = easier for the attacker = more dangerous:
-
-| Weight | Category | Examples |
-|--------|----------|---------|
-| 0.1 | Structural / automatic | `runs_as` (pod→SA), `granted_by`, `bound_to` |
-| 0.2–0.5 | Passive access | `assumes_cloud_role`, `mounts`, `authenticates_as` |
-| 1.0–1.5 | Active exploitation | `can_exec`, `runs_on` (escape), `can_impersonate` |
-| 2.0–3.0 | API mutation | `can_patch`, `can_create`, `can_delete` |
-
-The pathfinder uses these weights to rank paths by realism — a 2-hop token theft (weight 0.8) ranks higher than a 3-hop workload mutation chain (weight 2.3).
-
----
-
-## Deploying as a Job
-
-```bash
-kubectl apply -f deploy/rbac.yaml    # read-only SA + ClusterRole
-kubectl apply -f deploy/job.yaml     # hardened Job (non-root, read-only fs, no caps)
-make logs                            # tail output
-make results                         # copy result JSON from pod
-```
-
-The Job runs as UID 65534 (nobody), read-only root filesystem, all Linux capabilities dropped, seccomp RuntimeDefault. Auto-cleans up after 1 hour.
 
 ---
 

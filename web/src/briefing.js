@@ -662,21 +662,58 @@ function renderPhaseStrip(pathEntry) {
   const phases = classifyPathPhases(pathEntry.path);
   const defs = [
     { key: 'initialAccess', label: 'Foothold', data: phases.initialAccess },
-    { key: 'credTheft', label: 'Credential Access', data: phases.credTheft },
-    { key: 'privEsc', label: 'Privilege Escalation', data: phases.privEsc },
-    { key: 'lateralMovement', label: 'Lateral Movement', data: phases.lateralMovement },
+    { key: 'credTheft', label: 'Cred Access', data: phases.credTheft },
+    { key: 'privEsc', label: 'PrivEsc', data: phases.privEsc },
+    { key: 'lateralMovement', label: 'Lateral', data: phases.lateralMovement },
     { key: 'impact', label: 'Impact', data: phases.impact },
   ];
   return defs.map(def => {
     const node = nodeById[def.data.nodeId];
+    const present = def.data.present;
+    const value = node ? (node.name || node.id).split(':').pop() : '—';
     return `
-      <div class="phase-step${def.data.present ? ' active' : ''}">
-        <div class="phase-step-label">${escHtml(def.label)}</div>
-        <div class="phase-step-node">${node ? escHtml((node.name || node.id).split(':').pop()) : 'Not present'}</div>
-        <div class="phase-step-meta">${def.data.edgeKind ? escHtml(def.data.edgeKind) : (def.data.present ? 'Present in path' : 'No dedicated step')}</div>
-      </div>
+      <span class="pp-phase-chip${present ? ' active' : ''}" title="${escHtml(def.label)}: ${escHtml(value)}">
+        <span class="pp-phase-label">${escHtml(def.label)}</span>
+        <span class="pp-phase-node">${escHtml(value)}</span>
+      </span>
     `;
-  }).join('');
+  }).join('<span class="pp-phase-arrow">›</span>');
+}
+
+function outcomeFor(hop) {
+  const t = hop.tgt;
+  const tname = t?.name || '?';
+  const tkind = t?.kind || 'resource';
+  const ns = t?.namespace ? ` (ns: ${t.namespace})` : '';
+  switch (hop.edgeKind) {
+    case 'runs_as':            return `You now act as ${tkind} ${tname}`;
+    case 'mounts':             return `Filesystem access to ${tkind} ${tname}`;
+    case 'authenticates_as':   return `Authenticated as ${tkind} ${tname}`;
+    case 'assumes_cloud_role': return `Cloud identity ${tname} assumed`;
+    case 'runs_on':            return `Code executes on host ${tname}`;
+    case 'can_exec':           return `Shell access inside ${tkind} ${tname}`;
+    case 'can_impersonate':    return `Permissions of ${tkind} ${tname} acquired`;
+    case 'can_create':         return `Can create ${tkind} resources${ns}`;
+    case 'can_patch':          return `Can mutate ${tkind} ${tname}`;
+    case 'can_delete':         return `Can delete ${tkind} ${tname}`;
+    case 'can_get':            return `Can read ${tkind} ${tname}`;
+    case 'can_list':           return `Can enumerate ${tkind} resources${ns}`;
+    case 'can_portforward':    return `Network reach into ${tkind} ${tname}`;
+    case 'can_escalate':       return `Role escalation on ${tkind} ${tname}`;
+    case 'can_bind':           return `Can grant roles to ${tkind} ${tname}`;
+    case 'grants':             return `Grants permissions to ${tkind} ${tname}`;
+    case 'bound_to':           return `Binding attaches to ${tkind} ${tname}`;
+    case 'granted_by':         return `Privileges granted by ${tkind} ${tname}`;
+    case 'member_of':          return `Member of ${tkind} ${tname}`;
+    case 'inferred':           return `Indirect reach to ${tkind} ${tname}`;
+    default:                   return `Reaches ${tkind} ${tname}`;
+  }
+}
+
+function pivotablePathsFromNode(nodeId) {
+  return nodeId
+    ? (dataLayer.pathRows || []).filter(row => row.path.nodes[0] === nodeId).length
+    : 0;
 }
 
 function buildScopedSubgraph(nodeIds, focusId) {
@@ -842,44 +879,62 @@ function renderPathView() {
   const focusId = pathState.focus || selectedHop?.src?.id || selectedHop?.tgt?.id || '';
   const impact = pathEntry.impact;
   const phasesHtml = renderPhaseStrip(pathEntry);
-  const pathWeight = (pathEntry.path.edges || []).reduce((sum, kind) => sum + (EDGE_WEIGHT[kind] || 5), 0);
+
+  const flowNodes = pathEntry.path.nodes || [];
+  const flowEdges = pathEntry.path.edges || [];
+  const flowParts = [];
+  flowNodes.forEach((nodeId, idx) => {
+    const node = nodeById[nodeId];
+    const color = NODE_COLORS[node?.kind] || DEFAULT_NODE_COLOR;
+    const label = (node?.name || nodeId || '').split(':').pop();
+    flowParts.push(
+      `<span class="pp-flow-node" style="border-color:${color}55;color:${color}" title="${escHtml(`${node?.kind || 'Node'} ${label}`)}">
+        <span class="pp-flow-icon">${escHtml(NODE_ICONS[node?.kind] || '•')}</span>
+        <span class="pp-flow-name">${escHtml(label)}</span>
+      </span>`
+    );
+    if (idx < flowNodes.length - 1) {
+      const edgeKind = flowEdges[idx];
+      const edgeColor = EDGE_COLORS[edgeKind] || DEFAULT_EDGE_COLOR;
+      flowParts.push(
+        `<span class="pp-flow-edge" style="color:${edgeColor}" title="${escHtml(edgeKind || '')}">→<span class="pp-flow-edge-label">${escHtml(edgeKind || '')}</span></span>`
+      );
+    }
+  });
 
   routeEl.innerHTML = `
     <div id="path-view">
       <div class="path-back-row">
-        <button class="brief-btn" id="path-back-btn">Back to Briefing</button>
+        <button class="brief-btn" id="path-back-btn">← Briefing</button>
         <button class="brief-btn primary" id="path-explore-btn">Open in Explore</button>
       </div>
-      <div class="phase-strip">${phasesHtml}</div>
-      <div class="path-layout">
-        <div class="path-main">
-          <div class="brief-card" style="display:flex;flex-direction:column;min-height:0;flex:1;">
-            <div class="path-toolbar">
-              <div>
-                <div class="path-toolbar-title">${escHtml(pathEntry.narrative)}</div>
-                <div class="path-toolbar-sub">${escHtml(impact.label)} · ${pathEntry.hopCount} hops · ${pathEntry.severity} severity · total weight ${pathWeight.toFixed(1)}</div>
-              </div>
-              <div class="path-toolbar-actions">
-                <span class="sev-badge ${pathEntry.severity}">${pathEntry.severity}</span>
-                <span class="mini-chip"><strong>Target</strong> ${escHtml(pathEntry.target?.kind || '?')}</span>
-                <span class="mini-chip"><strong>MITRE</strong> ${pathEntry.mitreIds.length || 0}</span>
-              </div>
-            </div>
-            <div class="path-scroll">
-              <div id="path-storyboard" class="path-storyboard"></div>
-            </div>
-          </div>
+
+      <div class="pp-header">
+        <div class="pp-header-row">
+          <span class="sev-badge ${pathEntry.severity}">${pathEntry.severity}</span>
+          <span class="pp-impact-label">${escHtml(impact.label)}</span>
+          <span class="pp-meta-chip"><strong>${pathEntry.hopCount}</strong> hops</span>
+          <span class="pp-meta-chip"><strong>${escHtml(pathEntry.target?.kind || '?')}</strong> target</span>
+          <span class="pp-meta-chip"><strong>${pathEntry.mitreIds.length || 0}</strong> MITRE</span>
         </div>
-        <div class="path-rail">
-          <div class="path-rail-card">
-            <div class="subgraph-card-head">
-              <div class="path-rail-title" style="margin:0">Inline Subgraph</div>
-              <span class="mini-chip"><strong>Focus</strong> ${escHtml((nodeById[focusId]?.name || focusId || '').split(':').pop())}</span>
-            </div>
-            <div class="path-rail-body">
+        <div class="pp-flow">${flowParts.join('')}</div>
+        <div class="pp-phase-row">${phasesHtml}</div>
+      </div>
+
+      <div class="pp-layout">
+        <div class="pp-main">
+          <div id="pp-storyboard" class="pp-storyboard"></div>
+        </div>
+        <div class="pp-rail">
+          <details class="pp-rail-card" id="pp-subgraph-details" open>
+            <summary>
+              <span>Inline Subgraph</span>
+              <span class="pp-rail-focus mini-chip"><strong>Focus</strong> ${escHtml((nodeById[focusId]?.name || focusId || '').split(':').pop())}</span>
+            </summary>
+            <div class="pp-rail-body">
               <div id="path-subgraph-card"></div>
             </div>
-          </div>
+          </details>
         </div>
       </div>
     </div>
@@ -888,78 +943,76 @@ function renderPathView() {
   routeEl.querySelector('#path-back-btn')?.addEventListener('click', () => route('/briefing'));
   routeEl.querySelector('#path-explore-btn')?.addEventListener('click', () => route(`/explore?scope=${encodeURIComponent(`path:${pathEntry.id}`)}&path=${encodeURIComponent(pathEntry.id)}`));
 
-  const storyboard = routeEl.querySelector('#path-storyboard');
+  const storyboard = routeEl.querySelector('#pp-storyboard');
   if (storyboard) {
     storyboard.innerHTML = hopModels.map(hop => {
       const actionInfo = hop.info || { action: hop.edgeKind, cmds: [`# ${hop.edgeKind}`] };
+      const cmdText = actionInfo.cmds.join('\n');
+      const isLast = hop.idx === hopModels.length - 1;
+      const isActive = selectedHop?.idx === hop.idx;
+      const srcColor = NODE_COLORS[hop.src?.kind] || DEFAULT_NODE_COLOR;
+      const tgtColor = NODE_COLORS[hop.tgt?.kind] || DEFAULT_NODE_COLOR;
+      const edgeColor = EDGE_COLORS[hop.edgeKind] || DEFAULT_EDGE_COLOR;
+      const pivotCount = pivotablePathsFromNode(hop.tgt?.id);
+      const outcome = outcomeFor(hop);
       return `
-        <div class="hop-card${selectedHop?.idx === hop.idx ? ' active' : ''}" data-hop-idx="${hop.idx}" data-focus-id="${escHtml(hop.src?.id || hop.tgt?.id || '')}">
-          <div class="hop-head">
-            <div class="hop-head-top">
-              <div class="hop-title">
-                <span class="mini-chip" style="border-color:${NODE_COLORS[hop.src?.kind] || DEFAULT_NODE_COLOR}55;color:${NODE_COLORS[hop.src?.kind] || DEFAULT_NODE_COLOR}">${escHtml(NODE_ICONS[hop.src?.kind] || '•')} ${escHtml(hop.src?.kind || '?')}</span>
-                <span>${escHtml(hop.src?.name || hop.src?.id || '?')}</span>
-                <span class="mini-chip" style="border-color:${EDGE_COLORS[hop.edgeKind] || DEFAULT_EDGE_COLOR}55;color:${EDGE_COLORS[hop.edgeKind] || DEFAULT_EDGE_COLOR}">${escHtml(hop.edgeKind)}</span>
-                <span class="mini-chip" style="border-color:${NODE_COLORS[hop.tgt?.kind] || DEFAULT_NODE_COLOR}55;color:${NODE_COLORS[hop.tgt?.kind] || DEFAULT_NODE_COLOR}">${escHtml(NODE_ICONS[hop.tgt?.kind] || '•')} ${escHtml(hop.tgt?.kind || '?')}</span>
-                <span>${escHtml(hop.tgt?.name || hop.tgt?.id || '?')}</span>
-              </div>
-              <div class="hop-inline-row">
-                <span class="mini-chip"><strong>Weight</strong> ${hop.weight.toFixed(1)}</span>
-                <span class="mini-chip"><strong>Tier</strong> ${hop.tier}</span>
-              </div>
-            </div>
+        <div class="pp-step${isActive ? ' active' : ''}${isLast ? ' last' : ''}" data-hop-idx="${hop.idx}" data-focus-id="${escHtml(hop.src?.id || hop.tgt?.id || '')}">
+          <div class="pp-step-rail">
+            <div class="pp-step-num">${hop.idx + 1}</div>
+            ${isLast ? '' : '<div class="pp-step-line"></div>'}
           </div>
-          <div class="hop-body">
-            <div class="hop-primary-stack">
-              <div class="hop-section">
-                <div class="hop-section-title">Why It Works</div>
-                <div style="font-size:12px;color:var(--text);line-height:1.65;">${escHtml(hop.whyItWorks)}</div>
-              </div>
-              <div class="hop-section hop-copy-wrap">
-                <div class="hop-section-title">Attack Command</div>
-                <button class="hop-copy-btn" data-copy-cmd="${encodeURIComponent(actionInfo.cmds.join('\n'))}">Copy</button>
-                <div class="modal-cmd" style="margin:0;padding-right:54px;">${escHtml(actionInfo.cmds.join('\n'))}</div>
-              </div>
+          <div class="pp-step-body">
+            <div class="pp-step-head">
+              <span class="pp-step-node" style="border-color:${srcColor}55;color:${srcColor}">${escHtml(NODE_ICONS[hop.src?.kind] || '•')} ${escHtml(hop.src?.name || hop.src?.id || '?')}</span>
+              <span class="pp-step-edge" style="color:${edgeColor};border-color:${edgeColor}55">${escHtml(hop.edgeKind)}</span>
+              <span class="pp-step-node" style="border-color:${tgtColor}55;color:${tgtColor}">${escHtml(NODE_ICONS[hop.tgt?.kind] || '•')} ${escHtml(hop.tgt?.name || hop.tgt?.id || '?')}</span>
+              <span class="pp-step-spacer"></span>
+              ${pivotCount > 0 ? `<button class="pp-pivot-btn" data-pivot-name="${escHtml(hop.tgt?.name || '')}" title="Filter Briefing to paths starting from ${escHtml(hop.tgt?.name || '?')}">Pivot here<span class="pp-pivot-count">${pivotCount}</span></button>` : ''}
             </div>
-            <details class="hop-extra-details">
+            <div class="pp-cmd-wrap">
+              <button class="pp-copy-btn" data-copy-cmd="${encodeURIComponent(cmdText)}">Copy</button>
+              <pre class="pp-cmd">${escHtml(cmdText)}</pre>
+            </div>
+            <div class="pp-outcome"><span class="pp-outcome-arrow">→</span> ${escHtml(outcome)}</div>
+            <details class="pp-detail">
               <summary>
-                <span>Supporting Detail</span>
-                <span class="hop-extra-summary">
-                  <span class="mini-chip"><strong>Evidence</strong> ${hop.evidence.length}</span>
-                  <span class="mini-chip"><strong>Alternatives</strong> ${hop.alternatives.length}</span>
-                  <span class="mini-chip"><strong>MITRE</strong> ${hop.mitreIds.length}</span>
+                <span class="pp-detail-toggle">Why this works · supporting detail</span>
+                <span class="pp-detail-counts">
+                  <span class="mini-chip"><strong>${hop.evidence.length}</strong> ev</span>
+                  <span class="mini-chip"><strong>${hop.alternatives.length}</strong> alt</span>
+                  <span class="mini-chip"><strong>${hop.mitreIds.length}</strong> mitre</span>
                 </span>
               </summary>
-              <div class="hop-extra-body">
-                <div class="hop-section">
-                  <div class="hop-section-title">Evidence</div>
+              <div class="pp-detail-body">
+                <div class="pp-detail-section">
+                  <div class="pp-detail-label">Why it works</div>
+                  <div class="pp-detail-text">${escHtml(hop.whyItWorks)}</div>
+                </div>
+                <div class="pp-detail-section">
+                  <div class="pp-detail-label">Evidence</div>
                   <div class="hop-evidence-list">
                     ${hop.evidence.length ? hop.evidence.map(f => `
                       <div class="hop-evidence-item">
                         <strong>${escHtml(f.severity || '?')} · ${escHtml(f.title || f.rule_id || 'Finding')}</strong><br>
                         ${escHtml((f.description || '').slice(0, 180))}
                       </div>
-                    `).join('') : '<div class="hop-evidence-item">No directly overlapping findings for this hop.</div>'}
+                    `).join('') : '<div class="hop-evidence-item">No directly overlapping findings.</div>'}
                   </div>
                 </div>
-                <div class="hop-section">
-                  <div class="hop-section-title">Alternative Pivots</div>
-                  <details class="hop-alt-toggle">
-                    <summary style="cursor:pointer;color:var(--accent);font-size:11px;">${hop.alternatives.length} other moves from ${escHtml(hop.src?.name || '?')}</summary>
-                    <div class="hop-alt-list" style="margin-top:10px;">
-                      ${hop.alternatives.length ? hop.alternatives.map(alt => `
-                        <div class="hop-alt-item">
-                          <strong>${escHtml(alt.edgeKind)}</strong> → ${escHtml(alt.target?.kind || '?')} ${escHtml(alt.target?.name || alt.targetId)}
-                          <div style="margin-top:6px;"><button class="brief-inline-btn" data-alt-path="${alt.pathId}">Focus this path</button></div>
-                        </div>
-                      `).join('') : '<div class="hop-alt-item">No alternative pivots cached for this actor.</div>'}
-                    </div>
-                  </details>
+                <div class="pp-detail-section">
+                  <div class="pp-detail-label">Alternative pivots</div>
+                  <div class="hop-alt-list">
+                    ${hop.alternatives.length ? hop.alternatives.map(alt => `
+                      <div class="hop-alt-item">
+                        <strong>${escHtml(alt.edgeKind)}</strong> → ${escHtml(alt.target?.kind || '?')} ${escHtml(alt.target?.name || alt.targetId)}
+                        <button class="brief-inline-btn pp-alt-btn" data-alt-path="${alt.pathId}">Focus</button>
+                      </div>
+                    `).join('') : '<div class="hop-alt-item">No alternative pivots cached.</div>'}
+                  </div>
                 </div>
-                <div class="hop-section">
-                  <div class="hop-section-title">MITRE / Tags</div>
+                <div class="pp-detail-section">
+                  <div class="pp-detail-label">MITRE · weight ${hop.weight.toFixed(1)} · tier ${hop.tier}</div>
                   <div class="hop-inline-row">
-                    <span class="mini-chip"><strong>Edge</strong> ${escHtml(hop.edgeKind)}</span>
                     ${(hop.mitreIds.length ? hop.mitreIds : ['No MITRE tags']).map(id => `<span class="mitre-chip">${escHtml(id)}</span>`).join('')}
                   </div>
                 </div>
@@ -972,7 +1025,7 @@ function renderPathView() {
 
     storyboard.querySelectorAll('[data-hop-idx]').forEach(card => {
       card.addEventListener('click', e => {
-        if (e.target.closest('[data-copy-cmd]') || e.target.closest('[data-alt-path]') || e.target.closest('summary')) return;
+        if (e.target.closest('[data-copy-cmd]') || e.target.closest('[data-alt-path]') || e.target.closest('[data-pivot-name]') || e.target.closest('summary')) return;
         updateRouteQuery({ hop: card.dataset.hopIdx, focus: card.dataset.focusId || '' }, currentRoute.path);
       });
     });
@@ -988,6 +1041,13 @@ function renderPathView() {
       btn.addEventListener('click', e => {
         e.stopPropagation();
         route(`/path/${encodeURIComponent(btn.dataset.altPath)}`);
+      });
+    });
+    storyboard.querySelectorAll('[data-pivot-name]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const name = btn.dataset.pivotName || '';
+        location.hash = buildHash('/briefing', name ? { q: name } : {});
       });
     });
   }
