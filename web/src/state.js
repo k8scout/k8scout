@@ -156,7 +156,7 @@ function renderFootholdHeader() {
     <div class="fh-compact-row">
       <div class="fh-identity">
         <div class="fh-brand app-brand">
-          <img class="app-brand-logo" src="../k8scout_logo.png?v=1776347433" alt="k8scout logo">
+          <img class="app-brand-logo" src="img/k8scout_logo.png?v=1776347433" alt="k8scout logo">
           <span class="app-brand-wordmark">k8scout</span>
         </div>
         <span class="fh-sep fh-sep-inline"></span>
