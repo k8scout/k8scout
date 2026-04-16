@@ -28,6 +28,17 @@ It works in two modes:
 
 ---
 
+## Demo
+
+<p align="center">
+  <video src="./web/demo/k8scout-demo.mp4" controls muted playsinline width="960"></video>
+</p>
+<p align="center">
+  <a href="./web/demo/k8scout-demo.mp4">Download / open the demo video directly</a>
+</p>
+
+---
+
 ## What it finds
 
 k8scout builds a weighted permission graph and runs Dijkstra-based pathfinding to discover realistic multi-step attack chains:
