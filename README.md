@@ -31,10 +31,7 @@ It works in two modes:
 ## Demo
 
 <p align="center">
-  <video src="./web/demo/k8scout-demo.mp4" controls muted playsinline width="960"></video>
-</p>
-<p align="center">
-  <a href="./web/demo/k8scout-demo.mp4">Download / open the demo video directly</a>
+  <img width="960" alt="k8scout demo" src="./web/demo/k8scout-demo.gif" />
 </p>
 
 ---
