@@ -426,8 +426,8 @@ svg#graph{width:100%;height:100%;display:block;}
 
 /* ─── SVG graph styles ─── */
 .node-circle{cursor:pointer;stroke-width:1.5;transition:filter .25s,opacity .25s,stroke .15s;}
-.node-circle.dimmed{opacity:.08;}
-.node-circle.dimmed ~ text{opacity:.05;}
+.node-circle.dimmed{opacity:.08;pointer-events:none;}
+.node-circle.dimmed ~ text{opacity:.05;pointer-events:none;}
 .node-g.focus-dim{opacity:.12;pointer-events:none;}
 .node-g.focus-dim .node-circle{stroke-width:0.5;}
 .edge-path.focus-dim{opacity:.03 !important;pointer-events:none;}
@@ -440,11 +440,12 @@ svg#graph{width:100%;height:100%;display:block;}
 .edge-mid-label{pointer-events:none;transition:opacity .2s;}
 .edge-mid-label text{dominant-baseline:middle;text-anchor:middle;}
 .edge-path{fill:none;stroke-width:1.5;transition:opacity .2s,stroke-width .15s;cursor:pointer;}
-.edge-path:hover{stroke-width:3;opacity:1 !important;filter:drop-shadow(0 0 4px currentColor);}
+.edge-path:not(.dimmed):hover{stroke-width:3;opacity:1 !important;filter:drop-shadow(0 0 4px currentColor);}
+.edge-path.dimmed{pointer-events:none;}
 .show-more-btn{background:none;border:1px solid var(--border);border-radius:4px;color:var(--accent);cursor:pointer;font-size:10px;padding:3px 8px;margin-top:4px;width:100%;text-align:center;transition:border-color .1s;}
 .show-more-btn:hover{border-color:var(--accent);background:rgba(76,201,240,.06);}
 .edge-detail-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:#fff;margin-bottom:4px;}
-.edge-path.dimmed{opacity:.03;}
+.edge-path.dimmed{opacity:.03;pointer-events:none;}
 .edge-path.highlighted{stroke-width:3;opacity:1 !important;filter:drop-shadow(0 0 3px currentColor);}
 .edge-path.path-active{stroke:var(--path-glow) !important;stroke-width:5.5;opacity:1 !important;filter:drop-shadow(0 0 6px var(--path-glow)) !important;animation:edgePulse 1.8s ease-in-out infinite;}
 @keyframes edgePulse{0%,100%{opacity:.75;filter:drop-shadow(0 0 4px var(--path-glow));}50%{opacity:1;filter:drop-shadow(0 0 10px var(--path-glow));}}
@@ -644,7 +645,7 @@ code{background:rgba(165,214,255,.08);padding:1px 5px;border-radius:4px;font-fam
 
 /* ─── Host / Kubernetes node (Linux machine) — diamond shape ─── */
 .host-shape{stroke-width:2.5;cursor:pointer;transition:filter .2s,opacity .2s;}
-.host-shape.dimmed{opacity:.1;}
+.host-shape.dimmed{opacity:.1;pointer-events:none;}
 .host-shape.path-active{stroke:var(--path-glow) !important;stroke-width:4;filter:drop-shadow(0 0 14px var(--path-glow));}
 .host-shape.path-start{stroke:var(--accent) !important;stroke-width:4;}
 .host-shape.path-end{stroke:var(--crit) !important;stroke-width:4;filter:drop-shadow(0 0 16px var(--crit));}
@@ -747,7 +748,10 @@ body[data-explore-mode="path-focus"] .tab-bar,
 body[data-explore-mode="path-focus"] #tab-findings,
 body[data-explore-mode="path-focus"] #tab-legend,
 body[data-explore-mode="path-focus"] #tab-queries,
-body[data-explore-mode="path-focus"] .filter-btn{display:none !important;}
+body[data-explore-mode="path-focus"] .filter-btn,
+body[data-explore-mode="path-focus"] #fit-btn,
+body[data-explore-mode="path-focus"] #crossns-btn,
+body[data-explore-mode="path-focus"] #focus-btn{display:none !important;}
 body[data-explore-mode="path-focus"] #sidebar{width:340px;}
 body[data-explore-mode="path-focus"] #tab-paths{display:flex !important;}
 body[data-explore-mode="path-focus"] #paths-container{padding:12px 10px;}
@@ -1187,7 +1191,7 @@ const EDGE_WEIGHT = {
 const ATTACK_EDGE_KINDS = new Set([
   'grants','bound_to','runs_as','mounts',
   'can_exec','can_impersonate','can_create','can_patch',
-  'can_delete','can_get','can_list','can_portforward','member_of',
+  'can_delete','can_get','can_list','can_portforward',
   'can_escalate','can_bind',
   'inferred',
   'granted_by',
@@ -4271,11 +4275,17 @@ function rebuildPathIndices() {
     const impact = pathImpactType(path);
     const source = nodeById[path.nodes[0]];
     const target = nodeById[path.nodes[path.nodes.length - 1]];
-    const relatedFindings = (graphData?.findings || []).filter(f =>
-      f.id === path._findingId ||
-      path.nodes.some(nodeId => (f.affected_nodes || []).includes(nodeId))
-    );
-    const mitreIds = [...new Set(relatedFindings.flatMap(f => f.mitre_ids || []))];
+    // When the path carries a backend finding ID, use ONLY that finding's
+    // metadata (accurate). Otherwise fall back to affected-node intersection
+    // for frontend-DFS-only paths.
+    const relatedFindings = path._findingId
+      ? (graphData?.findings || []).filter(f => f.id === path._findingId)
+      : (graphData?.findings || []).filter(f =>
+          path.nodes.some(nodeId => (f.affected_nodes || []).includes(nodeId))
+        );
+    const mitreIds = path._mitreIds && path._mitreIds.length
+      ? [...new Set(path._mitreIds)]
+      : [...new Set(relatedFindings.flatMap(f => f.mitre_ids || []))];
     const namespaces = [...new Set(path.nodes.map(nodeId => nodeById[nodeId]?.namespace).filter(Boolean))];
     const edgeKinds = [...new Set(path.edges || [])];
     const searchText = [
@@ -5425,7 +5435,7 @@ function computeAttackPaths() {
     return false;
   }
 
-  const MAX_PATHS = 50, MAX_DEPTH = 10;
+  const MAX_PATHS = 50, MAX_DEPTH = 12;
   const paths = [];
 
   // Per-source BFS with per-path visited tracking (finds multiple distinct paths)
@@ -5492,11 +5502,15 @@ function computeAttackPaths() {
 }
 
 // importFindingPaths merges backend-computed attack_path data from risk_findings
-// into computedPaths. The backend's BFS paths are authoritative and may include
-// paths through inferred edges that the frontend's DFS didn't find.
+// into computedPaths. The backend's weighted paths are authoritative: when a
+// frontend-computed path shares the same node signature, we overwrite the
+// metadata with the backend's values (title, score, weight, stages, shape) so
+// the UI always reflects backend truth. Backend-only paths that the frontend
+// DFS didn't discover are appended as fresh entries.
 function importFindingPaths() {
   if (!graphData) return;
-  const existingSigs = new Set(computedPaths.map(p => p.nodes.join('→')));
+  const sigIndex = new Map();
+  computedPaths.forEach((p, i) => sigIndex.set(p.nodes.join('→'), i));
 
   (graphData.findings || []).forEach(f => {
     const ap = f.attack_path;
@@ -5507,20 +5521,68 @@ function importFindingPaths() {
     const edges = ap.slice(1).map(s => (s.edge && s.edge.kind) || 'inferred');
     if (nodes.length < 2) return;
 
-    const sig = nodes.join('→');
-    if (existingSigs.has(sig)) return;
-    existingSigs.add(sig);
+    const backendMeta = {
+      _findingId:   f.id,
+      _score:       f.score,
+      _title:       f.title,
+      _weight:      f.path_weight,
+      _stages:      f.attack_stages || null,
+      _chainShape:  f.chain_shape || null,
+      _mitreIds:    f.mitre_ids || [],
+      _ruleId:      f.rule_id || null,
+      _backend:     true,
+    };
 
-    // Tag with the source finding so UI can cross-reference.
-    computedPaths.push({ nodes, edges, _findingId: f.id, _score: f.score, _title: f.title, _weight: f.path_weight });
+    const sig = nodes.join('→');
+    const existingIdx = sigIndex.get(sig);
+    if (existingIdx != null) {
+      // Overwrite metadata on the frontend-DFS path so backend wins.
+      Object.assign(computedPaths[existingIdx], backendMeta);
+      return;
+    }
+    sigIndex.set(sig, computedPaths.length);
+    computedPaths.push({ nodes, edges, ...backendMeta });
   });
 
-  // Re-sort so newly imported high-score paths surface at the top.
+  // Re-sort so newly imported high-score paths surface at the top. Backend
+  // paths use their own score; frontend-only paths fall back to pathImpactType.
   computedPaths.sort((a, b) => {
-    const ia = pathImpactType(a), ib = pathImpactType(b);
-    if (ia.score !== ib.score) return ib.score - ia.score;
+    const sa = (a._score != null) ? a._score : pathImpactType(a).score;
+    const sb = (b._score != null) ? b._score : pathImpactType(b).score;
+    if (sa !== sb) return sb - sa;
+    const wa = (a._weight != null) ? a._weight : Number.POSITIVE_INFINITY;
+    const wb = (b._weight != null) ? b._weight : Number.POSITIVE_INFINITY;
+    if (wa !== wb) return wa - wb;
     return a.nodes.length - b.nodes.length;
   });
+}
+
+// synthesisePathFromFinding converts a finding's backend attack_path into the
+// frontend path shape and pushes it into computedPaths. Returns the new index,
+// or -1 if the finding has no usable path. Idempotent on signature.
+function synthesisePathFromFinding(f) {
+  if (!f) return -1;
+  const ap = f.attack_path;
+  if (!ap || ap.length < 2) return -1;
+  const nodes = ap.map(s => s.node && s.node.id).filter(Boolean);
+  const edges = ap.slice(1).map(s => (s.edge && s.edge.kind) || 'inferred');
+  if (nodes.length < 2) return -1;
+  const sig = nodes.join('→');
+  const existing = computedPaths.findIndex(p => p.nodes.join('→') === sig);
+  if (existing >= 0) return existing;
+  computedPaths.push({
+    nodes, edges,
+    _findingId:  f.id,
+    _score:      f.score,
+    _title:      f.title,
+    _weight:     f.path_weight,
+    _stages:     f.attack_stages || null,
+    _chainShape: f.chain_shape || null,
+    _mitreIds:   f.mitre_ids || [],
+    _ruleId:     f.rule_id || null,
+    _backend:    true,
+  });
+  return computedPaths.length - 1;
 }
 
 /* ================================================================
@@ -5535,9 +5597,14 @@ function classifyPathPhases(path) {
     impact:          { nodeId: path.nodes[path.nodes.length - 1], label: 'Impact',                present: true },
   };
 
-  const PRIVESC_EDGES   = new Set(['grants','bound_to','can_bind','can_escalate','inferred']);
-  const LATERAL_EDGES   = new Set(['can_exec','runs_as','can_portforward','runs_on','can_create','can_patch','can_impersonate']);
-  const CRED_EDGES      = new Set(['mounts','authenticates_as','assumes_cloud_role']);
+  // Edge→phase taxonomy aligned with backend classifyPathStages:
+  //   runs_as / authenticates_as / can_impersonate = identity pivot (cred theft)
+  //   mounts / assumes_cloud_role                  = cred / cloud theft
+  //   grants / bound_to / granted_by / can_bind / can_escalate / inferred = priv esc
+  //   can_exec / can_portforward / runs_on / can_create / can_patch      = lateral / takeover
+  const PRIVESC_EDGES = new Set(['grants','bound_to','granted_by','can_bind','can_escalate','inferred']);
+  const LATERAL_EDGES = new Set(['can_exec','can_portforward','runs_on','can_create','can_patch']);
+  const CRED_EDGES    = new Set(['mounts','authenticates_as','assumes_cloud_role','runs_as','can_impersonate']);
 
   path.edges.forEach((ek, i) => {
     if (CRED_EDGES.has(ek) && !phases.credTheft.present) {
@@ -5703,25 +5770,30 @@ function renderSidebar() {
     `;
     card.addEventListener('click', () => {
       openFindingModal(fid);
-      // If this finding has an attack_path, highlight it in the graph and switch to paths tab.
+      // If this finding has an attack_path, highlight it. Look up in
+      // computedPaths by signature; if missing (e.g. a deeper backend path
+      // that the frontend DFS didn't rediscover), synthesise it on demand
+      // and re-render the paths list so the new card is reachable.
       const ap = f.attack_path;
-      if (ap && ap.length >= 2) {
-        const nodes = ap.map(s => s.node && s.node.id).filter(Boolean);
-        const sig = nodes.join('→');
-        const pathIdx = computedPaths.findIndex(p => p.nodes.join('→') === sig);
-        if (pathIdx >= 0) {
-          clearPathHighlight();
-          activePathIdx = pathIdx;
-          highlightPath(computedPaths[pathIdx]);
-          // Activate the matching path card and switch tab.
-          document.querySelector('.tab[data-tab="paths"]').click();
-          const matchCard = document.querySelector(`.path-card[data-path-idx="${pathIdx}"]`);
-          if (matchCard) {
-            document.querySelectorAll('.path-card').forEach(c => c.classList.remove('active'));
-            matchCard.classList.add('active');
-            matchCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
-        }
+      if (!ap || ap.length < 2) return;
+      const nodes = ap.map(s => s.node && s.node.id).filter(Boolean);
+      const sig = nodes.join('→');
+      let pathIdx = computedPaths.findIndex(p => p.nodes.join('→') === sig);
+      if (pathIdx < 0) {
+        pathIdx = synthesisePathFromFinding(f);
+        if (pathIdx < 0) return;
+        // Re-render the paths sidebar so the synthesised card exists.
+        renderAttackPaths();
+      }
+      clearPathHighlight();
+      activePathIdx = pathIdx;
+      highlightPath(computedPaths[pathIdx]);
+      document.querySelector('.tab[data-tab="paths"]').click();
+      const matchCard = document.querySelector(`.path-card[data-path-idx="${pathIdx}"]`);
+      if (matchCard) {
+        document.querySelectorAll('.path-card').forEach(c => c.classList.remove('active'));
+        matchCard.classList.add('active');
+        matchCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     });
     list.appendChild(card);
@@ -5819,6 +5891,9 @@ function renderAttackPaths() {
       const target = nodeById[path.nodes[path.nodes.length-1]];
       const source = nodeById[path.nodes[0]];
       const col    = pathColor(sev);
+      // Prefer backend-computed stages when available (accurate taxonomy).
+      // Fall back to the frontend heuristic for frontend-DFS-only paths.
+      const backendStages = path._stages && path._stages.length ? path._stages : null;
       const phases = classifyPathPhases(path);
       const steps  = path.nodes.length - 1;
 
@@ -5831,8 +5906,11 @@ function renderAttackPaths() {
       // Narrative label
       const narrative = getPathNarrative(path);
 
-      // Phase row HTML
-      const phaseHtml = buildPhaseRow(phases);
+      // Phase row HTML — prefer backend stages, fall back to frontend heuristic.
+      const phaseHtml = backendStages
+        ? buildBackendStageRow(backendStages)
+        : buildPhaseRow(phases);
+      const shapeBadge = chainShapeBadge(path._chainShape);
 
       // Chain chips
       let chainHtml = '';
@@ -5919,7 +5997,10 @@ function renderAttackPaths() {
             <div class="path-title">${path._title ? escHtml(displayTitle) : displayTitle}</div>
             <div class="path-meta">${steps} step${steps!==1?'s':''} · risk ${Number(riskScore).toFixed(1)} · exploitability: ${exploitLabel}</div>
           </div>
-          <span class="impact-badge ${impact.type}">${escHtml(impact.label)}</span>
+          <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;">
+            <span class="impact-badge ${impact.type}">${escHtml(impact.label)}</span>
+            ${shapeBadge}
+          </div>
         </div>
         <div class="effort-meter" title="Exploitability: ${exploitLabel} (weight ${weight.toFixed(1)})"><div class="effort-bar" style="width:${exploitPct}%;background:${exploitColor}"></div></div>
         <div class="path-label">${escHtml(narrative)}</div>
@@ -5958,6 +6039,45 @@ function renderAttackPaths() {
     groupEl.appendChild(itemsEl);
     container.appendChild(groupEl);
   });
+}
+
+// buildBackendStageRow renders the phase row using backend AttackStages.
+// Each stage carries: stage (int), label (string), node_id (string), description (string).
+// Called when a path was emitted by the backend; otherwise we fall back to the
+// frontend heuristic classifyPathPhases.
+function buildBackendStageRow(stages) {
+  if (!stages || !stages.length) return '';
+  const classFor = (label) => {
+    const l = (label||'').toLowerCase();
+    if (l.includes('foothold') || l.includes('entry')) return 'initial';
+    if (l.includes('credential') || l.includes('theft') || l.includes('impersonat') || l.includes('identity pivot') || l.includes('node pivot')) return 'credtheft';
+    if (l.includes('priv') || l.includes('admin') || l.includes('escalat') || l.includes('cloud')) return 'privesc';
+    if (l.includes('lateral') || l.includes('takeover') || l.includes('escape') || l.includes('visibility') || l.includes('discovery')) return 'lateral';
+    if (l.includes('target') || l.includes('data') || l.includes('reached')) return 'impact';
+    return 'initial';
+  };
+  const chips = stages.map(s => {
+    const node = nodeById[s.node_id];
+    const short = node ? ((node.name||node.id||'?').split(':').pop()) : (s.node_id||'').split(':').pop();
+    const trunc = short.length > 14 ? short.slice(0, 13) + '…' : short;
+    const cls = classFor(s.label);
+    return `<span class="phase-chip ${cls}" title="${escHtml(s.label)}: ${escHtml(s.description||'')}">${escHtml(s.label)} · ${escHtml(trunc)}</span>`;
+  });
+  return `<div class="phase-row">${chips.join('<span class="phase-arrow">→</span>')}</div>`;
+}
+
+// chainShapeBadge renders a small badge describing the backend PathShape.
+function chainShapeBadge(shape) {
+  if (!shape) return '';
+  const labels = {
+    full_chain:     { text: 'FULL CHAIN',     cls: 'impact-badge CLUSTER_ADMIN' },
+    foothold_start: { text: 'FOOTHOLD CHAIN', cls: 'impact-badge NODE_BREAKOUT' },
+    bridge_start:   { text: 'RBAC CHAIN',     cls: 'impact-badge PRIVESC' },
+    abstract_start: { text: 'THEORETICAL',    cls: 'impact-badge UNKNOWN' },
+  };
+  const info = labels[shape];
+  if (!info) return '';
+  return `<span class="${info.cls}" title="Backend chain-shape classification">${escHtml(info.text)}</span>`;
 }
 
 function buildPhaseRow(phases) {
@@ -6275,6 +6395,8 @@ function renderGraph() {
   // Edge hover tooltip + click detail
   linkSel
     .on('mousemove', (event, d) => {
+      // Suppress tooltip for edges dimmed out by an active path highlight.
+      if (d3.select(event.currentTarget).classed('dimmed')) { hideTooltip(); return; }
       const src = typeof d.source === 'object' ? d.source : simNodes[d.source];
       const tgt = typeof d.target === 'object' ? d.target : simNodes[d.target];
       const sname = src?.name || src?.id || '?';
@@ -6286,6 +6408,7 @@ function renderGraph() {
     .on('mouseleave', hideTooltip)
     .on('click', (event, d) => {
       event.stopPropagation();
+      if (d3.select(event.currentTarget).classed('dimmed')) return;
       hideTooltip();
       const src = typeof d.source === 'object' ? d.source : simNodes[d.source];
       const tgt = typeof d.target === 'object' ? d.target : simNodes[d.target];
@@ -6370,6 +6493,8 @@ function renderGraph() {
     })
     .on('click', (e, d) => { e.stopPropagation(); selectNode(d.id); })
     .on('mousemove', (e, d) => {
+      // Suppress tooltip for nodes dimmed out by an active path highlight.
+      if (d3.select(e.currentTarget).classed('dimmed')) { hideTooltip(); return; }
       const score = (d.risk_score||0).toFixed(1);
       const sev = score>=8?'CRITICAL':score>=6?'HIGH':score>=4?'MEDIUM':'LOW';
       let extra = '';
@@ -7329,20 +7454,33 @@ function openFindingModal(fid) {
     body += `</ul></div>`;
   }
 
-  // Exploitation path from attack graph
-  const relPaths = computedPaths.filter(p =>
-    (f.affected_nodes||[]).some(nid => p.nodes.includes(nid))
-  );
-  if (relPaths.length) {
-    const p = relPaths[0];
-    const impact2 = pathImpactType(p);
+  // Exploitation path — prefer the finding's own backend attack_path. Only
+  // fall back to a node-intersection match in computedPaths for findings
+  // that don't carry a backend path (single-step rule findings).
+  let exploitPath = null;
+  if (f.attack_path && f.attack_path.length >= 2) {
+    const apNodes = f.attack_path.map(s => s.node && s.node.id).filter(Boolean);
+    const apEdges = f.attack_path.slice(1).map(s => (s.edge && s.edge.kind) || 'inferred');
+    if (apNodes.length >= 2) {
+      exploitPath = { nodes: apNodes, edges: apEdges };
+    }
+  }
+  if (!exploitPath) {
+    const relPaths = computedPaths.filter(p =>
+      (f.affected_nodes||[]).some(nid => p.nodes.includes(nid))
+    );
+    if (relPaths.length) exploitPath = relPaths[0];
+  }
+  if (exploitPath) {
+    const impact2 = pathImpactType(exploitPath);
     body += `<div class="modal-section"><h4>Exploitation Path <span class="impact-badge ${impact2.type}" style="vertical-align:middle">${escHtml(impact2.label)}</span></h4>`;
-    p.edges.forEach((ek, i) => {
-      const srcN = nodeById[p.nodes[i]];
-      const tgtN = nodeById[p.nodes[i+1]];
+    exploitPath.edges.forEach((ek, i) => {
+      const srcN = nodeById[exploitPath.nodes[i]];
+      const tgtN = nodeById[exploitPath.nodes[i+1]];
       const cmdFn = ATTACK_CMD[ek];
-      if (!cmdFn) return;
-      const info = cmdFn(srcN||{}, tgtN||{});
+      const info = cmdFn
+        ? cmdFn(srcN||{}, tgtN||{})
+        : { action: `${ek}: ${srcN?.name || exploitPath.nodes[i]} → ${tgtN?.name || exploitPath.nodes[i+1]}`, cmds: [`# ${ek}`] };
       body += `<p style="margin-bottom:4px;color:var(--muted);font-size:11px">Step ${i+1}: ${escHtml(info.action)}</p>`;
       body += `<div class="modal-cmd">${escHtml(info.cmds.join('\n'))}</div>`;
     });

@@ -42,6 +42,25 @@ type RiskFinding struct {
 	// Each stage represents a distinct level of access gained during the attack.
 	// Nil for single-step findings.
 	AttackStages []AttackStage `json:"attack_stages,omitempty"`
+	// ChainShape classifies the path's structural realism for the UI:
+	// "full_chain", "foothold_start", "bridge_start", or "abstract_start".
+	// Empty for single-step findings.
+	ChainShape string `json:"chain_shape,omitempty"`
+}
+
+// ChainShapeFromPathShape converts a PathShape into the string label persisted
+// on RiskFinding.ChainShape.
+func ChainShapeFromPathShape(shape PathShape) string {
+	switch {
+	case shape.FullChain:
+		return "full_chain"
+	case shape.StartRole == RoleFoothold:
+		return "foothold_start"
+	case shape.StartRole == RoleBridge:
+		return "bridge_start"
+	default:
+		return "abstract_start"
+	}
 }
 
 // AttackStage describes one stage of a progressive attack chain.
@@ -3029,6 +3048,7 @@ func inferMultiHopFindings(g *Graph, r *kube.EnumerationResult, existing []RiskF
 					AttackPath:    sp.Path,
 					PathWeight:    sp.Weight,
 					AttackStages:  stages,
+					ChainShape:    ChainShapeFromPathShape(shape),
 					Mitigation: fmt.Sprintf("Break the attack path by removing at least one edge. "+
 						"Review permissions and workload configurations along: %s",
 						formatPathDescription(sp.Path)),
@@ -3150,6 +3170,7 @@ func inferReviewerMultiHopFindings(g *Graph, r *kube.EnumerationResult, existing
 					AttackPath:    sp.Path,
 					PathWeight:    sp.Weight,
 					AttackStages:  stages,
+					ChainShape:    ChainShapeFromPathShape(shape),
 					Mitigation: fmt.Sprintf(
 						"Break the attack path by removing at least one edge. "+
 							"Review permissions and workload configurations along: %s",
