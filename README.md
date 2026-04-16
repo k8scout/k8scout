@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="400" alt="k8scout logo" src="https://github.com/user-attachments/assets/046170e0-974d-4eca-911b-1000b0478b3b" />
+  <img width="520" alt="k8scout logo" src="./web/img/k8scout_logo.png" />
 </p>
 <p align="center">
   <img alt="GitHub stars" src="https://img.shields.io/github/stars/k8scout/k8scout?style=flat" />
@@ -7,6 +7,7 @@
   <img alt="GitHub issues" src="https://img.shields.io/github/issues/k8scout/k8scout?style=flat" />
   <img alt="GitHub license" src="https://img.shields.io/github/license/k8scout/k8scout" />
 </p>
+<h1 align="center">k8scout</h1>
 
 > **Beta** — A single-binary Kubernetes attack path engine for authorized security assessments.
 
