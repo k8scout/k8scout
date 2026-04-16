@@ -1,7 +1,10 @@
 <p align="center">
   <img width="400" alt="k8scout logo" src="https://github.com/user-attachments/assets/046170e0-974d-4eca-911b-1000b0478b3b" />
 </p>
-A single-binary Kubernetes attack path engine for authorized security assessments. Drop it into a compromised pod, run it, and get a map of every realistic escalation path from your current foothold to cluster-admin, node access, secret theft, and cloud IAM roles.
+
+> **Beta** — A single-binary Kubernetes attack path engine for authorized security assessments.
+
+Drop it into a compromised pod, run it, and get a map of every realistic escalation path — from your current foothold to cluster-admin, node access, secret theft, and cloud IAM roles.
 
 > **Intended use**: Penetration testing engagements, red team operations, internal security reviews, and cluster hardening audits. Always obtain proper authorization before running against any cluster.
 
@@ -27,13 +30,15 @@ k8scout builds a weighted permission graph and runs Dijkstra-based pathfinding t
 - **Pod to cluster-admin** — through RBAC bindings, workload mutation, or CRB creation
 - **Container escape to node** — via privileged containers, hostPID, hostNetwork, dangerous capabilities, or hostPath mounts
 - **Lateral movement** — exec into other pods, steal their SA tokens, pivot through their permissions
-- **Secret and credential theft** — mounted SA tokens, secrets, configmaps with leaked credentials
-- **Cloud IAM escalation** — IRSA (AWS), GKE Workload Identity, Azure Workload Identity
+- **Secret and credential theft** — mounted SA tokens, secrets, configmaps with leaked credentials, orphaned tokens
+- **Cloud IAM escalation** — IRSA (AWS), GKE Workload Identity, Azure Workload Identity, projected token audience abuse
 - **Impersonation chains** — SA-to-SA takeover through impersonation permissions
 - **Workload mutation** — patch a deployment to change its SA, then inherit that SA's permissions
 - **Webhook injection** — mutating webhook control to inject into future workloads
+- **GitOps operator abuse** — ArgoCD, Flux, External Secrets, and Vault operator privilege escalation
+- **Misconfiguration detection** — dangling bindings, wildcard verbs, automounted tokens, plaintext secrets in env vars
 
-Every finding includes MITRE ATT&CK technique IDs, a risk score, and step-by-step attack path with the actual graph nodes involved.
+Every finding includes MITRE ATT&CK technique IDs, a risk score, and step-by-step attack path with the actual graph nodes involved. 50 detection rules in total.
 
 ---
 
@@ -125,7 +130,7 @@ k8scout (running inside compromised pod)
  │     (always permitted, no RBAC needed)
  │
  ├── 3. Enumerate cluster objects (graceful degradation if denied)
- │     Namespaces, RBAC, Workloads, Pods, Secrets, Nodes, Webhooks
+ │     Namespaces, RBAC, Workloads, Pods, Secrets, Nodes, Webhooks, CRDs
  │
  ├── 4. Build attack graph
  │     Nodes: pods, SAs, roles, bindings, secrets, workloads, nodes, cloud identities
@@ -136,7 +141,7 @@ k8scout (running inside compromised pod)
  │     Weighted by attacker effort — cheapest (most realistic) paths first
  │     Targets: cluster-admin, nodes, SA tokens, cloud IAM, privileged workloads
  │
- ├── 6. Run inference rules (24 rules with MITRE ATT&CK mapping)
+ ├── 6. Run inference rules (50 rules with MITRE ATT&CK mapping)
  │
  ├── 7. Optional: AI risk narrative (GPT-4o)
  │
@@ -152,9 +157,11 @@ Even with a minimal SA that can't list pods or RBAC objects, the tool synthesize
 Load the JSON report into `web/graph.html` in any browser (drag-and-drop, no server needed).
 
 - **Attack Paths tab** — ranked by risk score, each showing the full multi-hop chain from foothold to target
+- **Multi-chain view** — visualize overlapping attack paths simultaneously on a single graph
 - **Force-directed graph** — all nodes and edges with color-coded categories and risk score rings
 - **Focus mode** — dims structural noise to highlight attack-relevant nodes
 - **RBAC toggle** — hides RBAC nodes but automatically shows them when part of an active attack path
+- **Mini-map** — navigate large graphs without losing context
 - **Node detail** — click any node for metadata, connections, and related findings
 - **Export** — download a self-contained HTML pentest report
 
@@ -224,6 +231,12 @@ make results                         # copy result JSON from pod
 ```
 
 The Job runs as UID 65534 (nobody), read-only root filesystem, all Linux capabilities dropped, seccomp RuntimeDefault. Auto-cleans up after 1 hour.
+
+---
+
+## Beta feedback
+
+k8scout is in active development. If you hit a bug, false positive, or a detection gap in your cluster, please [open an issue](../../issues). False positives and missed paths are especially useful — include the anonymized finding JSON if possible.
 
 ---
 
