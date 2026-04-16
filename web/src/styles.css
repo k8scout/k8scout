@@ -446,8 +446,8 @@ svg#graph{width:100%;height:100%;display:block;}
 /* ─── Always-on edge mid-labels ─── */
 .edge-mid-label{pointer-events:none;transition:opacity .2s;}
 .edge-mid-label text{dominant-baseline:middle;text-anchor:middle;}
-.edge-path{fill:none;stroke-width:1.5;transition:opacity .2s,stroke-width .15s;cursor:pointer;}
-.edge-path:not(.dimmed):hover{stroke-width:3;opacity:1 !important;filter:drop-shadow(0 0 4px currentColor);}
+.edge-path{fill:none;stroke-width:1.5;transition:opacity .2s,stroke-width .15s;cursor:pointer;pointer-events:visibleStroke;stroke-linecap:round;stroke-linejoin:round;}
+.edge-path:not(.dimmed):hover{stroke-width:4.5;opacity:1 !important;filter:drop-shadow(0 0 4px currentColor);}
 .edge-path.dimmed{pointer-events:none;}
 .show-more-btn{background:none;border:1px solid var(--border);border-radius:4px;color:var(--accent);cursor:pointer;font-size:10px;padding:3px 8px;margin-top:4px;width:100%;text-align:center;transition:border-color .1s;}
 .show-more-btn:hover{border-color:var(--accent);background:rgba(76,201,240,.06);}

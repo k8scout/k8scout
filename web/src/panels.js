@@ -47,13 +47,6 @@ function selectNode(id) {
     })
     .classed('path-active', false);
 
-  // Show edge mid-labels only for edges connected to the selected node
-  linksLayer.selectAll('g.edge-mid-label')
-    .attr('display', d => {
-      const sid = edgeNodeId(d.source), tid = edgeNodeId(d.target);
-      return (sid === id || tid === id) ? null : 'none';
-    });
-
   showDetailPanel(node);
 }
 
@@ -65,8 +58,6 @@ function clearSelection() {
   nodesLayer.selectAll('circle.score-ring').style('display', null).style('opacity', null);
   nodesLayer.selectAll('text.score-badge-text').style('display', null).style('opacity', null);
   linksLayer.selectAll('path.edge-path').classed('dimmed',false).classed('highlighted',false).classed('path-active',false);
-  // Hide all edge mid-labels when selection is cleared
-  linksLayer.selectAll('g.edge-mid-label').attr('display', 'none');
   nodesLayer.selectAll('text.path-step-num').remove();
   nodesLayer.selectAll('g.path-edge-label').remove();
   hideDetailPanel();
@@ -82,9 +73,6 @@ function highlightPath(path) {
   });
   const startId = path.nodes[0];
   const endId   = path.nodes[path.nodes.length - 1];
-
-  // Hide any per-node edge mid-labels from prior node selection
-  linksLayer.selectAll('g.edge-mid-label').attr('display', 'none');
 
   // Force-show RBAC nodes in this path even if RBAC is hidden
   activePathNodeIds = pathNodeSet;
@@ -153,39 +141,6 @@ function highlightPath(path) {
       .text(i === 0 ? '▶' : (i === path.nodes.length-1 ? '⬛' : String(i)));
   });
 
-  // Edge kind labels on active path edges
-  nodesLayer.selectAll('text.path-edge-label').remove();
-  path.nodes.forEach((nid, i) => {
-    if (i >= path.nodes.length - 1) return;
-    const nextId = path.nodes[i+1];
-    // Find the simEdge for this hop
-    const edgeKind = path.edges && path.edges[i] ? path.edges[i] : '';
-    if (!edgeKind) return;
-    // Find source node position
-    const srcG = nodesLayer.selectAll('g.node-g').filter(d => d.id === nid);
-    const tgtG = nodesLayer.selectAll('g.node-g').filter(d => d.id === nextId);
-    if (srcG.empty() || tgtG.empty()) return;
-    const s = srcG.datum(), t = tgtG.datum();
-    if (s.x == null || t.x == null) return;
-    const mx = ((s.x||0)+(t.x||0))/2 - (s.y||0)*0.02;
-    const my = ((s.y||0)+(t.y||0))/2 + (s.x||0)*0.02;
-    // Place label relative to zoomLayer — use a separate labels group approach
-    // We place it in nodesLayer but at the midpoint, offset in screen space
-    const g = nodesLayer.append('g')
-      .attr('class', 'path-edge-label')
-      .attr('transform', `translate(${mx},${my})`);
-    const labelText = edgeKind.replace('can_','').replace('_',' ');
-    const labelWidth = Math.max(44, labelText.length * 6 + 12);
-    g.append('rect')
-      .attr('x', -labelWidth/2).attr('y', -7).attr('width', labelWidth).attr('height', 14)
-      .attr('rx', 4).attr('fill', '#0d0f1a').attr('fill-opacity', 0.9)
-      .attr('stroke', '#a29bfe40');
-    g.append('text')
-      .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
-      .attr('font-size', '8px').attr('fill', '#a29bfe').attr('font-weight', '700')
-      .text(labelText);
-  });
-
   hideDetailPanel();
   showChainStrip(path);
   fitNodesToView(path.nodes);
@@ -209,7 +164,6 @@ function clearPathHighlight() {
     .style('display', null)
     .style('opacity', null);
   linksLayer.selectAll('path.edge-path').classed('dimmed',false).classed('highlighted',false).classed('path-active',false);
-  linksLayer.selectAll('g.edge-mid-label').attr('display', 'none');
   nodesLayer.selectAll('text.path-step-num').remove();
   nodesLayer.selectAll('g.path-edge-label').remove();
   hideChainStrip();
@@ -670,4 +624,3 @@ function moveTooltip(event) {
   tooltip.style.top  = Math.min(y, window.innerHeight - 80) + 'px';
 }
 function hideTooltip() { tooltip.classList.remove('visible'); }
-

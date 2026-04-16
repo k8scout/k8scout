@@ -255,18 +255,18 @@ function renderGraph() {
 
     // Tier 1: exploitation — full opacity, thick, vivid color
     if (tier === 1) {
-      if (isNodeBreakout) return { stroke: '#ff4757', width: '2.8', dash: null, opacity: 1 };
-      if (d.inferred)     return { stroke: '#ff79c6', width: '2.2', dash: '5,3', opacity: 0.9 };
+      if (isNodeBreakout) return { stroke: '#ff4757', width: '3.3', dash: null, opacity: 1 };
+      if (d.inferred)     return { stroke: '#ff79c6', width: '2.8', dash: '5,3', opacity: 0.9 };
       const col = EDGE_COLORS[d.kind] || '#ff7f50';
-      return { stroke: col, width: '2.4', dash: null, opacity: 1 };
+      return { stroke: col, width: '3.0', dash: null, opacity: 1 };
     }
     // Tier 2: privilege chain — medium opacity, normal width
     if (tier === 2) {
-      if (isSecretExfil) return { stroke: '#ffd166', width: '1.8', dash: '6,3', opacity: 0.8 };
-      return { stroke: EDGE_COLORS[d.kind] || '#7b6fff', width: '1.8', dash: null, opacity: 0.7 };
+      if (isSecretExfil) return { stroke: '#ffd166', width: '2.4', dash: '6,3', opacity: 0.8 };
+      return { stroke: EDGE_COLORS[d.kind] || '#7b6fff', width: '2.3', dash: null, opacity: 0.7 };
     }
     // Tier 3: structural — very subtle, thin
-    return { stroke: '#4a4e5a', width: '0.9', dash: null, opacity: 0.15 };
+    return { stroke: '#4a4e5a', width: '1.5', dash: null, opacity: 0.15 };
   }
 
   // Links (paths for curves)
@@ -305,27 +305,6 @@ function renderGraph() {
       const tgt = typeof d.target === 'object' ? d.target : simNodes[d.target];
       showEdgeDetailPanel(src, tgt, d);
     });
-
-  // Always-on edge mid-labels for tier-1 (direct exploitation) edges
-  let edgeLabelSel;
-  {
-    const t1Edges = simEdges.filter(e => (EDGE_TIER[e.kind]||2) === 1);
-    edgeLabelSel = linksLayer.selectAll('g.edge-mid-label')
-      .data(t1Edges, d => `${edgeNodeId(d.source)}-${d.kind}-${edgeNodeId(d.target)}`)
-      .join(enter => {
-        const g = enter.append('g').attr('class','edge-mid-label').attr('pointer-events','none').attr('display','none');
-        g.append('rect').attr('rx',3).attr('height',12)
-          .attr('fill','rgba(10,10,18,.86)')
-          .attr('stroke','rgba(255,255,255,.07)').attr('stroke-width','0.5');
-        g.append('text')
-          .attr('y',1)
-          .attr('font-size','8.5px').attr('font-weight','700')
-          .attr('font-family',"'Cascadia Code','Fira Code','Consolas',monospace")
-          .attr('fill', d => EDGE_COLORS[d.kind] || '#a29bfe')
-          .text(d => d.kind.replace('can_','').replace(/_/g,' '));
-        return g;
-      });
-  }
 
   // Nodes
   nodeSel = nodesLayer.selectAll('g.node-g')
@@ -579,23 +558,6 @@ function renderGraph() {
     linkSel.attr('d', edgePath);
     nodeSel.attr('transform', d => `translate(${d.x?.toFixed(1)||0},${d.y?.toFixed(1)||0})`);
 
-    // Update edge mid-label positions
-    if (edgeLabelSel) {
-      edgeLabelSel.each(function(d) {
-        const s = typeof d.source === 'object' ? d.source : simNodes[d.source];
-        const t = typeof d.target === 'object' ? d.target : simNodes[d.target];
-        if (!s || !t || s.x == null || t.x == null) return;
-        const mx = ((s.x||0)+(t.x||0))/2;
-        const my = ((s.y||0)+(t.y||0))/2;
-        const el = d3.select(this);
-        el.attr('transform', `translate(${mx.toFixed(1)},${my.toFixed(1)})`);
-        const txtEl = el.select('text').node();
-        const lw = txtEl ? Math.max(40, txtEl.textContent.length * 5.5 + 12) : 48;
-        el.select('rect').attr('x', -lw/2).attr('y', -6).attr('width', lw);
-        el.select('text').attr('x', 0);
-      });
-    }
-
     // Update position map for minimap
     simNodes.forEach(n => { nodePosMap[n.id] = {x: n.x, y: n.y, kind: n.kind, risk: n.risk_score||0}; });
     updateMinimapViewport();
@@ -731,4 +693,3 @@ document.getElementById('minimap').addEventListener('click', () => {
     fitGraph();
   }
 });
-
