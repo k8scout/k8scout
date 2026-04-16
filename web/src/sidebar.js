@@ -244,7 +244,6 @@ function renderAttackPaths() {
       if (source) {
         if (source.kind === 'ServiceAccount') {
           const saRef = `system:serviceaccount:${source.namespace||'default'}:${source.name}`;
-          const tokenCmd = `kubectl exec -it $(kubectl get pods -n ${source.namespace||'default'} -o name | head -1) -n ${source.namespace||'default'} -- cat /var/run/secrets/kubernetes.io/serviceaccount/token`;
           identityBannerHtml = `
             <div class="identity-ctx-banner">
               <div class="identity-ctx-label">Identity — operate as this service account</div>
@@ -266,7 +265,7 @@ function renderAttackPaths() {
         }
       }
 
-      // Attack steps with kubectl commands
+      // Numbered step list — action label header, command below
       let stepsHtml = identityBannerHtml + '<div class="attack-steps-label">Attack Steps</div>';
       path.edges.forEach((edgeKind, i) => {
         const srcNode = nodeById[path.nodes[i]];
@@ -276,7 +275,6 @@ function renderAttackPaths() {
           action: `${edgeKind}: ${srcNode?.name||'?'} → ${tgtNode?.name||'?'}`,
           cmds: [`# ${edgeKind}`]
         };
-        // Determine phase label for this step
         let stepPhaseLabel = '';
         if (phases.initialAccess.nodeId === path.nodes[i]) stepPhaseLabel = 'Initial Access';
         else if (phases.credTheft.present && phases.credTheft.stepIdx === i) stepPhaseLabel = '🔑 Cred Theft';
@@ -284,13 +282,14 @@ function renderAttackPaths() {
         else if (phases.lateralMovement.present && phases.lateralMovement.stepIdx === i) stepPhaseLabel = '↔ Lateral Move';
         if (i === path.edges.length - 1) stepPhaseLabel = (stepPhaseLabel || '') + (stepPhaseLabel ? ' + ' : '') + '💀 Impact';
 
+        const cmdText = info.cmds.join('\n');
         stepsHtml += `
           <div class="attack-step">
             <div class="attack-step-header">
               <div class="step-num">${i+1}</div>
               <div class="step-action">${escHtml(info.action)}${stepPhaseLabel ? `<span style="font-size:9px;color:var(--muted);margin-left:5px;">[${stepPhaseLabel}]</span>` : ''}</div>
             </div>
-            <div class="step-cmd">${escHtml(info.cmds.join('\n'))}<button class="copy-btn" onclick="copyCmd(this)" data-cmd="${encodeURIComponent(info.cmds.join('\n'))}">⧉</button></div>
+            <div class="step-cmd">${escHtml(cmdText)}<button class="copy-btn" onclick="copyCmd(this)" data-cmd="${encodeURIComponent(cmdText)}">⧉</button></div>
           </div>
         `;
       });

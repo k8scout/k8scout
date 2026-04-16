@@ -634,8 +634,7 @@ function getHopAlternatives(srcId, currentTargetId) {
     .slice(0, 4);
 }
 
-function buildHopModels(pathEntry) {
-  const path = pathEntry.path;
+function buildHopModelsFromPath(path) {
   return (path.edges || []).map((edgeKind, idx) => {
     const src = nodeById[path.nodes[idx]];
     const tgt = nodeById[path.nodes[idx + 1]];
@@ -656,6 +655,181 @@ function buildHopModels(pathEntry) {
       info: ATTACK_CMD[edgeKind] ? ATTACK_CMD[edgeKind](src || {}, tgt || {}) : null,
     };
   });
+}
+
+function buildHopModels(pathEntry) {
+  return buildHopModelsFromPath(pathEntry.path);
+}
+
+function stageTagForHop(hop, hopIdx, totalHops, phases) {
+  const tags = [];
+  if (hopIdx === 0) tags.push('Initial Access');
+  if (phases?.credTheft?.present && phases.credTheft.stepIdx === hopIdx) tags.push('Cred Theft');
+  if (phases?.privEsc?.present && phases.privEsc.stepIdx === hopIdx) tags.push('Priv Esc');
+  if (phases?.lateralMovement?.present && phases.lateralMovement.stepIdx === hopIdx) tags.push('Lateral');
+  if (hopIdx === totalHops - 1) tags.push('Impact');
+  return tags.join(' · ');
+}
+
+function playbookFlowHtml(path) {
+  const flowNodes = path.nodes || [];
+  const flowEdges = path.edges || [];
+  const parts = [];
+  flowNodes.forEach((nodeId, idx) => {
+    const node = nodeById[nodeId];
+    const color = NODE_COLORS[node?.kind] || DEFAULT_NODE_COLOR;
+    const label = (node?.name || nodeId || '').split(':').pop();
+    parts.push(
+      `<span class="pp-flow-node" style="border-color:${color}55;color:${color}" title="${escHtml(`${node?.kind || 'Node'} ${label}`)}">
+        <span class="pp-flow-icon">${escHtml(NODE_ICONS[node?.kind] || '•')}</span>
+        <span class="pp-flow-name">${escHtml(label)}</span>
+      </span>`
+    );
+    if (idx < flowNodes.length - 1) {
+      const edgeKind = flowEdges[idx];
+      const edgeColor = EDGE_COLORS[edgeKind] || DEFAULT_EDGE_COLOR;
+      parts.push(
+        `<span class="pp-flow-edge" style="color:${edgeColor}" title="${escHtml(edgeKind || '')}">→<span class="pp-flow-edge-label">${escHtml(edgeKind || '')}</span></span>`
+      );
+    }
+  });
+  return `<div class="pp-flow">${parts.join('')}</div>`;
+}
+
+function playbookOperatorContextHtml(source) {
+  if (!source) return '';
+  if (source.kind === 'ServiceAccount') {
+    const saRef = `system:serviceaccount:${source.namespace || 'default'}:${source.name}`;
+    return `
+      <div class="pp-operator-ctx">
+        <span class="pp-operator-label">Act as</span>
+        <code class="pp-operator-id">${escHtml(saRef)}</code>
+        <button class="pp-operator-copy" data-copy-cmd="${encodeURIComponent(saRef)}" title="Copy identity">⧉</button>
+      </div>`;
+  }
+  if (source.kind === 'Identity') {
+    return `
+      <div class="pp-operator-ctx">
+        <span class="pp-operator-label">Current user</span>
+        <code class="pp-operator-id">${escHtml(source.name || 'current-identity')}</code>
+      </div>`;
+  }
+  return '';
+}
+
+function playbookStepHtml(hop, opts = {}) {
+  const { open = false, stageTag = '', showPivot = false } = opts;
+  const actionInfo = hop.info || { action: hop.edgeKind, cmds: [`# ${hop.edgeKind}`] };
+  const cmdText = actionInfo.cmds.join('\n');
+  const tgtColor = NODE_COLORS[hop.tgt?.kind] || DEFAULT_NODE_COLOR;
+  const edgeColor = EDGE_COLORS[hop.edgeKind] || DEFAULT_EDGE_COLOR;
+  const outcome = outcomeFor(hop);
+  const pivotCount = showPivot ? pivotablePathsFromNode(hop.tgt?.id) : 0;
+  return `
+    <details class="pp-step"${open ? ' open' : ''} data-hop-idx="${hop.idx}" data-focus-id="${escHtml(hop.src?.id || hop.tgt?.id || '')}">
+      <summary class="pp-step-summary">
+        <span class="pp-step-num">${hop.idx + 1}</span>
+        <span class="pp-step-summary-mid">
+          <span class="pp-step-action">${escHtml(actionInfo.action || hop.edgeKind)}</span>
+          <span class="pp-step-summary-tgt" style="border-color:${tgtColor}55;color:${tgtColor}" title="${escHtml(hop.tgt?.kind || '')}: ${escHtml(hop.tgt?.name || '')}">${escHtml(NODE_ICONS[hop.tgt?.kind] || '•')} ${escHtml((hop.tgt?.name || hop.tgt?.id || '?').split(':').pop())}</span>
+        </span>
+        ${stageTag ? `<span class="pp-step-stage">${escHtml(stageTag)}</span>` : ''}
+        <span class="pp-step-edgekind" style="color:${edgeColor}" title="${escHtml(hop.edgeKind)}">${escHtml(hop.edgeKind)}</span>
+        <span class="pp-step-chevron">▾</span>
+      </summary>
+      <div class="pp-step-content">
+        <div class="pp-cmd-wrap">
+          <button class="pp-copy-btn" data-copy-cmd="${encodeURIComponent(cmdText)}">Copy</button>
+          <pre class="pp-cmd">${escHtml(cmdText)}</pre>
+        </div>
+        <div class="pp-outcome">
+          <span class="pp-outcome-arrow">→</span>
+          <span class="pp-outcome-text">${escHtml(outcome)}</span>
+          ${pivotCount > 0 ? `<button class="pp-pivot-btn" data-pivot-name="${escHtml(hop.tgt?.name || '')}" title="Filter Briefing to paths starting from ${escHtml(hop.tgt?.name || '?')}">Pivot here<span class="pp-pivot-count">${pivotCount}</span></button>` : ''}
+        </div>
+        <details class="pp-detail">
+          <summary>
+            <span class="pp-detail-toggle">Why this works · supporting detail</span>
+            <span class="pp-detail-counts">
+              <span class="mini-chip"><strong>${hop.evidence.length}</strong> ev</span>
+              <span class="mini-chip"><strong>${hop.alternatives.length}</strong> alt</span>
+              <span class="mini-chip"><strong>${hop.mitreIds.length}</strong> mitre</span>
+            </span>
+          </summary>
+          <div class="pp-detail-body">
+            <div class="pp-detail-section">
+              <div class="pp-detail-label">Why it works</div>
+              <div class="pp-detail-text">${escHtml(hop.whyItWorks)}</div>
+            </div>
+            <div class="pp-detail-section">
+              <div class="pp-detail-label">Evidence</div>
+              <div class="hop-evidence-list">
+                ${hop.evidence.length ? hop.evidence.map(f => `
+                  <div class="hop-evidence-item">
+                    <strong>${escHtml(f.severity || '?')} · ${escHtml(f.title || f.rule_id || 'Finding')}</strong><br>
+                    ${escHtml((f.description || '').slice(0, 180))}
+                  </div>
+                `).join('') : '<div class="hop-evidence-item">No directly overlapping findings.</div>'}
+              </div>
+            </div>
+            <div class="pp-detail-section">
+              <div class="pp-detail-label">Alternative pivots</div>
+              <div class="hop-alt-list">
+                ${hop.alternatives.length ? hop.alternatives.map(alt => `
+                  <div class="hop-alt-item">
+                    <strong>${escHtml(alt.edgeKind)}</strong> → ${escHtml(alt.target?.kind || '?')} ${escHtml(alt.target?.name || alt.targetId)}
+                    <button class="brief-inline-btn pp-alt-btn" data-alt-path="${alt.pathId}">Focus</button>
+                  </div>
+                `).join('') : '<div class="hop-alt-item">No alternatives cached.</div>'}
+              </div>
+            </div>
+            <div class="pp-detail-section">
+              <div class="pp-detail-label">MITRE · weight ${hop.weight.toFixed(1)} · tier ${hop.tier}</div>
+              <div class="hop-inline-row">
+                ${(hop.mitreIds.length ? hop.mitreIds : ['No MITRE tags']).map(id => `<span class="mitre-chip">${escHtml(id)}</span>`).join('')}
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </details>
+  `;
+}
+
+function attachPlaybookHandlers(rootEl, opts = {}) {
+  if (!rootEl) return;
+  rootEl.querySelectorAll('[data-copy-cmd]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(decodeURIComponent(btn.dataset.copyCmd));
+      const orig = btn.textContent;
+      btn.textContent = '✓';
+      setTimeout(() => { btn.textContent = orig; }, 1200);
+    });
+  });
+  rootEl.querySelectorAll('[data-alt-path]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      route(`/path/${encodeURIComponent(btn.dataset.altPath)}`);
+    });
+  });
+  rootEl.querySelectorAll('[data-pivot-name]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const name = btn.dataset.pivotName || '';
+      location.hash = buildHash('/briefing', name ? { q: name } : {});
+    });
+  });
+  if (opts.onStepSelect) {
+    rootEl.querySelectorAll('.pp-step').forEach(step => {
+      step.addEventListener('click', e => {
+        if (e.target.closest('[data-copy-cmd]') || e.target.closest('[data-alt-path]') || e.target.closest('[data-pivot-name]')) return;
+        const sum = e.target.closest('summary');
+        if (sum && !sum.classList.contains('pp-step-summary')) return;
+        opts.onStepSelect(step.dataset.hopIdx, step.dataset.focusId || '');
+      });
+    });
+  }
 }
 
 function renderPhaseStrip(pathEntry) {
@@ -881,28 +1055,8 @@ function renderPathView() {
   const focusId = pathState.focus || selectedHop?.src?.id || selectedHop?.tgt?.id || '';
   const impact = pathEntry.impact;
   const phasesHtml = renderPhaseStrip(pathEntry);
-
-  const flowNodes = pathEntry.path.nodes || [];
-  const flowEdges = pathEntry.path.edges || [];
-  const flowParts = [];
-  flowNodes.forEach((nodeId, idx) => {
-    const node = nodeById[nodeId];
-    const color = NODE_COLORS[node?.kind] || DEFAULT_NODE_COLOR;
-    const label = (node?.name || nodeId || '').split(':').pop();
-    flowParts.push(
-      `<span class="pp-flow-node" style="border-color:${color}55;color:${color}" title="${escHtml(`${node?.kind || 'Node'} ${label}`)}">
-        <span class="pp-flow-icon">${escHtml(NODE_ICONS[node?.kind] || '•')}</span>
-        <span class="pp-flow-name">${escHtml(label)}</span>
-      </span>`
-    );
-    if (idx < flowNodes.length - 1) {
-      const edgeKind = flowEdges[idx];
-      const edgeColor = EDGE_COLORS[edgeKind] || DEFAULT_EDGE_COLOR;
-      flowParts.push(
-        `<span class="pp-flow-edge" style="color:${edgeColor}" title="${escHtml(edgeKind || '')}">→<span class="pp-flow-edge-label">${escHtml(edgeKind || '')}</span></span>`
-      );
-    }
-  });
+  const phases = classifyPathPhases(pathEntry.path);
+  const operatorHtml = playbookOperatorContextHtml(nodeById[pathEntry.path.nodes[0]]);
 
   routeEl.innerHTML = `
     <div id="path-view">
@@ -919,12 +1073,13 @@ function renderPathView() {
           <span class="pp-meta-chip"><strong>${escHtml(pathEntry.target?.kind || '?')}</strong> target</span>
           <span class="pp-meta-chip"><strong>${pathEntry.mitreIds.length || 0}</strong> MITRE</span>
         </div>
-        <div class="pp-flow">${flowParts.join('')}</div>
+        ${playbookFlowHtml(pathEntry.path)}
         <div class="pp-phase-row">${phasesHtml}</div>
       </div>
 
       <div class="pp-layout">
         <div class="pp-main">
+          ${operatorHtml}
           <div id="pp-storyboard" class="pp-storyboard"></div>
         </div>
         <div class="pp-rail">
@@ -950,110 +1105,13 @@ function renderPathView() {
 
   const storyboard = routeEl.querySelector('#pp-storyboard');
   if (storyboard) {
-    storyboard.innerHTML = hopModels.map(hop => {
-      const actionInfo = hop.info || { action: hop.edgeKind, cmds: [`# ${hop.edgeKind}`] };
-      const cmdText = actionInfo.cmds.join('\n');
-      const isLast = hop.idx === hopModels.length - 1;
-      const isActive = selectedHop?.idx === hop.idx;
-      const srcColor = NODE_COLORS[hop.src?.kind] || DEFAULT_NODE_COLOR;
-      const tgtColor = NODE_COLORS[hop.tgt?.kind] || DEFAULT_NODE_COLOR;
-      const edgeColor = EDGE_COLORS[hop.edgeKind] || DEFAULT_EDGE_COLOR;
-      const pivotCount = pivotablePathsFromNode(hop.tgt?.id);
-      const outcome = outcomeFor(hop);
-      return `
-        <div class="pp-step${isActive ? ' active' : ''}${isLast ? ' last' : ''}" data-hop-idx="${hop.idx}" data-focus-id="${escHtml(hop.src?.id || hop.tgt?.id || '')}">
-          <div class="pp-step-rail">
-            <div class="pp-step-num">${hop.idx + 1}</div>
-            ${isLast ? '' : '<div class="pp-step-line"></div>'}
-          </div>
-          <div class="pp-step-body">
-            <div class="pp-step-head">
-              <span class="pp-step-node" style="border-color:${srcColor}55;color:${srcColor}">${escHtml(NODE_ICONS[hop.src?.kind] || '•')} ${escHtml(hop.src?.name || hop.src?.id || '?')}</span>
-              <span class="pp-step-edge" style="color:${edgeColor};border-color:${edgeColor}55">${escHtml(hop.edgeKind)}</span>
-              <span class="pp-step-node" style="border-color:${tgtColor}55;color:${tgtColor}">${escHtml(NODE_ICONS[hop.tgt?.kind] || '•')} ${escHtml(hop.tgt?.name || hop.tgt?.id || '?')}</span>
-              <span class="pp-step-spacer"></span>
-              ${pivotCount > 0 ? `<button class="pp-pivot-btn" data-pivot-name="${escHtml(hop.tgt?.name || '')}" title="Filter Briefing to paths starting from ${escHtml(hop.tgt?.name || '?')}">Pivot here<span class="pp-pivot-count">${pivotCount}</span></button>` : ''}
-            </div>
-            <div class="pp-cmd-wrap">
-              <button class="pp-copy-btn" data-copy-cmd="${encodeURIComponent(cmdText)}">Copy</button>
-              <pre class="pp-cmd">${escHtml(cmdText)}</pre>
-            </div>
-            <div class="pp-outcome"><span class="pp-outcome-arrow">→</span> ${escHtml(outcome)}</div>
-            <details class="pp-detail">
-              <summary>
-                <span class="pp-detail-toggle">Why this works · supporting detail</span>
-                <span class="pp-detail-counts">
-                  <span class="mini-chip"><strong>${hop.evidence.length}</strong> ev</span>
-                  <span class="mini-chip"><strong>${hop.alternatives.length}</strong> alt</span>
-                  <span class="mini-chip"><strong>${hop.mitreIds.length}</strong> mitre</span>
-                </span>
-              </summary>
-              <div class="pp-detail-body">
-                <div class="pp-detail-section">
-                  <div class="pp-detail-label">Why it works</div>
-                  <div class="pp-detail-text">${escHtml(hop.whyItWorks)}</div>
-                </div>
-                <div class="pp-detail-section">
-                  <div class="pp-detail-label">Evidence</div>
-                  <div class="hop-evidence-list">
-                    ${hop.evidence.length ? hop.evidence.map(f => `
-                      <div class="hop-evidence-item">
-                        <strong>${escHtml(f.severity || '?')} · ${escHtml(f.title || f.rule_id || 'Finding')}</strong><br>
-                        ${escHtml((f.description || '').slice(0, 180))}
-                      </div>
-                    `).join('') : '<div class="hop-evidence-item">No directly overlapping findings.</div>'}
-                  </div>
-                </div>
-                <div class="pp-detail-section">
-                  <div class="pp-detail-label">Alternative pivots</div>
-                  <div class="hop-alt-list">
-                    ${hop.alternatives.length ? hop.alternatives.map(alt => `
-                      <div class="hop-alt-item">
-                        <strong>${escHtml(alt.edgeKind)}</strong> → ${escHtml(alt.target?.kind || '?')} ${escHtml(alt.target?.name || alt.targetId)}
-                        <button class="brief-inline-btn pp-alt-btn" data-alt-path="${alt.pathId}">Focus</button>
-                      </div>
-                    `).join('') : '<div class="hop-alt-item">No alternative pivots cached.</div>'}
-                  </div>
-                </div>
-                <div class="pp-detail-section">
-                  <div class="pp-detail-label">MITRE · weight ${hop.weight.toFixed(1)} · tier ${hop.tier}</div>
-                  <div class="hop-inline-row">
-                    ${(hop.mitreIds.length ? hop.mitreIds : ['No MITRE tags']).map(id => `<span class="mitre-chip">${escHtml(id)}</span>`).join('')}
-                  </div>
-                </div>
-              </div>
-            </details>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    storyboard.querySelectorAll('[data-hop-idx]').forEach(card => {
-      card.addEventListener('click', e => {
-        if (e.target.closest('[data-copy-cmd]') || e.target.closest('[data-alt-path]') || e.target.closest('[data-pivot-name]') || e.target.closest('summary')) return;
-        updateRouteQuery({ hop: card.dataset.hopIdx, focus: card.dataset.focusId || '' }, currentRoute.path);
-      });
-    });
-    storyboard.querySelectorAll('[data-copy-cmd]').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        navigator.clipboard.writeText(decodeURIComponent(btn.dataset.copyCmd));
-        btn.textContent = 'Copied';
-        setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
-      });
-    });
-    storyboard.querySelectorAll('[data-alt-path]').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        route(`/path/${encodeURIComponent(btn.dataset.altPath)}`);
-      });
-    });
-    storyboard.querySelectorAll('[data-pivot-name]').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const name = btn.dataset.pivotName || '';
-        location.hash = buildHash('/briefing', name ? { q: name } : {});
-      });
+    storyboard.innerHTML = hopModels.map(hop => playbookStepHtml(hop, {
+      open: selectedHop?.idx === hop.idx,
+      stageTag: stageTagForHop(hop, hop.idx, hopModels.length, phases),
+      showPivot: true,
+    })).join('');
+    attachPlaybookHandlers(routeEl.querySelector('.pp-main'), {
+      onStepSelect: (hopIdx, focus) => updateRouteQuery({ hop: hopIdx, focus }, currentRoute.path),
     });
   }
 
