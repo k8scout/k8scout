@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="520" alt="k8scout logo" src="./web/img/k8scout_logo.png" />
+  <img width="340" alt="k8scout logo" src="./web/img/k8scout_logo.png" />
 </p>
 <p align="center">
   <img alt="GitHub stars" src="https://img.shields.io/github/stars/k8scout/k8scout?style=flat" />
@@ -12,8 +12,6 @@
 > **Beta** — A single-binary Kubernetes attack path engine for authorized security assessments.
 
 Drop it into a compromised pod, run it, and get a map of every realistic escalation path — from your current foothold to cluster-admin, node access, secret theft, and cloud IAM roles.
-
-> **Intended use**: Penetration testing engagements, red team operations, internal security reviews, and cluster hardening audits. Always obtain proper authorization before running against any cluster.
 
 ---
 
@@ -68,6 +66,8 @@ kubectl cp <ns>/<pod>:/tmp/result.json ./result.json
 ```
 
 The binary auto-detects it's running in-cluster, identifies the pod and SA, and starts pathfinding from your exact foothold.
+
+> **Intended use**: Penetration testing engagements, red team operations, internal security reviews, and cluster hardening audits. Always obtain proper authorization before running against any cluster.
 
 ### From your local machine
 
