@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="520" alt="k8scout logo" src="./web/img/k8scout_logo.png" />
+  <img width="340" alt="k8scout logo" src="./web/img/k8scout_logo.png" />
 </p>
 <p align="center">
   <img alt="GitHub stars" src="https://img.shields.io/github/stars/k8scout/k8scout?style=flat" />
