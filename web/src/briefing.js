@@ -857,6 +857,8 @@ function renderPathView() {
     return;
   }
 
+  const prevScrollTop = routeEl.querySelector('.pp-main')?.scrollTop ?? 0;
+
   const pathEntry = dataLayer.pathsById[currentRoute?.params?.id];
   if (!pathEntry) {
     routeEl.innerHTML = `
@@ -942,6 +944,9 @@ function renderPathView() {
 
   routeEl.querySelector('#path-back-btn')?.addEventListener('click', () => route('/briefing'));
   routeEl.querySelector('#path-explore-btn')?.addEventListener('click', () => route(`/explore?scope=${encodeURIComponent(`path:${pathEntry.id}`)}&path=${encodeURIComponent(pathEntry.id)}`));
+
+  const mainScrollEl = routeEl.querySelector('.pp-main');
+  if (mainScrollEl && prevScrollTop) mainScrollEl.scrollTop = prevScrollTop;
 
   const storyboard = routeEl.querySelector('#pp-storyboard');
   if (storyboard) {
