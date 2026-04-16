@@ -13,13 +13,18 @@ const loadingText  = document.getElementById('loading-text');
 const progressFill = document.getElementById('progress-fill');
 const exploreScopeBtn = document.getElementById('explore-scope-btn');
 const exploreFullToggleBtn = document.getElementById('explore-full-toggle-btn');
+const openFileBtn = document.getElementById('open-file-btn');
+const briefingBtn = document.getElementById('briefing-btn');
+const crossnsBtn = document.getElementById('crossns-btn');
+const focusBtn = document.getElementById('focus-btn');
 
-document.getElementById('open-file-btn').addEventListener('click', () => fileInput.click());
+openFileBtn?.addEventListener('click', () => fileInput.click());
+briefingBtn?.addEventListener('click', () => route('/briefing'));
 document.getElementById('drop-open-file-btn')?.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
 window.addEventListener('hashchange', handleRouteChange);
 handleRouteChange();
-exploreScopeBtn?.addEventListener('click', () => route('/explore'));
+exploreScopeBtn?.addEventListener('click', () => updateRouteQuery({ scope: '', confirm: '' }, '/explore'));
 exploreFullToggleBtn?.addEventListener('click', () => updateRouteQuery({ scope: 'full', confirm: '' }, '/explore'));
 
 const RBAC_KINDS = new Set(['ClusterRole','Role','ClusterRoleBinding','RoleBinding']);
@@ -34,7 +39,6 @@ rbacBtn.addEventListener('click', () => {
   applyRbacVisibility();
 });
 
-const focusBtn = document.getElementById('focus-btn');
 focusBtn.addEventListener('click', () => {
   focusMode = !focusMode;
   focusBtn.classList.toggle('active', focusMode);
@@ -543,4 +547,3 @@ function ingestData(raw, nodes, edges) {
     renderGodPanel();
   }
 }
-

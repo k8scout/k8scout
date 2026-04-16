@@ -70,11 +70,6 @@ function parseServiceAccountRef(username) {
   return m ? { namespace: m[1], name: m[2] } : null;
 }
 
-function formatFootholdValue(value) {
-  if (value == null || value === '') return '<span class="foothold-value muted">Unknown</span>';
-  return `<span class="foothold-value">${escHtml(String(value))}</span>`;
-}
-
 function extractFoothold(raw, graph, byId) {
   const identity = raw?.identity || {};
   const saRef = {
@@ -137,38 +132,46 @@ function renderFootholdHeader() {
   if (!header) return;
 
   const foothold = dataLayer.foothold;
-  if (!foothold || !graphData) {
+  const routeName = currentRoute?.name || 'briefing';
+  if (!foothold || !graphData || routeName === 'explore') {
     header.classList.remove('visible');
     header.innerHTML = '';
     return;
   }
 
-  const routeName = currentRoute?.name || 'briefing';
+  const chips = [
+    foothold.pod        ? ['Pod', foothold.pod] : null,
+    foothold.workload   ? ['Wkld', foothold.workload] : null,
+    foothold.serviceAccount ? ['SA', foothold.serviceAccount] : null,
+    foothold.namespace  ? ['NS', foothold.namespace] : null,
+    foothold.node       ? ['Node', foothold.node] : null,
+    foothold.cloudIdentity ? ['Cloud', foothold.cloudIdentity] : null,
+  ].filter(Boolean);
+
+  const chipsHtml = chips.map(([label, value]) =>
+    `<span class="fh-chip" title="${escHtml(label)}: ${escHtml(value)}"><span class="fh-chip-label">${escHtml(label)}</span> ${escHtml(value)}</span>`
+  ).join('');
 
   header.innerHTML = `
-    <div class="foothold-top">
-      <div class="foothold-title-wrap">
-        <div class="foothold-kicker">Foothold</div>
-        <div class="foothold-title">${escHtml(foothold.username || 'Current identity')}</div>
-        <div class="foothold-subtitle">Current operator context detected from the report. This stays stable across routes so later briefing and path views can pivot without rebuilding the graph.</div>
-      </div>
-      <div class="foothold-status">
-        <div class="foothold-actions">
-          <button class="fh-action-btn" id="fh-scan-details">Scan details</button>
-          <button class="fh-action-btn" id="fh-open-json">Open JSON</button>
-          <button class="fh-action-btn" id="fh-export-report"${rawGraphData ? '' : ' disabled'}>Export HTML</button>
-          <button class="fh-action-btn${routeName === 'briefing' ? ' primary' : ''}" id="fh-briefing-btn"${routeName === 'briefing' ? ' disabled' : ''}>Briefing</button>
-          <button class="fh-action-btn${routeName === 'explore' ? ' primary' : ''}" id="fh-explore-btn"${routeName === 'explore' ? ' disabled' : ''}>Explore</button>
+    <div class="fh-compact-row">
+      <div class="fh-identity">
+        <div class="fh-brand app-brand">
+          <img class="app-brand-logo" src="../k8scout_logo.png?v=1776347433" alt="k8scout logo">
+          <span class="app-brand-wordmark">k8scout</span>
         </div>
+        <span class="fh-sep fh-sep-inline"></span>
+        <span class="fh-kicker">Foothold</span>
+        <span class="fh-username" title="${escHtml(foothold.username || 'Current identity')}">${escHtml(foothold.username || 'Current identity')}</span>
+        ${chipsHtml}
       </div>
-    </div>
-    <div class="foothold-grid">
-      <div class="foothold-card"><div class="foothold-label">Pod</div>${formatFootholdValue(foothold.pod)}</div>
-      <div class="foothold-card"><div class="foothold-label">Workload</div>${formatFootholdValue(foothold.workload)}</div>
-      <div class="foothold-card"><div class="foothold-label">Service Account</div>${formatFootholdValue(foothold.serviceAccount)}</div>
-      <div class="foothold-card"><div class="foothold-label">Namespace</div>${formatFootholdValue(foothold.namespace)}</div>
-      <div class="foothold-card"><div class="foothold-label">Node</div>${formatFootholdValue(foothold.node)}</div>
-      <div class="foothold-card"><div class="foothold-label">Cloud Identity</div>${formatFootholdValue(foothold.cloudIdentity)}</div>
+      <div class="fh-toolbar">
+        <button class="fh-action-btn" id="fh-scan-details">Scan</button>
+        <button class="fh-action-btn" id="fh-open-json">JSON</button>
+        <button class="fh-action-btn" id="fh-export-report"${rawGraphData ? '' : ' disabled'}>Export</button>
+        <span class="fh-sep"></span>
+        <button class="fh-action-btn${routeName === 'briefing' ? ' primary' : ''}" id="fh-briefing-btn"${routeName === 'briefing' ? ' disabled' : ''}>Briefing</button>
+        <button class="fh-action-btn" id="fh-explore-btn">Explore</button>
+      </div>
     </div>
   `;
   header.classList.add('visible');
@@ -321,4 +324,3 @@ function updateRouteQuery(patch, pathOverride) {
   });
   location.hash = buildHash(nextPath, nextQuery);
 }
-

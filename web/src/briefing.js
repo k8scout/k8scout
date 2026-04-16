@@ -198,16 +198,25 @@ function rebuildPathIndices() {
     pathRows.push(entry);
   });
 
-  Object.values(pathsByImpact).forEach(items => {
-    items.sort((a, b) => {
-      if (b.impact.score !== a.impact.score) return b.impact.score - a.impact.score;
-      return a.path.nodes.length - b.path.nodes.length;
-    });
+  const footholdIds = new Set(getFootholdSourceIds());
+  const hasFoothold = footholdIds.size > 0;
+  pathRows.forEach(row => {
+    row.footholdRooted = hasFoothold && footholdIds.has(row.path.nodes[0]);
   });
-  pathRows.sort((a, b) => {
-    if (b.impact.score !== a.impact.score) return b.impact.score - a.impact.score;
-    return a.path.nodes.length - b.path.nodes.length;
-  });
+
+  const sortPaths = hasFoothold
+    ? (a, b) => {
+        if (a.footholdRooted !== b.footholdRooted) return a.footholdRooted ? -1 : 1;
+        if (b.impact.score !== a.impact.score) return b.impact.score - a.impact.score;
+        return a.path.nodes.length - b.path.nodes.length;
+      }
+    : (a, b) => {
+        if (b.impact.score !== a.impact.score) return b.impact.score - a.impact.score;
+        return a.path.nodes.length - b.path.nodes.length;
+      };
+
+  Object.values(pathsByImpact).forEach(items => items.sort(sortPaths));
+  pathRows.sort(sortPaths);
 
   dataLayer.pathsById = pathsById;
   dataLayer.pathsByImpact = pathsByImpact;
@@ -227,6 +236,7 @@ function getBriefingFilterState() {
     impact: query.impact || '',
     ns: query.ns || '',
     target: query.target || '',
+    pathTab: query.pathTab || '',
   };
 }
 
@@ -354,27 +364,112 @@ function renderBriefing() {
   const filteredRows = getFilteredBriefingRows(filters);
   const options = getBriefingFilterOptions();
   const buckets = getBriefingImpactBuckets(allRows);
+  const foothold = dataLayer.foothold;
+  const hasFoothold = foothold && foothold.serviceAccountId;
 
-  routeEl.innerHTML = `
+  const footholdRows = [];
+  const otherRows = [];
+  if (hasFoothold) {
+    filteredRows.forEach(row => (row.footholdRooted ? footholdRows : otherRows).push(row));
+  } else {
+    otherRows.push(...filteredRows);
+  }
+  const hasOtherTab = hasFoothold && otherRows.length > 0;
+  const activePathTab = hasFoothold
+    ? ((filters.pathTab === 'other' && hasOtherTab) ? 'other' : 'foothold')
+    : 'all';
+  const activeTabRows = activePathTab === 'other' ? otherRows : footholdRows;
+  const activeTabLabel = activePathTab === 'other' ? 'Other Cluster Paths' : 'Paths From This Foothold';
+  const activeTabCount = activeTabRows.length;
+
+  const summaryHtml = `
+    <div id="brief-impact-grid" class="impact-grid${hasFoothold ? ' impact-grid-inline' : ''}"></div>
+  `;
+
+  const filterBarHtml = `
+    <div class="brief-filter-bar">
+      <input id="brief-search" class="brief-input" type="text" value="${escHtml(filters.q)}" placeholder="Search paths...">
+      <select id="brief-namespace-filter" class="brief-select">
+        <option value="">All namespaces</option>
+        ${options.namespaces.map(ns => `<option value="${escHtml(ns)}"${filters.ns === ns ? ' selected' : ''}>${escHtml(ns)}</option>`).join('')}
+      </select>
+      <select id="brief-target-filter" class="brief-select">
+        <option value="">Target type</option>
+        ${options.targetKinds.map(kind => `<option value="${escHtml(kind)}"${filters.target === kind ? ' selected' : ''}>${escHtml(kind)}</option>`).join('')}
+      </select>
+    </div>
+  `;
+
+  routeEl.innerHTML = hasFoothold ? `
+    <div id="briefing-view" class="fh-mode">
+      <div class="fh-layout">
+        <div class="fh-sidebar">
+          <div class="brief-card fh-summary-card">
+            <div class="brief-card-head">
+              <div class="brief-card-title">Summary</div>
+              <button class="brief-inline-btn" id="brief-clear-impact">Clear filter</button>
+            </div>
+            <div class="brief-card-body">${summaryHtml}</div>
+          </div>
+          <details class="brief-analyzer-collapse fh-analyzer-card">
+            <summary>
+              <span>Analyze From A Different Identity</span>
+            </summary>
+            <div class="brief-analyzer-collapse-body">
+              <div class="brief-analyzer-sub">Pivot off the initial foothold using the cluster-wide chain analyzer.</div>
+              <div id="brief-analyzer-slot" class="brief-analyzer-slot"></div>
+            </div>
+          </details>
+        </div>
+        <div class="fh-main">
+          <div class="brief-card scroll-card" style="flex:1;">
+            <div class="brief-card-head">
+              <div>
+                <div class="brief-card-title">${activeTabLabel} <span class="brief-meta" style="display:inline;margin-left:8px;">${activeTabCount} paths</span></div>
+              </div>
+              <div class="brief-path-actions">
+                <button class="brief-btn" id="brief-open-json-inline">Open JSON</button>
+                <button class="brief-btn primary" id="brief-explore-inline">Explore</button>
+              </div>
+            </div>
+            ${hasOtherTab ? `
+              <div class="brief-path-tabs">
+                <button class="brief-path-tab${activePathTab === 'foothold' ? ' active' : ''}" data-path-tab="foothold">
+                  From Foothold
+                  <span class="brief-path-tab-count">${footholdRows.length}</span>
+                </button>
+                <button class="brief-path-tab${activePathTab === 'other' ? ' active' : ''}" data-path-tab="other">
+                  Other Cluster Paths
+                  <span class="brief-path-tab-count">${otherRows.length}</span>
+                </button>
+              </div>
+            ` : ''}
+            ${filterBarHtml}
+            <div class="brief-list-meta">
+              <span>${activePathTab === 'other' ? `${activeTabCount} other-cluster paths` : `${activeTabCount} foothold-rooted paths`}</span>
+            </div>
+            <div id="brief-path-list" class="brief-path-list-host"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  ` : `
     <div id="briefing-view">
       <div class="briefing-grid">
         <div class="briefing-left">
           <div class="brief-card">
             <div class="brief-card-head">
-              <div class="brief-card-title">Impact Buckets</div>
+              <div class="brief-card-title">Summary</div>
               <button class="brief-inline-btn" id="brief-clear-impact">Clear filter</button>
             </div>
-            <div class="brief-card-body">
-              <div id="brief-impact-grid" class="impact-grid"></div>
-            </div>
+            <div class="brief-card-body">${summaryHtml}</div>
           </div>
           <details class="brief-analyzer-collapse">
             <summary>
               <span>Analyze From A Different Identity</span>
-              <span class="brief-meta">Inline identity analyzer</span>
             </summary>
             <div class="brief-analyzer-collapse-body">
-              <div class="brief-analyzer-sub">Reuse the existing cluster-wide chain analyzer and AI narrative tooling here when you need to pivot off the initial foothold. It stays available, but no longer competes with the primary briefing scan path.</div>
+              <div class="brief-analyzer-sub">Pivot off the initial foothold using the cluster-wide chain analyzer.</div>
               <div id="brief-analyzer-slot" class="brief-analyzer-slot"></div>
             </div>
           </details>
@@ -384,27 +479,15 @@ function renderBriefing() {
             <div class="brief-card-head">
               <div>
                 <div class="brief-card-title">Top Attack Paths</div>
-                <div class="brief-meta">Virtualized list. The full graph stays behind Explore.</div>
               </div>
               <div class="brief-path-actions">
                 <button class="brief-btn" id="brief-open-json-inline">Open JSON</button>
-                <button class="brief-btn primary" id="brief-explore-inline">Explore full graph</button>
+                <button class="brief-btn primary" id="brief-explore-inline">Explore</button>
               </div>
             </div>
-            <div class="brief-filter-bar">
-              <input id="brief-search" class="brief-input" type="text" value="${escHtml(filters.q)}" placeholder="Search narrative, nodes, or edge kinds">
-              <select id="brief-namespace-filter" class="brief-select">
-                <option value="">All namespaces</option>
-                ${options.namespaces.map(ns => `<option value="${escHtml(ns)}"${filters.ns === ns ? ' selected' : ''}>${escHtml(ns)}</option>`).join('')}
-              </select>
-              <select id="brief-target-filter" class="brief-select">
-                <option value="">Target type</option>
-                ${options.targetKinds.map(kind => `<option value="${escHtml(kind)}"${filters.target === kind ? ' selected' : ''}>${escHtml(kind)}</option>`).join('')}
-              </select>
-            </div>
+            ${filterBarHtml}
             <div class="brief-list-meta">
               <span>${filteredRows.length} of ${allRows.length} paths</span>
-              <span>Route state is reflected in the URL.</span>
             </div>
             <div id="brief-path-list" class="brief-path-list-host"></div>
           </div>
@@ -431,8 +514,11 @@ function renderBriefing() {
       });
     });
   }
-
   routeEl.querySelector('#brief-clear-impact')?.addEventListener('click', () => updateRouteQuery({ impact: '' }, '/briefing'));
+  routeEl.querySelectorAll('[data-path-tab]').forEach(btn => {
+    btn.addEventListener('click', () => updateRouteQuery({ pathTab: btn.dataset.pathTab }, '/briefing'));
+  });
+
   routeEl.querySelector('#brief-open-json-inline')?.addEventListener('click', () => fileInput.click());
   routeEl.querySelector('#brief-explore-inline')?.addEventListener('click', () => route('/explore'));
 
@@ -447,36 +533,50 @@ function renderBriefing() {
   wireInput('#brief-target-filter', 'target');
   mountIdentityAnalyzer(routeEl.querySelector('#brief-analyzer-slot'));
 
-  const pathListHost = routeEl.querySelector('#brief-path-list');
-  mountVirtualList(pathListHost, filteredRows, {
-    rowHeight: window.innerWidth < 760 ? 116 : 106,
-    overscan: 8,
-    renderRow: row => `
-      <div class="brief-path-card" data-path-id="${row.id}">
-        <div class="brief-path-top">
-          <div>
-            <div class="brief-path-title">
-              <span class="sev-badge ${row.severity}">${row.severity}</span>
-              <span>${escHtml(row.impact.label)}</span>
-              <span class="mini-chip"><strong>Hops</strong> ${row.hopCount}</span>
-            </div>
+  const renderPathRow = row => `
+    <div class="brief-path-card" data-path-id="${row.id}">
+      <div class="brief-path-top">
+        <div>
+          <div class="brief-path-title">
+            <span class="sev-badge ${row.severity}">${row.severity}</span>
+            <span>${escHtml(row.impact.label)}</span>
+            <span class="mini-chip"><strong>Hops</strong> ${row.hopCount}</span>
           </div>
-          <button class="brief-inline-btn" data-open-path="${row.id}">Open path</button>
         </div>
-        <div class="chain-stamp">${chainStampHtml(row.path)}</div>
+        <button class="brief-inline-btn" data-open-path="${row.id}">Open</button>
       </div>
-    `,
+      <div class="chain-stamp">${chainStampHtml(row.path)}</div>
+    </div>
+  `;
+
+  const rowHeight = window.innerWidth < 760 ? 116 : 106;
+  const primaryRows = hasFoothold ? activeTabRows : filteredRows;
+
+  const pathListHost = routeEl.querySelector('#brief-path-list');
+  mountVirtualList(pathListHost, primaryRows, {
+    rowHeight,
+    overscan: 8,
+    renderRow: renderPathRow,
+    emptyHtml: hasFoothold
+      ? (activePathTab === 'other'
+          ? '<div class="brief-list-empty">No other cluster paths match the current filters.</div>'
+          : '<div class="brief-list-empty">No paths start from this foothold identity. Switch tabs or use a different identity.</div>')
+      : '<div class="brief-list-empty">No paths match the current filters.</div>',
   });
-  pathListHost?.addEventListener('click', e => {
-    const openBtn = e.target.closest('[data-open-path]');
-    if (openBtn) {
-      e.stopPropagation();
-      route(`/path/${encodeURIComponent(openBtn.dataset.openPath)}`);
-      return;
-    }
-    const card = e.target.closest('.brief-path-card[data-path-id]');
-    if (card) route(`/path/${encodeURIComponent(card.dataset.pathId)}`);
-  });
+
+  const wirePathClicks = host => {
+    host?.addEventListener('click', e => {
+      const openBtn = e.target.closest('[data-open-path]');
+      if (openBtn) {
+        e.stopPropagation();
+        route(`/path/${encodeURIComponent(openBtn.dataset.openPath)}`);
+        return;
+      }
+      const card = e.target.closest('.brief-path-card[data-path-id]');
+      if (card) route(`/path/${encodeURIComponent(card.dataset.pathId)}`);
+    });
+  };
+  wirePathClicks(pathListHost);
 }
 
 function getPathRouteState() {
@@ -927,7 +1027,9 @@ function getScopedExplorePathIndex() {
 
 function updateExploreScopedChrome() {
   const pathFocused = isPathFocusedExploreMode();
-  document.body.dataset.exploreMode = pathFocused ? 'path-focus' : '';
+  const state = getExploreRouteState();
+  const fullGraph = currentRoute?.name === 'explore' && state.scope === 'full';
+  document.body.dataset.exploreMode = pathFocused ? 'path-focus' : (fullGraph ? 'full-graph' : '');
   if (!pathFocused) return;
   document.querySelectorAll('.tab').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === 'paths'));
   document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.toggle('active', panel.id === 'tab-paths'));
@@ -1024,13 +1126,18 @@ function hideExploreGate() {
 }
 
 function updateExploreToolbar() {
-  if (!exploreScopeBtn || !exploreFullToggleBtn) return;
+  if (!exploreScopeBtn || !exploreFullToggleBtn || !crossnsBtn || !focusBtn || !briefingBtn) return;
   const inExplore = currentRoute?.name === 'explore' && !!graphData;
-  exploreScopeBtn.style.display = inExplore ? '' : 'none';
-  exploreFullToggleBtn.style.display = inExplore ? '' : 'none';
+  const scope = getExploreRouteState().scope || '';
+  const isFullGraph = inExplore && scope === 'full';
+
+  briefingBtn.style.display = inExplore ? '' : 'none';
+  exploreScopeBtn.style.display = inExplore && !isFullGraph ? '' : 'none';
+  exploreFullToggleBtn.style.display = inExplore && !isFullGraph ? '' : 'none';
+  crossnsBtn.style.display = inExplore && !isFullGraph ? '' : 'none';
+  focusBtn.style.display = inExplore && !isFullGraph ? '' : 'none';
   if (!inExplore) return;
 
-  const scope = getExploreRouteState().scope || '';
   if (scope.startsWith('ns:')) {
     exploreScopeBtn.textContent = `🧭 ${scope.slice(3)}`;
   } else if (scope.startsWith('path:')) {
@@ -1068,6 +1175,8 @@ function destroyExplore() {
 
 function renderExploreScopePicker() {
   hideLoading();
+  const state = getExploreRouteState();
+  const hasPathReturn = !!state.pathId && !!dataLayer.pathsById[state.pathId];
   const namespaces = [...new Set(dataLayer.nodes.map(node => node.namespace).filter(Boolean))].sort();
   updateExploreToolbar();
   renderExploreGate(
@@ -1080,6 +1189,7 @@ function renderExploreScopePicker() {
       }).join('')}
     </div>`,
     `
+      ${hasPathReturn ? '<button class="brief-btn" id="explore-back-path">Back to Path Graph</button>' : ''}
       <button class="brief-btn" id="explore-back-briefing">Back to Briefing</button>
       <button class="brief-btn primary" id="explore-full-btn">Load full cluster graph${dataLayer.nodes.length > FULL_GRAPH_WARNING_THRESHOLD ? ' (warning)' : ''}</button>
     `
@@ -1088,12 +1198,16 @@ function renderExploreScopePicker() {
   document.querySelectorAll('[data-explore-ns]').forEach(btn => {
     btn.addEventListener('click', () => updateRouteQuery({ scope: `ns:${btn.dataset.exploreNs}`, confirm: '' }, '/explore'));
   });
+  document.getElementById('explore-back-path')?.addEventListener('click', () => {
+    updateRouteQuery({ scope: `path:${state.pathId}`, path: state.pathId, confirm: '' }, '/explore');
+  });
   document.getElementById('explore-back-briefing')?.addEventListener('click', () => route('/briefing'));
   document.getElementById('explore-full-btn')?.addEventListener('click', () => updateRouteQuery({ scope: 'full', confirm: '' }, '/explore'));
 }
 
 function renderFullGraphWarning() {
   hideLoading();
+  const state = getExploreRouteState();
   updateExploreToolbar();
   renderExploreGate(
     'Full Cluster Graph Warning',
@@ -1104,7 +1218,7 @@ function renderFullGraphWarning() {
       <button class="brief-btn primary" id="explore-warning-continue">Load full graph</button>
     `
   );
-  document.getElementById('explore-warning-back')?.addEventListener('click', () => route('/explore'));
+  document.getElementById('explore-warning-back')?.addEventListener('click', () => updateRouteQuery({ scope: '', confirm: '' }, '/explore'));
   document.getElementById('explore-warning-continue')?.addEventListener('click', () => updateRouteQuery({ confirm: '1' }, '/explore'));
 }
 
@@ -1201,4 +1315,3 @@ function renderCurrentRoute() {
 
 onRouteChange(renderCurrentRoute);
 renderCurrentRoute();
-

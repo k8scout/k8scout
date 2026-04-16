@@ -239,18 +239,6 @@ function renderAttackPaths() {
         : buildPhaseRow(phases);
       const shapeBadge = chainShapeBadge(path._chainShape);
 
-      // Chain chips
-      let chainHtml = '';
-      path.nodes.forEach((nid, i) => {
-        const n    = nodeById[nid];
-        const col2 = n ? (CATEGORY_COLORS[securityCategory(n)] || DEFAULT_NODE_COLOR) : DEFAULT_NODE_COLOR;
-        const label = n ? (n.name || nid).split(':').pop() : nid;
-        chainHtml += `<span class="path-node-chip" style="background:${col2}20;color:${col2};border:1px solid ${col2}40">${escHtml(label)}</span>`;
-        if (i < path.nodes.length - 1) {
-          chainHtml += `<span class="path-arrow">›</span><span class="path-edge-badge">${escHtml(path.edges[i])}</span><span class="path-arrow">›</span>`;
-        }
-      });
-
       // Identity context banner — shows which SA/user to operate as
       let identityBannerHtml = '';
       if (source) {
@@ -333,7 +321,6 @@ function renderAttackPaths() {
         <div class="path-label">${escHtml(narrative)}</div>
         ${phaseHtml}
         <div class="path-steps">
-          <div style="margin-bottom:8px;">${chainHtml}</div>
           ${stepsHtml}
         </div>
       `;
@@ -436,4 +423,3 @@ window.copyCmd = function(btn) {
     setTimeout(() => { btn.textContent = '⧉'; }, 1500);
   });
 };
-
