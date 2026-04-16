@@ -149,6 +149,18 @@ func Enumerate(ctx context.Context, c *Client, opts EnumerateOptions) (*Enumerat
 	}
 	result.ClusterObjects.Nodes = nodes
 
+	// ── Kubelet port probe (offensive mode only) ──────────────────────────────
+	if opts.ProbeKubelet {
+		log.Info("probing kubelet read-only port on known nodes (port 10255)")
+		result.ClusterObjects.KubeletProbes = probeKubeletReadOnly(ctx, nodes, log)
+		result.AuditFootprint = append(result.AuditFootprint, AuditEntry{
+			Action:     "Kubelet read-only port probe (port 10255, unauthenticated GET /healthz per node)",
+			Count:      len(result.ClusterObjects.KubeletProbes),
+			Skipped:    false,
+			NoiseLevel: "low",
+		})
+	}
+
 	// ── Admission Webhooks ────────────────────────────────────────────────────
 	log.Info("collecting admission webhook configurations")
 	webhooks, err := collectWebhooks(ctx, c, log)

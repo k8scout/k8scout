@@ -155,6 +155,13 @@ func allRules() []inferenceRule {
 		ruleVaultOperatorAbuse(),
 		ruleWebhookIgnorePolicy(),
 		ruleWebhookNamespaceGap(),
+		// Improvement batch.
+		ruleNonResourceURLPrivesc(),
+		ruleCRDPermissions(),
+		ruleOrphanedSATokens(),
+		ruleDanglingRoleBindings(),
+		ruleKubeletExposed(),
+		rulePriorityClassAbuse(),
 	}
 }
 
@@ -521,8 +528,20 @@ func ruleHostPathMounts() inferenceRule {
 			var evidence []string
 			var nodes []string
 			seen := map[string]bool{}
-			check := func(paths []string, label string) {
+
+			// isReadOnly returns true when path is in the read-only mount list.
+			isReadOnly := func(path string, roPaths []string) bool {
+				for _, ro := range roPaths {
+					if ro == path {
+						return true
+					}
+				}
+				return false
+			}
+
+			check := func(paths []string, roPaths []string, label string) {
 				for _, p := range paths {
+					ro := isReadOnly(p, roPaths)
 					tag := ""
 					for _, cp := range criticalPaths {
 						if p == cp.prefix || strings.HasPrefix(p, cp.prefix+"/") {
@@ -533,32 +552,50 @@ func ruleHostPathMounts() inferenceRule {
 					if tag == "" {
 						for _, hp := range highPaths {
 							if p == hp || strings.HasPrefix(p, hp+"/") {
-								tag = "HIGH: sensitive host path"
+								if ro {
+									// Read-only sensitive paths are informational, not escape vectors.
+									tag = "INFO: sensitive host path (read-only)"
+								} else {
+									tag = "HIGH: sensitive host path (writable)"
+								}
 								break
 							}
 						}
+					} else if ro {
+						// Even critical socket paths are downgraded when read-only.
+						tag = strings.Replace(tag, "CRITICAL", "HIGH (read-only)", 1)
 					}
 					if tag != "" {
 						evidence = append(evidence, fmt.Sprintf("%s mounts %q [%s]", label, p, tag))
 						if !seen[label] {
 							seen[label] = true
-							nodes = append(nodes, label)
+							// Only add as affected node for writable or critical-even-if-RO paths.
+							if !strings.Contains(tag, "INFO:") {
+								nodes = append(nodes, label)
+							}
 						}
 					}
 				}
 			}
 			for _, wl := range r.ClusterObjects.Workloads {
-				check(wl.HostPathMounts, "workload:"+wl.Namespace+":"+wl.Name)
+				check(wl.HostPathMounts, wl.ReadOnlyHostPaths, "workload:"+wl.Namespace+":"+wl.Name)
 			}
 			for _, pod := range r.ClusterObjects.Pods {
-				check(pod.HostPathMounts, "pod:"+pod.Namespace+":"+pod.Name)
+				check(pod.HostPathMounts, pod.ReadOnlyHostPaths, "pod:"+pod.Namespace+":"+pod.Name)
 			}
 			if len(evidence) == 0 {
 				return "", nil, nil
 			}
-			return fmt.Sprintf("%d workload(s)/pod(s) mount sensitive hostPath volumes. "+
-				"These grant containers read/write access to host filesystem paths, "+
-				"enabling credential theft or container escape.", len(nodes)), evidence, nodes
+			writableCount := 0
+			for _, ev := range evidence {
+				if !strings.Contains(ev, "read-only") {
+					writableCount++
+				}
+			}
+			desc := fmt.Sprintf("%d hostPath volume issue(s) found (%d writable). "+
+				"Writable mounts to sensitive host paths enable credential theft or container escape.",
+				len(evidence), writableCount)
+			return desc, evidence, nodes
 		},
 	}
 }
@@ -634,16 +671,41 @@ func ruleWildcardVerbs() inferenceRule {
 • Audit each ClusterRole/Role with wildcards and replace with minimal permission sets.
 • Use 'kubectl auth reconcile' to diff and apply minimal RBAC manifests.`,
 		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			// sensitiveResources are the only ones where a wildcard verb or resource
+			// grant is genuinely dangerous. Wildcards on events, endpoints, or namespaces
+			// are noisy but not directly exploitable for privilege escalation.
+			sensitiveResources := map[string]bool{
+				"secrets": true, "pods": true, "deployments": true, "daemonsets": true,
+				"statefulsets": true, "rolebindings": true, "clusterrolebindings": true,
+				"clusterroles": true, "roles": true, "serviceaccounts": true,
+				"nodes": true, "configmaps": true, "*": true,
+			}
 			var evidence []string
 			var nodes []string
 			checkRoles := func(roles []kube.RoleInfo, prefix string) {
 				for _, role := range roles {
 					for _, rule := range role.Rules {
-						if containsAny(rule.Verbs, "*") || containsAny(rule.Resources, "*") {
-							evidence = append(evidence, fmt.Sprintf("Role %s/%s has wildcard: verbs=%v resources=%v",
-								role.Namespace, role.Name, rule.Verbs, rule.Resources))
-							nodes = append(nodes, prefix+role.Namespace+":"+role.Name)
+						wildcardVerb := containsAny(rule.Verbs, "*")
+						wildcardResource := containsAny(rule.Resources, "*")
+						if !wildcardVerb && !wildcardResource {
+							continue
 						}
+						// Only flag when a sensitive resource is in scope.
+						affectsSensitive := wildcardResource // "*" resources = all resources
+						if !affectsSensitive {
+							for _, res := range rule.Resources {
+								if sensitiveResources[res] {
+									affectsSensitive = true
+									break
+								}
+							}
+						}
+						if !affectsSensitive {
+							continue
+						}
+						evidence = append(evidence, fmt.Sprintf("Role %s/%s has wildcard: verbs=%v resources=%v",
+							role.Namespace, role.Name, rule.Verbs, rule.Resources))
+						nodes = append(nodes, prefix+role.Namespace+":"+role.Name)
 					}
 				}
 			}
@@ -652,7 +714,7 @@ func ruleWildcardVerbs() inferenceRule {
 			if len(evidence) == 0 {
 				return "", nil, nil
 			}
-			return fmt.Sprintf("%d RBAC role(s) contain wildcard verb or resource grants. "+
+			return fmt.Sprintf("%d RBAC role(s) contain wildcard grants on sensitive resources. "+
 				"These are difficult to audit and often grant unintended permissions.", len(evidence)), evidence, nodes
 		},
 	}
@@ -970,10 +1032,10 @@ func ruleSensitiveConfigMaps() inferenceRule {
 
 func ruleCloudIRSAEscalation() inferenceRule {
 	return inferenceRule{
-		RuleID:   "CLOUD-IRSA-ESCALATION",
+		RuleID:   "CLOUD-WORKLOAD-IDENTITY-ESCALATION",
 		Severity: SeverityCritical,
 		Score:    9.5,
-		Title:    "ServiceAccount with cloud IAM role annotation — cross-cloud escalation path",
+		Title:    "ServiceAccount with cloud IAM annotation (AWS IRSA / Azure WI / GCP WI) — cross-cloud escalation path",
 		MITREIDs: []string{"T1078.004"},
 		Mitigation: `• Audit all cloud IAM roles bound to Kubernetes service accounts.
 • Apply least-privilege IAM policies to IRSA/Workload-Identity roles.
@@ -1024,10 +1086,12 @@ func ruleCloudIRSAEscalation() inferenceRule {
 			if len(evidence) == 0 {
 				return "", nil, nil
 			}
-			desc := fmt.Sprintf("%d ServiceAccount(s) carry cloud IAM role annotations. "+
-				"Any workload running as these SAs can call cloud APIs (S3, IAM, KMS, etc.) "+
+			desc := fmt.Sprintf("%d ServiceAccount(s) carry cloud IAM role annotations (AWS IRSA / Azure Workload Identity / GCP Workload Identity). "+
+				"Any workload running as these SAs can call cloud APIs (S3, IAM, KMS, Azure ARM, GCP APIs, etc.) "+
 				"using the pod's projected service account token — no secrets required. "+
-				"Compromising these pods enables cross-cloud privilege escalation.", len(evidence))
+				"Compromising these pods enables cross-cloud privilege escalation. "+
+				"NOTE: confidence is medium — the cloud-side trust policy must also allow the SA's OIDC sub-claim. "+
+				"Validate IAM trust policies before treating as confirmed.", len(evidence))
 			return desc, evidence, nodes
 		},
 	}
@@ -1329,15 +1393,38 @@ func ruleDangerousCapabilities() inferenceRule {
 		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
 			var evidence []string
 			var nodes []string
+			// capTierLabel maps tier strings to display labels with exploit context.
+			capTierLabel := map[string]string{
+				"CRITICAL": "CRITICAL — kernel/credential access (instant container escape)",
+				"HIGH":     "HIGH — strong introspection or raw I/O",
+				"MEDIUM":   "MEDIUM — network manipulation",
+			}
+			addCapEvidence := func(label string, details []kube.CapabilityDetail) {
+				for _, cd := range details {
+					tierLabel := capTierLabel[cd.Tier]
+					if tierLabel == "" {
+						tierLabel = cd.Tier
+					}
+					evidence = append(evidence, fmt.Sprintf("%s: container %q has %s [%s]",
+						label, cd.Container, cd.Cap, tierLabel))
+				}
+			}
 			for _, wl := range r.ClusterObjects.Workloads {
-				if len(wl.DangerousCapabilities) > 0 {
+				if len(wl.CapabilityDetails) > 0 {
+					addCapEvidence("Workload "+wl.Namespace+"/"+wl.Name, wl.CapabilityDetails)
+					nodes = append(nodes, "workload:"+wl.Namespace+":"+wl.Name)
+				} else if len(wl.DangerousCapabilities) > 0 {
+					// Fallback for data without granular details.
 					evidence = append(evidence, fmt.Sprintf("Workload %s/%s has dangerous caps in containers: %v",
 						wl.Namespace, wl.Name, wl.DangerousCapabilities))
 					nodes = append(nodes, "workload:"+wl.Namespace+":"+wl.Name)
 				}
 			}
 			for _, pod := range r.ClusterObjects.Pods {
-				if len(pod.DangerousCapabilities) > 0 {
+				if len(pod.CapabilityDetails) > 0 {
+					addCapEvidence("Pod "+pod.Namespace+"/"+pod.Name, pod.CapabilityDetails)
+					nodes = append(nodes, "pod:"+pod.Namespace+":"+pod.Name)
+				} else if len(pod.DangerousCapabilities) > 0 {
 					evidence = append(evidence, fmt.Sprintf("Pod %s/%s has dangerous caps in containers: %v",
 						pod.Namespace, pod.Name, pod.DangerousCapabilities))
 					nodes = append(nodes, "pod:"+pod.Namespace+":"+pod.Name)
@@ -1346,9 +1433,30 @@ func ruleDangerousCapabilities() inferenceRule {
 			if len(evidence) == 0 {
 				return "", nil, nil
 			}
-			return fmt.Sprintf("%d workload(s)/pod(s) grant dangerous Linux capabilities "+
-				"(SYS_ADMIN, NET_ADMIN, SYS_PTRACE, SYS_MODULE, or DAC_READ_SEARCH). "+
-				"These capabilities enable container escape, kernel module injection, and process introspection.", len(evidence)), evidence, nodes
+			// Escalate severity to CRITICAL if any CRITICAL-tier capability is present.
+			// This is surfaced in the description so the caller can override the rule's static severity.
+			hasCritical := false
+			for _, wl := range r.ClusterObjects.Workloads {
+				for _, cd := range wl.CapabilityDetails {
+					if cd.Tier == "CRITICAL" {
+						hasCritical = true
+					}
+				}
+			}
+			for _, pod := range r.ClusterObjects.Pods {
+				for _, cd := range pod.CapabilityDetails {
+					if cd.Tier == "CRITICAL" {
+						hasCritical = true
+					}
+				}
+			}
+			severityNote := ""
+			if hasCritical {
+				severityNote = " At least one CRITICAL-tier capability (SYS_MODULE/SYS_ADMIN/DAC_READ_SEARCH) is present — treat as CRITICAL severity."
+			}
+			return fmt.Sprintf("%d workload(s)/pod(s) grant dangerous Linux capabilities. "+
+				"These capabilities enable container escape, kernel module injection, and process introspection.%s",
+				len(nodes), severityNote), evidence, nodes
 		},
 	}
 }
@@ -2794,64 +2902,80 @@ func inferMultiHopFindings(g *Graph, r *kube.EnumerationResult, existing []RiskF
 	emittedPaths := make(map[string]bool)
 
 	for _, goal := range goals {
-		emitted := 0
+		// Collect candidates from all start nodes (2× budget to survive subset dedup).
+		candidateBudget := MaxPathsPerGoal * 2
+		var candidates []ScoredPath
+		seenFingerprints := make(map[string]bool)
 
 		for _, startID := range startIDs {
 			if goal.NodeID == startID {
 				continue // start IS the goal
 			}
+			if len(candidates) >= candidateBudget {
+				break
+			}
 
-			// Use weighted pathfinding: returns paths sorted by attacker effort
-			// (lowest weight first = most realistic/dangerous).
-			scored := g.FindWeightedPaths(startID, goal.NodeID, MaxAttackPathDepth, MaxPathsPerGoal-emitted)
-
+			scored := g.FindWeightedPaths(startID, goal.NodeID, MaxAttackPathDepth, candidateBudget-len(candidates))
 			for _, sp := range scored {
-				if emitted >= MaxPathsPerGoal {
-					break
-				}
 				if isDuplicatePath(sp.Path, existing) {
 					continue
 				}
-				fingerprint := pathFingerprint(sp.Path)
-				if emittedPaths[fingerprint] {
+				fp := pathFingerprint(sp.Path)
+				if seenFingerprints[fp] || emittedPaths[fp] {
 					continue
 				}
-				emittedPaths[fingerprint] = true
-
-				numHops := len(sp.Path) - 1
-				shape := ClassifyPath(sp.Path)
-				score := ScoreByShape(shape, goal.BaseScore, numHops)
-
-				findings = append(findings, RiskFinding{
-					RuleID:   "MULTIHOP-ESCALATION",
-					Severity: severityFromScore(score),
-					Score:    score,
-					Title:    BuildPathTitle(sp.Path, goal, shape),
-					Description: fmt.Sprintf("%s\n\nTarget: %s — %s",
-						formatPathDescription(sp.Path), goal.GoalKind, goal.Description),
-					Evidence:      buildPathEvidence(sp.Path),
-					AffectedNodes: pathAffectedNodes(sp.Path),
-					MITREIDs:      goalKindMITRE(goal.GoalKind),
-					AttackPath:    sp.Path,
-					PathWeight:    sp.Weight,
-					Mitigation: fmt.Sprintf("Break the attack path by removing at least one edge. "+
-						"Review permissions and workload configurations along: %s",
-						formatPathDescription(sp.Path)),
-				})
-				emitted++
-
-				log.Info("multi-hop finding",
-					zap.String("start", startID),
-					zap.String("goal_kind", string(goal.GoalKind)),
-					zap.String("goal_node", goal.NodeID),
-					zap.Int("hops", numHops),
-					zap.Float64("score", score),
-					zap.Float64("weight", sp.Weight))
+				seenFingerprints[fp] = true
+				candidates = append(candidates, sp)
 			}
+		}
 
+		// Sort candidates by path length (shortest first) so that subset detection
+		// correctly identifies longer dominated paths.
+		for i := 1; i < len(candidates); i++ {
+			for j := i; j > 0 && len(candidates[j].Path) < len(candidates[j-1].Path); j-- {
+				candidates[j], candidates[j-1] = candidates[j-1], candidates[j]
+			}
+		}
+
+		// Remove paths whose node sets are strict supersets of a shorter path.
+		candidates = deduplicateSubsetPaths(candidates)
+
+		emitted := 0
+		for _, sp := range candidates {
 			if emitted >= MaxPathsPerGoal {
 				break
 			}
+			fp := pathFingerprint(sp.Path)
+			emittedPaths[fp] = true
+
+			numHops := len(sp.Path) - 1
+			shape := ClassifyPath(sp.Path)
+			score := ScoreByShape(shape, goal.BaseScore, numHops)
+
+			findings = append(findings, RiskFinding{
+				RuleID:   "MULTIHOP-ESCALATION",
+				Severity: severityFromScore(score),
+				Score:    score,
+				Title:    BuildPathTitle(sp.Path, goal, shape),
+				Description: fmt.Sprintf("%s\n\nTarget: %s — %s",
+					formatPathDescription(sp.Path), goal.GoalKind, goal.Description),
+				Evidence:      buildPathEvidence(sp.Path),
+				AffectedNodes: pathAffectedNodes(sp.Path),
+				MITREIDs:      goalKindMITRE(goal.GoalKind),
+				AttackPath:    sp.Path,
+				PathWeight:    sp.Weight,
+				Mitigation: fmt.Sprintf("Break the attack path by removing at least one edge. "+
+					"Review permissions and workload configurations along: %s",
+					formatPathDescription(sp.Path)),
+			})
+			emitted++
+
+			log.Info("multi-hop finding",
+				zap.String("goal_kind", string(goal.GoalKind)),
+				zap.String("goal_node", goal.NodeID),
+				zap.Int("hops", numHops),
+				zap.Float64("score", score),
+				zap.Float64("weight", sp.Weight))
 		}
 	}
 
@@ -2866,6 +2990,43 @@ func pathFingerprint(path AttackPath) string {
 		ids[i] = step.Node.ID
 	}
 	return strings.Join(ids, "→")
+}
+
+// isSubsetPath returns true when every node in the shorter path `a` also appears in path `b`.
+// Used to filter redundant longer paths: if A→B→D exists, A→B→C→D adds no new reachability.
+func isSubsetPath(a, b AttackPath) bool {
+	if len(a) >= len(b) {
+		return false
+	}
+	bNodes := make(map[string]bool, len(b))
+	for _, step := range b {
+		bNodes[step.Node.ID] = true
+	}
+	for _, step := range a {
+		if !bNodes[step.Node.ID] {
+			return false
+		}
+	}
+	return true
+}
+
+// deduplicateSubsetPaths removes paths whose node sets are strict supersets of a shorter path.
+// Input must be sorted by path length (shortest first) for correct subset detection.
+func deduplicateSubsetPaths(paths []ScoredPath) []ScoredPath {
+	kept := make([]ScoredPath, 0, len(paths))
+	for _, candidate := range paths {
+		dominated := false
+		for _, shorter := range kept {
+			if isSubsetPath(shorter.Path, candidate.Path) {
+				dominated = true
+				break
+			}
+		}
+		if !dominated {
+			kept = append(kept, candidate)
+		}
+	}
+	return kept
 }
 
 // ── Reviewer multi-hop: workload-centric paths ────────────────────────────────
@@ -2971,6 +3132,293 @@ func inferReviewerMultiHopFindings(g *Graph, r *kube.EnumerationResult, existing
 	}
 
 	return findings
+}
+
+// ── New improvement-batch rules ───────────────────────────────────────────────
+
+// ruleNonResourceURLPrivesc fires when SSRR returns non-resource URL rules that
+// grant exec/portforward access bypassing the resource-based RBAC check.
+func ruleNonResourceURLPrivesc() inferenceRule {
+	return inferenceRule{
+		RuleID:   "PRIVESC-NONRESOURCE-URL",
+		Severity: SeverityHigh,
+		Score:    8.0,
+		Title:    "Non-resource URL rule grants exec/portforward — bypasses resource RBAC check",
+		MITREIDs: []string{"T1609"},
+		Mitigation: `• Non-resource URL rules are rarely needed by workloads. Remove them.
+• Audit ClusterRoles with nonResourceURLs containing /exec or /portforward.
+• Prefer explicit resource-based RBAC (pods/exec, pods/portforward) which is easier to audit.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			execPatterns := []string{"/exec", "/portforward", "/attach"}
+			var evidence []string
+			for ns, rules := range r.Permissions.SSRRByNamespace {
+				for _, rule := range rules {
+					if len(rule.NonResourceURLs) == 0 {
+						continue
+					}
+					for _, url := range rule.NonResourceURLs {
+						for _, pat := range execPatterns {
+							if strings.Contains(url, pat) {
+								evidence = append(evidence, fmt.Sprintf(
+									"SSRR namespace %q: non-resource URL %q verbs=%v (bypasses resource RBAC)",
+									ns, url, rule.Verbs))
+								break
+							}
+						}
+					}
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("SSRR returned %d non-resource URL rule(s) granting exec/portforward/attach access. "+
+				"Non-resource URL grants are checked before resource-level RBAC and can bypass deny policies "+
+				"that block pods/exec resource access.", len(evidence)), evidence, nil
+		},
+	}
+}
+
+// ruleCRDPermissions fires when any identity (SSRR/SSAR or reviewer RBAC) has
+// create/patch/delete on high-risk operator CRDs present in the cluster.
+func ruleCRDPermissions() inferenceRule {
+	return inferenceRule{
+		RuleID:   "PRIVESC-CRD-OPERATOR",
+		Severity: SeverityHigh,
+		Score:    8.5,
+		Title:    "Identity has create/patch/delete on high-risk operator CRDs — workload injection via GitOps/operator",
+		MITREIDs: []string{"T1610"},
+		Mitigation: `• Treat create/patch on Flux HelmRelease, ArgoCD Application, ExternalSecret, and Crossplane Provider
+  as equivalent to patching Deployments — they can inject arbitrary workloads or exfiltrate secrets.
+• Restrict these verbs to CI/CD service accounts with audit alerting.
+• Use OPA/Gatekeeper to validate CRD resources before admission.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			if len(r.ClusterObjects.CRDs) == 0 {
+				return "", nil, nil
+			}
+			// Build a set of high-risk CRD resource names present in this cluster.
+			presentCRDs := make(map[string]string, len(r.ClusterObjects.CRDs)) // resource → group/kind
+			for _, crd := range r.ClusterObjects.CRDs {
+				presentCRDs[crd.Resource] = crd.Group + "/" + crd.Kind
+			}
+			dangerousVerbs := map[string]bool{"create": true, "patch": true, "update": true, "delete": true, "*": true}
+			var evidence []string
+			// Check SSRR rules for CRD resource matches.
+			for ns, rules := range r.Permissions.SSRRByNamespace {
+				for _, rule := range rules {
+					for _, res := range rule.Resources {
+						if groupKind, ok := presentCRDs[res]; ok {
+							for _, verb := range rule.Verbs {
+								if dangerousVerbs[verb] {
+									evidence = append(evidence, fmt.Sprintf(
+										"SSRR namespace %q: %s %s (%s) — operator resource mutation",
+										ns, verb, res, groupKind))
+									break
+								}
+							}
+						}
+					}
+				}
+			}
+			// Also check SSAR results.
+			for _, c := range r.Permissions.SSARChecks {
+				if !c.Allowed {
+					continue
+				}
+				if _, ok := presentCRDs[c.Resource]; ok && dangerousVerbs[c.Verb] {
+					evidence = append(evidence, fmt.Sprintf(
+						"SSAR namespace %q: %s %s (%s) = allowed",
+						c.Namespace, c.Verb, c.Resource, presentCRDs[c.Resource]))
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("The current identity can mutate %d high-risk operator CRD resource(s). "+
+				"Patching Flux/ArgoCD/ExternalSecrets/Crossplane resources is functionally equivalent to "+
+				"modifying Deployments or reading Secrets — the operator will execute the requested change.", len(evidence)),
+				evidence, nil
+		},
+	}
+}
+
+// ruleOrphanedSATokens detects kubernetes.io/service-account-token secrets whose
+// owning ServiceAccount no longer exists. These tokens remain valid and represent
+// a persistent access vector if an attacker knows the token value.
+func ruleOrphanedSATokens() inferenceRule {
+	return inferenceRule{
+		RuleID:   "HYGIENE-ORPHANED-SA-TOKEN",
+		Severity: SeverityMedium,
+		Score:    6.5,
+		Title:    "Orphaned ServiceAccount token secrets — valid credentials for deleted SAs",
+		MITREIDs: []string{"T1552.007"},
+		Mitigation: `• Delete orphaned SA token secrets immediately — they remain valid even after the owning SA is deleted.
+• Audit: kubectl get secrets --all-namespaces --field-selector=type=kubernetes.io/service-account-token
+• Migrate to projected service account tokens (BoundServiceAccountTokenVolume) which expire automatically.
+• Enable periodic RBAC cleanup automation to remove orphaned secrets.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			// Build a set of known SA names per namespace.
+			saIndex := make(map[string]bool, len(r.ClusterObjects.ServiceAccounts))
+			for _, sa := range r.ClusterObjects.ServiceAccounts {
+				saIndex[sa.Namespace+"/"+sa.Name] = true
+			}
+			var evidence []string
+			var nodes []string
+			for _, sm := range r.ClusterObjects.SecretsMeta {
+				if sm.Type != "kubernetes.io/service-account-token" {
+					continue
+				}
+				if sm.SAName == "" {
+					continue
+				}
+				key := sm.Namespace + "/" + sm.SAName
+				if !saIndex[key] {
+					evidence = append(evidence, fmt.Sprintf(
+						"Secret %s/%s (type=SA-token) references deleted SA %q — token is still valid",
+						sm.Namespace, sm.Name, sm.SAName))
+					nodes = append(nodes, "secret:"+sm.Namespace+":"+sm.Name)
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("%d ServiceAccount token secret(s) reference deleted ServiceAccounts. "+
+				"Kubernetes does not automatically revoke legacy SA tokens when an SA is deleted — "+
+				"these tokens are active credentials that can be used until manually deleted.", len(evidence)),
+				evidence, nodes
+		},
+	}
+}
+
+// ruleDanglingRoleBindings detects RoleBindings/ClusterRoleBindings whose subjects
+// reference ServiceAccounts that no longer exist. These represent cleanup debt and
+// can be exploited if the SA name is reused (name-reuse attack).
+func ruleDanglingRoleBindings() inferenceRule {
+	return inferenceRule{
+		RuleID:   "HYGIENE-DANGLING-ROLEBINDING",
+		Severity: SeverityMedium,
+		Score:    5.5,
+		Title:    "RoleBindings with dangling subjects — potential name-reuse privilege escalation",
+		MITREIDs: []string{"T1078"},
+		Mitigation: `• Remove bindings whose subjects no longer exist.
+• Implement GitOps-managed RBAC so bindings are automatically cleaned up when SAs are deleted.
+• Alert on creation of ServiceAccounts whose names match existing bindings (name-reuse signal).
+• Use kubectl auth reconcile to diff RBAC state against a desired-state manifest.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			saIndex := make(map[string]bool, len(r.ClusterObjects.ServiceAccounts))
+			for _, sa := range r.ClusterObjects.ServiceAccounts {
+				saIndex[sa.Namespace+"/"+sa.Name] = true
+			}
+			var evidence []string
+			var nodes []string
+			checkBindings := func(bindings []kube.BindingInfo, kind string) {
+				for _, b := range bindings {
+					for _, subj := range b.Subjects {
+						if subj.Kind != "ServiceAccount" {
+							continue
+						}
+						key := subj.Namespace + "/" + subj.Name
+						if !saIndex[key] {
+							evidence = append(evidence, fmt.Sprintf(
+								"%s %q references deleted SA %s/%s — binding is dormant but grants %s/%s on recreation",
+								kind, b.Name, subj.Namespace, subj.Name, b.RoleRef.Kind, b.RoleRef.Name))
+							nodes = append(nodes, "binding:"+b.Namespace+":"+b.Name)
+						}
+					}
+				}
+			}
+			checkBindings(r.ClusterObjects.RoleBindings, "RoleBinding")
+			checkBindings(r.ClusterObjects.ClusterRoleBindings, "ClusterRoleBinding")
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("%d binding(s) reference non-existent ServiceAccount subjects. "+
+				"If a new SA is created with the same name, it immediately inherits all bound permissions — "+
+				"this is exploitable in namespaces where SA creation is allowed.", len(evidence)), evidence, nodes
+		},
+	}
+}
+
+// ruleKubeletExposed fires when the kubelet read-only port probe returns accessible nodes.
+func ruleKubeletExposed() inferenceRule {
+	return inferenceRule{
+		RuleID:   "EXPOSURE-KUBELET-READONLY-PORT",
+		Severity: SeverityHigh,
+		Score:    8.0,
+		Title:    "Kubelet read-only port (10255) accessible — unauthenticated pod metadata exposure",
+		MITREIDs: []string{"T1613"},
+		Mitigation: `• Disable the kubelet read-only port by setting --read-only-port=0 in kubelet configuration.
+• This port exposes pod specs, environment variables, and volume metadata without authentication.
+• Ensure kubelet uses --anonymous-auth=false and --authorization-mode=Webhook.
+• Use NetworkPolicy to block pod-to-node traffic on port 10255 if the port cannot be disabled.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			var evidence []string
+			var nodes []string
+			for _, probe := range r.ClusterObjects.KubeletProbes {
+				if probe.ReadOnlyOpen {
+					evidence = append(evidence, fmt.Sprintf(
+						"Node %s (%s): kubelet port 10255 responded — unauthenticated access confirmed",
+						probe.NodeName, probe.IP))
+					nodes = append(nodes, "node:"+probe.NodeName)
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("%d node(s) expose the kubelet read-only HTTP port (10255). "+
+				"Any pod in the cluster can query /pods to enumerate all pod specs and environment "+
+				"variables cluster-wide without API server credentials.", len(evidence)), evidence, nodes
+		},
+	}
+}
+
+// rulePriorityClassAbuse fires when the identity can create pods and any pods in the cluster
+// use non-default priority, indicating PriorityClasses are in use and could be weaponised to
+// evict critical system pods (kube-dns, CNI, etc.).
+func rulePriorityClassAbuse() inferenceRule {
+	return inferenceRule{
+		RuleID:   "PRIVESC-PRIORITY-CLASS-EVICTION",
+		Severity: SeverityMedium,
+		Score:    6.0,
+		Title:    "Pod creation rights + active PriorityClasses — risk of critical system pod eviction",
+		MITREIDs: []string{"T1499"},
+		Mitigation: `• Restrict access to high-priority PriorityClasses via RBAC (use resourceNames on priorityclasses).
+• Apply LimitRange / ResourceQuota to cap the priority of pods created by non-admin service accounts.
+• Monitor for creation of high-priority pods outside platform namespaces.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			// Check create pods SSAR permission.
+			canCreate := false
+			for _, c := range r.Permissions.SSARChecks {
+				if c.Allowed && c.Resource == "pods" && c.Verb == "create" {
+					canCreate = true
+					break
+				}
+			}
+			if !canCreate {
+				for _, rules := range r.Permissions.SSRRByNamespace {
+					for _, rule := range rules {
+						if containsAny(rule.Resources, "pods", "*") && containsAny(rule.Verbs, "create", "*") {
+							canCreate = true
+							break
+						}
+					}
+					if canCreate {
+						break
+					}
+				}
+			}
+			if !canCreate {
+				return "", nil, nil
+			}
+			evidence := []string{
+				"SSAR: create pods = allowed",
+				"Advisory: if high-priority PriorityClasses exist, an attacker can schedule a resource-exhausting " +
+					"pod with elevated priority, forcing the scheduler to evict kube-dns, CNI, or other critical system pods.",
+			}
+			return "The current identity can create pods. If PriorityClasses above system-cluster-critical exist and " +
+				"are not RBAC-restricted, an attacker can use them to schedule pods that evict critical system components, " +
+				"causing cluster-wide disruption.", evidence, nil
+		},
+	}
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────

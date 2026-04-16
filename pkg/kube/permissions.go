@@ -172,6 +172,14 @@ var ssarSpotChecks = []struct {
 	// Webhook mutation — can inject into all future workloads.
 	{"patch",       "mutatingwebhookconfigurations", ""},
 	{"create",      "mutatingwebhookconfigurations", ""},
+	// Some clusters grant update (not create) on pods/exec.
+	{"update",      "pods",                "exec"},
+	// TokenReview allows validating arbitrary bearer tokens — useful for lateral movement.
+	{"create",      "tokenreviews",        ""},
+	// Patching a ServiceAccount can inject imagePullSecrets or cloud identity annotations.
+	{"patch",       "serviceaccounts",     ""},
+	// CertificateSigningRequests allow forging TLS certificates for API server auth.
+	{"create",      "certificatesigningrequests", ""},
 }
 
 // collectSSAR runs all spot-check SSARs across all provided namespaces.
@@ -182,6 +190,8 @@ func collectSSAR(ctx context.Context, c *Client, namespaces []string, log *zap.L
 		"clusterroles": true, "clusterrolebindings": true,
 		"users": true,
 		"mutatingwebhookconfigurations": true,
+		"tokenreviews":                  true,
+		"certificatesigningrequests":    true,
 	}
 
 	// Build the list of checks to run, deduplicating cluster-scoped entries.

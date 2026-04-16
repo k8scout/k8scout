@@ -111,10 +111,11 @@ func run(cfg *Config) error {
 
 	// ── 3. Run collectors ─────────────────────────────────────────────────────
 	result, err := kube.Enumerate(ctx, client, kube.EnumerateOptions{
-		Namespaces: namespaces,
-		SkipSSAR:   cfg.SkipSSAR || cfg.Stealth,
-		Stealth:    cfg.Stealth,
-		Log:        log,
+		Namespaces:   namespaces,
+		SkipSSAR:     cfg.SkipSSAR || cfg.Stealth,
+		Stealth:      cfg.Stealth,
+		ProbeKubelet: !cfg.Stealth, // probe kubelet read-only port in non-stealth offensive mode
+		Log:          log,
 	})
 	if err != nil {
 		// Non-fatal: we may have partial results.

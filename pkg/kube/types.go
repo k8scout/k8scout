@@ -76,9 +76,10 @@ type ClusterObjects struct {
 	Pods                  []PodInfo     `json:"pods,omitempty"`
 	SecretsMeta           []SecretMeta  `json:"secrets_meta,omitempty"`
 	ConfigMapsMeta        []CMeta       `json:"configmaps_meta,omitempty"`
-	Nodes                 []NodeInfo    `json:"nodes,omitempty"`
-	Webhooks              []WebhookInfo `json:"webhooks,omitempty"`
-	CRDs                  []CRDInfo     `json:"crds,omitempty"`
+	Nodes                 []NodeInfo           `json:"nodes,omitempty"`
+	Webhooks              []WebhookInfo        `json:"webhooks,omitempty"`
+	CRDs                  []CRDInfo            `json:"crds,omitempty"`
+	KubeletProbes         []KubeletProbeResult `json:"kubelet_probes,omitempty"`
 }
 
 // CRDInfo describes a CustomResourceDefinition present in the cluster.
@@ -87,6 +88,22 @@ type CRDInfo struct {
 	Kind     string `json:"kind"`
 	Resource string `json:"resource"` // plural resource name (for SSRR matching)
 	Scope    string `json:"scope"`    // Namespaced or Cluster
+}
+
+// CapabilityDetail records a dangerous Linux capability found in a container, with its risk tier.
+type CapabilityDetail struct {
+	Container string `json:"container"`
+	Cap       string `json:"cap"`
+	// Tier classifies exploitability: CRITICAL (SYS_MODULE, SYS_ADMIN, DAC_READ_SEARCH),
+	// HIGH (SYS_PTRACE, SYS_RAWIO), MEDIUM (NET_ADMIN, NET_RAW).
+	Tier string `json:"tier"`
+}
+
+// KubeletProbeResult records the outcome of probing a node's kubelet read-only port (10255).
+type KubeletProbeResult struct {
+	NodeName     string `json:"node_name"`
+	IP           string `json:"ip"`
+	ReadOnlyOpen bool   `json:"read_only_open"` // true when port 10255 returned HTTP 200
 }
 
 // WebhookInfo — admission webhook metadata.
@@ -175,9 +192,12 @@ type WorkloadInfo struct {
 	ImageNames            []string          `json:"image_names,omitempty"`
 	// DangerousCapabilities lists container names that have one or more of
 	// SYS_ADMIN, NET_ADMIN, SYS_PTRACE, SYS_MODULE, DAC_READ_SEARCH in capabilities.Add.
-	DangerousCapabilities []string          `json:"dangerous_capabilities,omitempty"`
+	DangerousCapabilities []string           `json:"dangerous_capabilities,omitempty"`
+	// CapabilityDetails provides per-container, per-capability detail with risk tier.
+	// Supersedes DangerousCapabilities for scoring purposes.
+	CapabilityDetails     []CapabilityDetail `json:"capability_details,omitempty"`
 	// EnvSecretRefs lists secrets injected as env vars (names only — no values).
-	EnvSecretRefs         []EnvSecretRef    `json:"env_secret_refs,omitempty"`
+	EnvSecretRefs         []EnvSecretRef     `json:"env_secret_refs,omitempty"`
 	// PlaintextEnvVars lists environment variables whose names match sensitive patterns
 	// and whose values are hardcoded (not from a SecretKeyRef). Values are captured
 	// because they are already in the pod spec (no additional permission needed).
@@ -240,7 +260,9 @@ type PodInfo struct {
 	PlaintextEnvVars  []PlaintextEnvVar `json:"plaintext_env_vars,omitempty"`
 	// DangerousCapabilities lists container names that have one or more of
 	// SYS_ADMIN, NET_ADMIN, SYS_PTRACE, SYS_MODULE, DAC_READ_SEARCH in capabilities.Add.
-	DangerousCapabilities []string      `json:"dangerous_capabilities,omitempty"`
+	DangerousCapabilities []string           `json:"dangerous_capabilities,omitempty"`
+	// CapabilityDetails provides per-container, per-capability detail with risk tier.
+	CapabilityDetails     []CapabilityDetail `json:"capability_details,omitempty"`
 }
 
 // SecretMeta — Secret metadata. When GET permission is confirmed, Values is populated.
@@ -270,19 +292,21 @@ type CMeta struct {
 
 // NodeInfo — Node metadata only.
 type NodeInfo struct {
-	Name     string            `json:"name"`
-	Labels   map[string]string `json:"labels,omitempty"`
-	Taints   []string          `json:"taints,omitempty"`
-	Capacity map[string]string `json:"capacity,omitempty"` // cpu, memory strings
-	Roles    []string          `json:"roles,omitempty"`
+	Name        string            `json:"name"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Taints      []string          `json:"taints,omitempty"`
+	Capacity    map[string]string `json:"capacity,omitempty"` // cpu, memory strings
+	Roles       []string          `json:"roles,omitempty"`
+	InternalIPs []string          `json:"internal_ips,omitempty"` // node internal IP addresses
 }
 
 // EnumerateOptions configures a full enumeration run.
 type EnumerateOptions struct {
-	Namespaces []string
-	SkipSSAR   bool
-	Stealth    bool // skip SSRR/SSAR to reduce audit log footprint
-	Log        *zap.Logger
+	Namespaces   []string
+	SkipSSAR     bool
+	Stealth      bool // skip SSRR/SSAR to reduce audit log footprint
+	ProbeKubelet bool // probe each node's kubelet read-only port (10255) — offensive mode only
+	Log          *zap.Logger
 }
 
 // IdentityPermissions represents computed effective RBAC permissions for a subject.

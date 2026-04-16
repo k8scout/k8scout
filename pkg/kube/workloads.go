@@ -9,6 +9,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// capabilityTiers maps dangerous Linux capabilities to their risk tier for granular scoring.
+// CRITICAL: direct kernel or credential access; HIGH: strong introspection / raw I/O;
+// MEDIUM: network manipulation.
+var capabilityTiers = map[corev1.Capability]string{
+	"SYS_MODULE":      "CRITICAL",
+	"SYS_ADMIN":       "CRITICAL",
+	"DAC_READ_SEARCH": "CRITICAL",
+	"SYS_PTRACE":      "HIGH",
+	"SYS_RAWIO":       "HIGH",
+	"NET_ADMIN":       "MEDIUM",
+	"NET_RAW":         "MEDIUM",
+}
+
 var sensitiveEnvPatterns = []string{
 	"password", "passwd", "pwd", "secret", "token", "api_key", "apikey",
 	"apitoken", "access_key", "secret_key", "aws_access", "aws_secret",
@@ -123,25 +136,25 @@ func collectPods(ctx context.Context, c *Client, ns string, log *zap.Logger) ([]
 		}
 
 		// Container security contexts.
-		dangerousCaps := []corev1.Capability{"SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE", "SYS_MODULE", "DAC_READ_SEARCH"}
 		for _, ctr := range append(p.Spec.InitContainers, p.Spec.Containers...) {
 			pi.ImageNames = append(pi.ImageNames, ctr.Image)
 			if ctr.SecurityContext != nil && ctr.SecurityContext.Privileged != nil && *ctr.SecurityContext.Privileged {
 				pi.PrivilegedContainers = append(pi.PrivilegedContainers, ctr.Name)
 			}
 			if ctr.SecurityContext != nil && ctr.SecurityContext.Capabilities != nil {
+				hasDangerous := false
 				for _, cap := range ctr.SecurityContext.Capabilities.Add {
-					found := false
-					for _, dc := range dangerousCaps {
-						if cap == dc {
-							found = true
-							break
-						}
+					if tier, ok := capabilityTiers[cap]; ok {
+						pi.CapabilityDetails = append(pi.CapabilityDetails, CapabilityDetail{
+							Container: ctr.Name,
+							Cap:       string(cap),
+							Tier:      tier,
+						})
+						hasDangerous = true
 					}
-					if found {
-						pi.DangerousCapabilities = append(pi.DangerousCapabilities, ctr.Name)
-						break
-					}
+				}
+				if hasDangerous {
+					pi.DangerousCapabilities = append(pi.DangerousCapabilities, ctr.Name)
 				}
 			}
 			// Detect plaintext secrets hardcoded in env var values.
@@ -293,6 +306,11 @@ func collectNodes(ctx context.Context, c *Client, log *zap.Logger) ([]NodeInfo, 
 			"cpu":    n.Status.Capacity.Cpu().String(),
 			"memory": n.Status.Capacity.Memory().String(),
 		}
+		for _, addr := range n.Status.Addresses {
+			if addr.Type == corev1.NodeInternalIP {
+				ni.InternalIPs = append(ni.InternalIPs, addr.Address)
+			}
+		}
 		result = append(result, ni)
 	}
 	return result, nil
@@ -313,25 +331,25 @@ func podSpecToWorkloadInfo(kind, name, ns string, labels map[string]string, repl
 		AutomountSAToken: spec.AutomountServiceAccountToken,
 	}
 
-	dangerousCaps := []corev1.Capability{"SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE", "SYS_MODULE", "DAC_READ_SEARCH"}
 	for _, ctr := range append(spec.InitContainers, spec.Containers...) {
 		wi.ImageNames = append(wi.ImageNames, ctr.Image)
 		if ctr.SecurityContext != nil && ctr.SecurityContext.Privileged != nil && *ctr.SecurityContext.Privileged {
 			wi.PrivilegedContainers = append(wi.PrivilegedContainers, ctr.Name)
 		}
 		if ctr.SecurityContext != nil && ctr.SecurityContext.Capabilities != nil {
+			hasDangerous := false
 			for _, cap := range ctr.SecurityContext.Capabilities.Add {
-				found := false
-				for _, dc := range dangerousCaps {
-					if cap == dc {
-						found = true
-						break
-					}
+				if tier, ok := capabilityTiers[cap]; ok {
+					wi.CapabilityDetails = append(wi.CapabilityDetails, CapabilityDetail{
+						Container: ctr.Name,
+						Cap:       string(cap),
+						Tier:      tier,
+					})
+					hasDangerous = true
 				}
-				if found {
-					wi.DangerousCapabilities = append(wi.DangerousCapabilities, ctr.Name)
-					break
-				}
+			}
+			if hasDangerous {
+				wi.DangerousCapabilities = append(wi.DangerousCapabilities, ctr.Name)
 			}
 		}
 		// Collect secret references from env vars (key names only — no values).
