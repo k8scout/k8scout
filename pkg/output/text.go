@@ -75,6 +75,14 @@ func printText(r Report) error {
 	fmt.Printf("%s▶ Risk Findings (%d total)%s\n", colorBold, len(r.RiskFindings), colorReset)
 	fmt.Printf("  %s\n", strings.Repeat("-", 68))
 
+	if len(r.RiskFindings) == 0 {
+		fmt.Printf("\n  %sNo attack paths found.%s\n", colorYellow, colorReset)
+		fmt.Printf("  The current identity may lack read access to cluster RBAC objects,\n")
+		fmt.Printf("  which limits graph construction. For richer results:\n")
+		fmt.Printf("    • Deploy with the bundled read-only ClusterRole (deploy/rbac.yaml)\n")
+		fmt.Printf("    • Or run in --reviewer-mode with a privileged SA\n\n")
+	}
+
 	for _, f := range r.RiskFindings {
 		printFinding(f)
 	}
@@ -91,7 +99,7 @@ func printText(r Report) error {
 	}
 
 	fmt.Printf("\n%s%s%s\n", colorCyan, sep, colorReset)
-	fmt.Printf("Full JSON report: %s\n\n", r.Meta.ClusterServer)
+	fmt.Printf("Full details in JSON report (load into web/graph.html for interactive graph)\n\n")
 
 	return nil
 }
