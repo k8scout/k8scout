@@ -186,6 +186,7 @@ func allRules() []inferenceRule {
 		ruleVaultOperatorAbuse(),
 		ruleWebhookIgnorePolicy(),
 		ruleWebhookNamespaceGap(),
+		ruleWebhookBackendTakeover(),
 	}
 }
 
@@ -2026,6 +2027,54 @@ func ruleWebhookNamespaceGap() inferenceRule {
 				"may not be covered by admission policy. An attacker who can create or control "+
 				"a namespace that is excluded from webhook enforcement can bypass security controls "+
 				"(image scanning, mutation injection, policy validation).", len(evidence))
+			return desc, evidence, nodes
+		},
+	}
+}
+
+func ruleWebhookBackendTakeover() inferenceRule {
+	return inferenceRule{
+		RuleID:   "PRIVESC-WEBHOOK-BACKEND-TAKEOVER",
+		Severity: SeverityHigh,
+		Score:    8.5,
+		Title:    "Webhook backend workload is reachable — compromising it controls admission mutations",
+		MITREIDs: []string{"T1610", "T1525"},
+		Mitigation: `• Run webhook backend workloads with minimal RBAC — they should only need TLS secrets.
+• Isolate webhook backend pods in a dedicated namespace with NetworkPolicy restricting ingress.
+• Ensure webhook pods run with read-only root filesystem and no privileged capabilities.
+• Use separate ServiceAccounts for webhook backends with no additional RBAC bindings.
+• Monitor webhook backend pod image digests and alert on unexpected changes.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			var evidence []string
+			var nodes []string
+			for _, wh := range r.ClusterObjects.Webhooks {
+				if wh.Kind != "Mutating" || !wh.InterceptsPods {
+					continue
+				}
+				if wh.ServiceName == "" || wh.ServiceNS == "" {
+					continue
+				}
+				for _, wl := range r.ClusterObjects.Workloads {
+					if wl.Namespace != wh.ServiceNS {
+						continue
+					}
+					if wl.Name == wh.ServiceName || strings.HasPrefix(wl.Name, wh.ServiceName+"-") {
+						evidence = append(evidence, fmt.Sprintf(
+							"webhook %q backend: workload %s/%s (Service %s/%s)",
+							wh.Name, wl.Namespace, wl.Name, wh.ServiceNS, wh.ServiceName))
+						nodes = append(nodes, "workload:"+wl.Namespace+":"+wl.Name)
+						nodes = append(nodes, "webhook:"+wh.Name)
+					}
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			desc := fmt.Sprintf("%d mutating webhook backend workload(s) identified. "+
+				"If an attacker can compromise the backend workload (via exec, SA token theft, "+
+				"or workload mutation), they control what mutations the webhook applies to all "+
+				"future pod creations. This enables SA replacement, sidecar injection, "+
+				"security context modification, and environment variable exfiltration in new workloads.", len(evidence))
 			return desc, evidence, nodes
 		},
 	}

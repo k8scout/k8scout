@@ -433,6 +433,10 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 	// Register Webhook nodes.
 	for _, wh := range result.ClusterObjects.Webhooks {
 		wid := "webhook:" + wh.Name
+		interceptsPods := "false"
+		if wh.InterceptsPods {
+			interceptsPods = "true"
+		}
 		nm[wid] = &Node{
 			ID:   wid,
 			Kind: KindWebhook,
@@ -442,6 +446,7 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 				"failure_policy":  wh.FailurePolicy,
 				"service_name":    wh.ServiceName,
 				"service_ns":      wh.ServiceNS,
+				"intercepts_pods": interceptsPods,
 			},
 		}
 	}
@@ -781,15 +786,57 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 		}
 	}
 
-	// Mutating webhooks → workloads they can intercept.
-	// A compromised mutating webhook can inject sidecars, modify images, or steal
-	// tokens for all future pods in its intercept scope.
+	// Mutating webhooks: backend linkage and offensive capability edges.
 	for _, wh := range result.ClusterObjects.Webhooks {
 		if wh.Kind != "Mutating" {
 			continue
 		}
 		whID := "webhook:" + wh.Name
 		if nm[whID] == nil {
+			continue
+		}
+
+		// Backend linkage: workload → [serves_webhook] → webhook.
+		// Match webhook's backend Service to workloads in the same namespace with the same name.
+		if wh.ServiceName != "" && wh.ServiceNS != "" {
+			for _, wl := range result.ClusterObjects.Workloads {
+				if wl.Namespace != wh.ServiceNS {
+					continue
+				}
+				if wl.Name == wh.ServiceName || strings.HasPrefix(wl.Name, wh.ServiceName+"-") {
+					wlID := "workload:" + wl.Namespace + ":" + wl.Name
+					if nm[wlID] != nil {
+						edges = append(edges, Edge{
+							From:   wlID,
+							To:     whID,
+							Kind:   EdgeServesWebhook,
+							Reason: fmt.Sprintf("workload %s/%s backs webhook %q via Service %s/%s", wl.Namespace, wl.Name, wh.Name, wh.ServiceNS, wh.ServiceName),
+						})
+					}
+				}
+			}
+			// Also check pods directly (some webhook backends are bare pods or matched by service selectors).
+			for _, pod := range result.ClusterObjects.Pods {
+				if pod.Namespace != wh.ServiceNS {
+					continue
+				}
+				if pod.OwnerName == wh.ServiceName || strings.HasPrefix(pod.OwnerName, wh.ServiceName+"-") {
+					podID := "pod:" + pod.Namespace + ":" + pod.Name
+					if nm[podID] != nil {
+						edges = append(edges, Edge{
+							From:   podID,
+							To:     whID,
+							Kind:   EdgeServesWebhook,
+							Reason: fmt.Sprintf("pod %s/%s backs webhook %q", pod.Namespace, pod.Name, wh.Name),
+						})
+					}
+				}
+			}
+		}
+
+		// Offensive capability: webhook → [can_mutate_workloads] → target workloads.
+		// Only emitted for pod-intercepting mutating webhooks.
+		if !wh.InterceptsPods {
 			continue
 		}
 		for _, wl := range result.ClusterObjects.Workloads {
@@ -799,10 +846,11 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 			wlID := "workload:" + wl.Namespace + ":" + wl.Name
 			if nm[wlID] != nil {
 				edges = append(edges, Edge{
-					From:   whID,
-					To:     wlID,
-					Kind:   EdgeInferred,
-					Reason: fmt.Sprintf("mutating webhook %q can intercept workload creation/updates", wh.Name),
+					From:     whID,
+					To:       wlID,
+					Kind:     EdgeCanMutateWorkloads,
+					Reason:   fmt.Sprintf("mutating webhook %q intercepts pod creation — can inject sidecars, replace SA, modify security context", wh.Name),
+					Inferred: true,
 				})
 			}
 		}

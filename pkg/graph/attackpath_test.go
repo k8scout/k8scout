@@ -1003,6 +1003,177 @@ func containsStr(s []string, target string) bool {
 	return false
 }
 
+// TestAttackPath_WebhookBackendTakeover validates the admission controller attack chain:
+//
+//	pod → [can_exec] → webhook-backend → [serves_webhook] → webhook → [can_mutate_workloads] → target-workload
+//
+// An attacker who can exec into the webhook backend workload controls all future pod mutations.
+func TestAttackPath_WebhookBackendTakeover(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{
+			{ID: "pod:default:attacker", Kind: KindPod, Name: "attacker", Namespace: "default"},
+			{ID: "workload:webhook-ns:admission-controller", Kind: KindWorkload, Name: "admission-controller", Namespace: "webhook-ns"},
+			{ID: "webhook:my-mutator/pod-injector", Kind: KindWebhook, Name: "my-mutator/pod-injector",
+				Metadata: map[string]string{
+					"webhook_kind":    "Mutating",
+					"intercepts_pods": "true",
+					"service_name":    "admission-controller",
+					"service_ns":      "webhook-ns",
+				}},
+			{ID: "workload:prod:api-server", Kind: KindWorkload, Name: "api-server", Namespace: "prod"},
+		},
+		Edges: []Edge{
+			{From: "pod:default:attacker", To: "workload:webhook-ns:admission-controller", Kind: EdgeCanExec},
+			{From: "workload:webhook-ns:admission-controller", To: "webhook:my-mutator/pod-injector", Kind: EdgeServesWebhook,
+				Reason: "workload backs webhook via Service"},
+			{From: "webhook:my-mutator/pod-injector", To: "workload:prod:api-server", Kind: EdgeCanMutateWorkloads,
+				Reason: "mutating webhook intercepts pod creation", Inferred: true},
+		},
+	}
+	g.BuildIndex()
+
+	paths := g.FindWeightedPaths("pod:default:attacker", "workload:prod:api-server", MaxAttackPathDepth, 10)
+	if len(paths) == 0 {
+		t.Fatal("expected path: pod → exec → backend-workload → serves_webhook → webhook → can_mutate_workloads → target")
+	}
+	p := paths[0]
+	if len(p.Path) != 4 {
+		t.Fatalf("expected 4-step path, got %d: %v", len(p.Path), pathNodeIDs(p.Path))
+	}
+	want := []string{
+		"pod:default:attacker",
+		"workload:webhook-ns:admission-controller",
+		"webhook:my-mutator/pod-injector",
+		"workload:prod:api-server",
+	}
+	got := pathNodeIDs(p.Path)
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("step %d: want %q, got %q", i, w, got[i])
+		}
+	}
+	// Weight: can_exec(1.0) + serves_webhook(0.1) + can_mutate_workloads(3.0) = 4.1
+	expectedWeight := 4.1
+	if p.Weight < expectedWeight-0.01 || p.Weight > expectedWeight+0.01 {
+		t.Fatalf("expected weight ~%.1f, got %f", expectedWeight, p.Weight)
+	}
+}
+
+// TestAttackPath_WebhookPatchToMutation validates the RBAC-based webhook attack chain:
+//
+//	pod → [runs_as] → SA → [granted_by] → CRB → [bound_to] → role → [can_patch] → webhook → [can_mutate_workloads] → target
+//
+// An identity with patch permissions on MutatingWebhookConfigurations can redirect the webhook endpoint.
+func TestAttackPath_WebhookPatchToMutation(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{
+			{ID: "pod:default:foothold", Kind: KindPod, Name: "foothold", Namespace: "default"},
+			{ID: "sa:default:app-sa", Kind: KindServiceAccount, Name: "app-sa", Namespace: "default"},
+			{ID: "crb:webhook-admin", Kind: KindClusterRoleBinding, Name: "webhook-admin"},
+			{ID: "clusterrole:webhook-manager", Kind: KindClusterRole, Name: "webhook-manager"},
+			{ID: "webhook:istio-sidecar/injector", Kind: KindWebhook, Name: "istio-sidecar/injector",
+				Metadata: map[string]string{
+					"webhook_kind":    "Mutating",
+					"intercepts_pods": "true",
+				}},
+			{ID: "workload:prod:payment-svc", Kind: KindWorkload, Name: "payment-svc", Namespace: "prod"},
+		},
+		Edges: []Edge{
+			{From: "pod:default:foothold", To: "sa:default:app-sa", Kind: EdgeRunsAs},
+			{From: "sa:default:app-sa", To: "crb:webhook-admin", Kind: EdgeGrantedBy},
+			{From: "crb:webhook-admin", To: "clusterrole:webhook-manager", Kind: EdgeBoundTo},
+			{From: "clusterrole:webhook-manager", To: "webhook:istio-sidecar/injector", Kind: EdgeCanPatch,
+				Reason: "can patch mutating webhook"},
+			{From: "webhook:istio-sidecar/injector", To: "workload:prod:payment-svc", Kind: EdgeCanMutateWorkloads,
+				Reason: "mutating webhook intercepts pod creation", Inferred: true},
+		},
+	}
+	g.BuildIndex()
+
+	paths := g.FindWeightedPaths("pod:default:foothold", "workload:prod:payment-svc", MaxAttackPathDepth, 10)
+	if len(paths) == 0 {
+		t.Fatal("expected path through RBAC → webhook patch → mutation")
+	}
+	p := paths[0]
+	got := pathNodeIDs(p.Path)
+	if len(got) != 6 {
+		t.Fatalf("expected 6-step path, got %d: %v", len(got), got)
+	}
+	if got[4] != "webhook:istio-sidecar/injector" {
+		t.Errorf("expected webhook node at step 4, got %q", got[4])
+	}
+	if got[5] != "workload:prod:payment-svc" {
+		t.Errorf("expected target workload at step 5, got %q", got[5])
+	}
+}
+
+// TestAttackPath_WebhookBuildIntegration validates that Build() correctly creates
+// serves_webhook and can_mutate_workloads edges from EnumerationResult data.
+func TestAttackPath_WebhookBuildIntegration(t *testing.T) {
+	log := zaptest.NewLogger(t)
+	result := &kube.EnumerationResult{
+		Identity: kube.IdentityInfo{
+			Username:  "system:serviceaccount:default:test-sa",
+			Namespace: "default",
+			SAName:    "test-sa",
+		},
+		Permissions: kube.PermissionsInfo{
+			SSRRByNamespace: map[string][]kube.PolicyRule{},
+		},
+		ClusterObjects: kube.ClusterObjects{
+			Namespaces: []kube.NSInfo{{Name: "default"}, {Name: "webhook-ns"}},
+			ServiceAccounts: []kube.SAInfo{
+				{Name: "test-sa", Namespace: "default"},
+				{Name: "webhook-sa", Namespace: "webhook-ns"},
+			},
+			Workloads: []kube.WorkloadInfo{
+				{Kind: "Deployment", Name: "webhook-server", Namespace: "webhook-ns", ServiceAccount: "webhook-sa"},
+				{Kind: "Deployment", Name: "target-app", Namespace: "default", ServiceAccount: "test-sa"},
+			},
+			Webhooks: []kube.WebhookInfo{
+				{
+					Name:           "my-injector/sidecar",
+					Kind:           "Mutating",
+					ServiceName:    "webhook-server",
+					ServiceNS:      "webhook-ns",
+					InterceptsPods: true,
+					Rules:          []string{"*/pods"},
+					Operations:     []string{"CREATE"},
+				},
+			},
+		},
+	}
+
+	g := Build(result, log)
+
+	// Check that serves_webhook edge was created.
+	foundServesWebhook := false
+	foundCanMutate := false
+	for _, e := range g.Edges {
+		if e.Kind == EdgeServesWebhook && e.From == "workload:webhook-ns:webhook-server" && e.To == "webhook:my-injector/sidecar" {
+			foundServesWebhook = true
+		}
+		if e.Kind == EdgeCanMutateWorkloads && e.From == "webhook:my-injector/sidecar" && e.To == "workload:default:target-app" {
+			foundCanMutate = true
+		}
+	}
+	if !foundServesWebhook {
+		t.Error("missing serves_webhook edge from backend workload to webhook")
+	}
+	if !foundCanMutate {
+		t.Error("missing can_mutate_workloads edge from webhook to target workload")
+	}
+
+	// Check that webhook node has intercepts_pods metadata.
+	whNode := g.nodeByID("webhook:my-injector/sidecar")
+	if whNode == nil {
+		t.Fatal("webhook node not found in graph")
+	}
+	if whNode.Metadata["intercepts_pods"] != "true" {
+		t.Errorf("webhook node missing intercepts_pods=true metadata, got %q", whNode.Metadata["intercepts_pods"])
+	}
+}
+
 // ensure fmt/strings imports stay used in this file even if tests evolve.
 var _ = fmt.Sprintf
 var _ = strings.Join

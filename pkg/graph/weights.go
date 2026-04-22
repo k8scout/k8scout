@@ -59,6 +59,12 @@ func EdgeWeightOf(e *Edge) float64 {
 	case EdgeCanBind:
 		return 1.0
 
+	// Admission control: backend linkage is structural, mutation is offensive capability.
+	case EdgeServesWebhook:
+		return 0.1
+	case EdgeCanMutateWorkloads:
+		return 3.0
+
 	// Inferred edges: speculative multi-step escalation, higher difficulty.
 	case EdgeInferred:
 		return 2.0

@@ -67,6 +67,11 @@ const (
 	// (different namespace, privileged execution context, cluster-scoped
 	// workload like DaemonSet). Captures weak-foothold → strong-foothold pivots.
 	StrongerFoothold GoalKind = "stronger_foothold"
+
+	// AdmissionControl — a mutating webhook that intercepts pod-related resources.
+	// Controlling this webhook allows injecting sidecars, replacing service accounts,
+	// and modifying security contexts in all future workloads within its scope.
+	AdmissionControl GoalKind = "admission_control"
 )
 
 // GoalNode pairs a graph node with its high-value classification.
@@ -278,6 +283,16 @@ func HighValueTargets(g *Graph, r *kube.EnumerationResult) []GoalNode {
 					BaseScore:   6.5,
 				})
 			}
+
+		// ── AdmissionControl ─────────────────────────────────────────────────
+		// Mutating webhooks that intercept pod-related resources.
+		case n.Kind == KindWebhook && n.Metadata["webhook_kind"] == "Mutating" && n.Metadata["intercepts_pods"] == "true":
+			goals = append(goals, GoalNode{
+				NodeID:      n.ID,
+				GoalKind:    AdmissionControl,
+				Description: fmt.Sprintf("Mutating webhook %q intercepts pod creation — controls future workload specs", n.Name),
+				BaseScore:   8.5,
+			})
 		}
 	}
 

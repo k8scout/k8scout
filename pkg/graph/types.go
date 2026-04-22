@@ -58,6 +58,12 @@ const (
 	// EdgeAssumesCloudRole — SA → cloud IAM identity (IRSA, Azure WI, GKE WI).
 	// Enables paths: pod → [runs_as] → SA → [assumes_cloud_role] → cloud:aws:arn:...
 	EdgeAssumesCloudRole EdgeKind = "assumes_cloud_role"
+	// EdgeServesWebhook — workload/pod backs a mutating webhook's Service endpoint.
+	// Structural edge: compromising this workload means controlling the webhook's mutations.
+	EdgeServesWebhook EdgeKind = "serves_webhook"
+	// EdgeCanMutateWorkloads — mutating webhook can intercept and modify future workload creation.
+	// Offensive capability: controlling this webhook allows sidecar injection, SA replacement, etc.
+	EdgeCanMutateWorkloads EdgeKind = "can_mutate_workloads"
 )
 
 // Node represents a vertex in the permission graph.

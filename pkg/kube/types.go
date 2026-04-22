@@ -103,6 +103,7 @@ type WebhookInfo struct {
 	URL                  string   `json:"url,omitempty"`
 	HasNamespaceSelector bool     `json:"has_namespace_selector,omitempty"` // true if NamespaceSelector is set
 	Operations           []string `json:"operations,omitempty"`             // CREATE, UPDATE, DELETE, CONNECT
+	InterceptsPods       bool     `json:"intercepts_pods,omitempty"`        // true if webhook matches pod-related resources
 }
 
 // NSInfo — namespace metadata.

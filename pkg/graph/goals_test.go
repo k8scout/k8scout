@@ -396,6 +396,65 @@ func TestHighValueTargets_EmptyGraph(t *testing.T) {
 	}
 }
 
+// ── AdmissionControl ────────────────────────────────────────────────────────
+
+func TestHighValueTargets_AdmissionControl_mutatingPodWebhook(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{
+			{ID: "webhook:my-injector/sidecar", Kind: KindWebhook, Name: "my-injector/sidecar",
+				Metadata: map[string]string{
+					"webhook_kind":    "Mutating",
+					"intercepts_pods": "true",
+				}},
+		},
+	}
+	r := &kube.EnumerationResult{}
+	goals := HighValueTargets(&g, r)
+	if len(goals) != 1 {
+		t.Fatalf("want 1 AdmissionControl goal, got %d: %+v", len(goals), goals)
+	}
+	if goals[0].GoalKind != AdmissionControl {
+		t.Errorf("want GoalKind %q, got %q", AdmissionControl, goals[0].GoalKind)
+	}
+	if goals[0].BaseScore != 8.5 {
+		t.Errorf("want BaseScore 8.5, got %f", goals[0].BaseScore)
+	}
+}
+
+func TestHighValueTargets_AdmissionControl_validatingWebhook_notGoal(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{
+			{ID: "webhook:policy/validate", Kind: KindWebhook, Name: "policy/validate",
+				Metadata: map[string]string{
+					"webhook_kind":    "Validating",
+					"intercepts_pods": "true",
+				}},
+		},
+	}
+	r := &kube.EnumerationResult{}
+	goals := HighValueTargets(&g, r)
+	if len(goals) != 0 {
+		t.Fatalf("want 0 goals for validating webhook, got %d: %+v", len(goals), goals)
+	}
+}
+
+func TestHighValueTargets_AdmissionControl_nonPodWebhook_notGoal(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{
+			{ID: "webhook:cert-manager/inject-ca", Kind: KindWebhook, Name: "cert-manager/inject-ca",
+				Metadata: map[string]string{
+					"webhook_kind":    "Mutating",
+					"intercepts_pods": "false",
+				}},
+		},
+	}
+	r := &kube.EnumerationResult{}
+	goals := HighValueTargets(&g, r)
+	if len(goals) != 0 {
+		t.Fatalf("want 0 goals for non-pod mutating webhook, got %d: %+v", len(goals), goals)
+	}
+}
+
 func TestHighValueTargets_NegativeCase_noFalsePositives(t *testing.T) {
 	// Graph with nodes that must NOT produce any goals.
 	g := Graph{
