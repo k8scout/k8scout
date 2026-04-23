@@ -27,6 +27,7 @@ func collectWebhooks(ctx context.Context, c *Client, log *zap.Logger) ([]Webhook
 					FailurePolicy: webhookFailurePolicy(wh.FailurePolicy),
 					HasNamespaceSelector: wh.NamespaceSelector != nil &&
 						(len(wh.NamespaceSelector.MatchLabels) > 0 || len(wh.NamespaceSelector.MatchExpressions) > 0),
+					InterceptsPods: interceptsPodResources(wh.Rules),
 				}
 				if wh.ClientConfig.Service != nil {
 					wi.ServiceName = wh.ClientConfig.Service.Name
@@ -111,4 +112,30 @@ func appendUnique(slice []string, s string) []string {
 		}
 	}
 	return append(slice, s)
+}
+
+// podRelatedResources are Kubernetes resources whose admission interception
+// gives the webhook control over workload pod specs.
+var podRelatedResources = map[string]bool{
+	"pods":         true,
+	"deployments":  true,
+	"replicasets":  true,
+	"statefulsets": true,
+	"daemonsets":   true,
+	"jobs":         true,
+	"cronjobs":     true,
+	"pods/*":       true,
+}
+
+// interceptsPodResources returns true if any of the webhook's rules match
+// pod-related resources (pods, deployments, statefulsets, etc.).
+func interceptsPodResources(rules []admissionv1.RuleWithOperations) bool {
+	for _, r := range rules {
+		for _, res := range r.Resources {
+			if podRelatedResources[res] || res == "*" {
+				return true
+			}
+		}
+	}
+	return false
 }

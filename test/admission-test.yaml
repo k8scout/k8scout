@@ -1,0 +1,171 @@
+## k8scout admission-controller attack-path test fixture
+##
+## Apply:  kubectl apply -f test/admission-test.yaml
+## Scan:   ./k8scout --all-namespaces -o admission-test-report.json
+## Clean:  kubectl delete -f test/admission-test.yaml
+##
+## This creates a realistic webhook topology that exercises:
+##   1. serves_webhook edges  (backend workload → webhook)
+##   2. can_mutate_workloads edges  (webhook → target workloads)
+##   3. AdmissionControl goal detection  (pod-intercepting mutating webhook)
+##   4. PRIVESC-WEBHOOK-BACKEND-TAKEOVER inference rule
+##   5. RBAC path: SA → patch mutatingwebhookconfigurations → webhook
+##
+## The webhook uses failurePolicy=Ignore and a caBundle placeholder,
+## so it will NOT block pod creation — safe to apply on any cluster.
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: webhook-test
+
+---
+# Backend ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: webhook-backend-sa
+  namespace: webhook-test
+
+---
+# Backend Deployment — simulates the webhook server process.
+# Runs nginx as a stand-in (no real admission logic).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-injector
+  namespace: webhook-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pod-injector
+  template:
+    metadata:
+      labels:
+        app: pod-injector
+    spec:
+      serviceAccountName: webhook-backend-sa
+      containers:
+        - name: webhook
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 8443
+
+---
+# Service that the MutatingWebhookConfiguration points to.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pod-injector
+  namespace: webhook-test
+spec:
+  selector:
+    app: pod-injector
+  ports:
+    - port: 443
+      targetPort: 8443
+
+---
+# MutatingWebhookConfiguration — intercepts pod CREATE in all namespaces.
+# failurePolicy=Ignore ensures this is safe even without a real webhook server.
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: test-pod-injector
+webhooks:
+  - name: pod-injector.webhook-test.svc
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: Ignore
+    clientConfig:
+      service:
+        name: pod-injector
+        namespace: webhook-test
+        path: /mutate
+      # Dummy caBundle — webhook will fail TLS and be ignored (failurePolicy=Ignore)
+      caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUI9ekNDQVoyZ0F3SUJBZ0lKQUxiTXFrZzFaS3dITUEwR0NTcUdTSWIzRFFFQkN3VUFNQ014SVRBZkJnTlYKQkFNTUdIQnZaQzFwYm1wbFkzUnZjaTUzWldKb2IyOXJMWFJsYzNRd0hoY05NalV3TVRJME1EQXdNREF3V2hjTgpNalV3TVRJMk1EQXdNREF3V2pBak1TRXdId1lEVlFRRERCaHdiMlF0YVc1cVpXTjBiM0l1ZDJWaWFHOXZheTEwClpYTjBNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QU1JSUJDUUFBQUFFQUFBQUFBQUFBQUFBQUFBQUFBQUEKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+    rules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["pods"]
+        scope: "*"
+
+---
+# Target namespace with a workload the webhook would intercept.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: target-app
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-api
+  namespace: target-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-api
+  template:
+    metadata:
+      labels:
+        app: payment-api
+    spec:
+      containers:
+        - name: api
+          image: nginx:1.27-alpine
+
+---
+# RBAC: give a SA in default namespace the ability to patch the webhook.
+# This exercises the RBAC → webhook patch → can_mutate_workloads path.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: webhook-patcher
+  namespace: default
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: webhook-patch-test
+rules:
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations"]
+    verbs: ["get", "patch", "update"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: webhook-patcher-binding
+subjects:
+  - kind: ServiceAccount
+    name: webhook-patcher
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: webhook-patch-test
+
+---
+# A pod running as webhook-patcher SA — gives k8scout a concrete foothold
+# to build attack paths from.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attacker-foothold
+  namespace: default
+  labels:
+    app: attacker-foothold
+spec:
+  serviceAccountName: webhook-patcher
+  containers:
+    - name: shell
+      image: busybox:1.36
+      command: ["sleep", "infinity"]

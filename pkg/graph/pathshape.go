@@ -67,6 +67,10 @@ func capabilityLabelForEdge(e Edge) string {
 		return "token theft"
 	case EdgeAssumesCloudRole:
 		return "cloud role assumption"
+	case EdgeServesWebhook:
+		return "webhook backend"
+	case EdgeCanMutateWorkloads:
+		return "admission mutation"
 	case EdgeInferred:
 		if e.Reason != "" {
 			return "escalation"
