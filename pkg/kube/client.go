@@ -49,6 +49,16 @@ func NewClient(kubeconfigPath string, timeout time.Duration, log *zap.Logger) (*
 		cfg.WrapTransport = func(rt http.RoundTripper) http.RoundTripper { return rt }
 	}
 
+	// Raise client-side rate limits. The client-go defaults (QPS 5 / Burst 10) are far
+	// too low for an enumeration tool: recon alone can fire 1000+ SelfSubjectAccessReview
+	// calls, which the default limiter throttles to minutes of artificial waiting.
+	if cfg.QPS == 0 {
+		cfg.QPS = 50
+	}
+	if cfg.Burst == 0 {
+		cfg.Burst = 100
+	}
+
 	cs, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("creating clientset: %w", err)

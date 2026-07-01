@@ -31,6 +31,9 @@ type Config struct {
 	Kubeconfig    string
 	ReviewerMode  bool
 	Stealth       bool
+	Recon         bool
+	BruteforceNS  bool
+	NSWordlist    string
 }
 
 func main() {
@@ -48,6 +51,9 @@ It never reads secret data values — only metadata.`,
 		Version:      version,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cfg.Recon {
+				return runRecon(cfg)
+			}
 			if cfg.ReviewerMode {
 				return runReviewer(cfg)
 			}
@@ -74,6 +80,15 @@ It never reads secret data values — only metadata.`,
 		"Skip SSRR and SSAR API calls to reduce audit log footprint. "+
 			"Findings that require permission data will be limited. "+
 			"Appends an audit_footprint block to the report showing what was skipped.")
+	f.BoolVar(&cfg.Recon, "recon", false,
+		"Recon mode: quickly display the current identity, its effective permissions (SSRR), "+
+			"and which resources it can access (SSAR) — no graph, inference, or AI. "+
+			"Combine with --bruteforce-ns to discover namespaces you cannot list.")
+	f.BoolVar(&cfg.BruteforceNS, "bruteforce-ns", false,
+		"Bruteforce namespace names (via a built-in wordlist or --ns-wordlist) to find namespaces "+
+			"that are not listable cluster-wide. Only effective with --recon.")
+	f.StringVar(&cfg.NSWordlist, "ns-wordlist", "",
+		"Path to a newline-delimited namespace wordlist for --bruteforce-ns (defaults to a built-in list)")
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -165,6 +180,84 @@ func run(cfg *Config) error {
 			return fmt.Errorf("writing JSON output to %s: %w", cfg.OutFile, err)
 		}
 		log.Info("JSON report written", zap.String("path", cfg.OutFile))
+	}
+
+	return nil
+}
+
+// runRecon implements the --recon flow: a fast, low-footprint enumeration that reports
+// the current identity, its effective permissions (SSRR), and the resources it can
+// access (SSAR capability matrix). With --bruteforce-ns it also probes a wordlist of
+// candidate namespace names to discover namespaces that cannot be listed cluster-wide.
+func runRecon(cfg *Config) error {
+	log := buildLogger(cfg.LogLevel)
+	defer log.Sync() //nolint:errcheck
+
+	log.Info("k8scout recon mode starting", zap.String("version", version))
+
+	timeout := time.Duration(cfg.TimeoutSecs) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout*10)
+	defer cancel()
+
+	// ── 1. Build Kubernetes client ─────────────────────────────────────────────
+	client, err := kube.NewClient(cfg.Kubeconfig, timeout, log)
+	if err != nil {
+		return fmt.Errorf("building kube client: %w", err)
+	}
+
+	// ── 2. Determine base namespaces ───────────────────────────────────────────
+	var namespaces []string
+	if cfg.Namespace != "" {
+		namespaces = []string{cfg.Namespace}
+	} else {
+		nsCtx, nsCancel := context.WithTimeout(ctx, 10*time.Second)
+		listed, lerr := client.ListNamespaces(nsCtx)
+		nsCancel()
+		if lerr != nil {
+			cur := client.CurrentNamespace()
+			if cur == "" {
+				cur = "default"
+			}
+			log.Warn("cannot list namespaces; using current (try --bruteforce-ns to discover more)",
+				zap.String("namespace", cur), zap.Error(lerr))
+			namespaces = []string{cur}
+		} else {
+			namespaces = listed
+		}
+	}
+
+	// ── 3. Resolve namespace wordlist for bruteforce ──────────────────────────
+	var wordlist []string
+	if cfg.BruteforceNS {
+		if cfg.NSWordlist != "" {
+			wordlist, err = kube.LoadNamespaceWordlist(cfg.NSWordlist)
+			if err != nil {
+				return fmt.Errorf("loading namespace wordlist %q: %w", cfg.NSWordlist, err)
+			}
+		} else {
+			wordlist = kube.DefaultNamespaceWordlist
+		}
+	}
+
+	// ── 4. Run recon ───────────────────────────────────────────────────────────
+	result := kube.Recon(ctx, client, kube.ReconOptions{
+		Namespaces:        namespaces,
+		BruteforceNS:      cfg.BruteforceNS,
+		NamespaceWordlist: wordlist,
+		Log:               log,
+	})
+
+	// ── 5. Output ──────────────────────────────────────────────────────────────
+	writer := output.New(cfg.Format, log)
+	if err := writer.PrintRecon(*result); err != nil {
+		log.Error("printing recon report to stdout", zap.Error(err))
+	}
+
+	if cfg.OutFile != "" && cfg.Format == "json" {
+		if err := writer.WriteReconFile(*result, cfg.OutFile); err != nil {
+			return fmt.Errorf("writing recon JSON output to %s: %w", cfg.OutFile, err)
+		}
+		log.Info("recon JSON report written", zap.String("path", cfg.OutFile))
 	}
 
 	return nil

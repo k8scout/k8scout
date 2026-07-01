@@ -27,6 +27,23 @@ vendor/
 # macOS
 .DS_Store
 
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+*~
+
+# Test / coverage output
+coverage.out
+coverage.html
+*.coverprofile
+*.test
+
+# Logs & temp
+*.log
+*.tmp
+tmp/
+
 # Old binary names (pre-rename)
 k8s-enum
 k8s-enum-linux-amd64
