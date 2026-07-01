@@ -80,6 +80,56 @@ type ClusterObjects struct {
 	Webhooks              []WebhookInfo        `json:"webhooks,omitempty"`
 	CRDs                  []CRDInfo            `json:"crds,omitempty"`
 	KubeletProbes         []KubeletProbeResult `json:"kubelet_probes,omitempty"`
+	NetworkPolicies       []NetworkPolicyInfo  `json:"network_policies,omitempty"`
+	Services              []ServiceInfo        `json:"services,omitempty"`
+	MetadataProbes        []MetadataProbeResult `json:"metadata_probes,omitempty"`
+	PersistentVolumes     []PVInfo             `json:"persistent_volumes,omitempty"`
+	PersistentVolumeClaims []PVCInfo           `json:"persistent_volume_claims,omitempty"`
+	// Cloud-specific data.
+	AWSAuth            *AWSAuthConfig      `json:"aws_auth,omitempty"`
+	EKSPodIdentity     *EKSPodIdentityInfo `json:"eks_pod_identity,omitempty"`
+	AADPodIdentity     *AADPodIdentityInfo `json:"aad_pod_identity,omitempty"`
+	GKEInfo            *GKEClusterInfo     `json:"gke_info,omitempty"`
+	AzureKeyVaultCSI   bool               `json:"azure_keyvault_csi,omitempty"`
+	GCPSAKeysInSecrets []string           `json:"gcp_sa_keys_in_secrets,omitempty"`
+}
+
+// AWSAuthConfig represents the parsed aws-auth ConfigMap from kube-system.
+type AWSAuthConfig struct {
+	MapRoles []AWSAuthEntry `json:"map_roles,omitempty"`
+	MapUsers []AWSAuthEntry `json:"map_users,omitempty"`
+}
+
+// AWSAuthEntry represents a single mapping in aws-auth.
+type AWSAuthEntry struct {
+	ARN      string   `json:"arn"`
+	Type     string   `json:"type"` // "role" or "user"
+	Username string   `json:"username,omitempty"`
+	Groups   []string `json:"groups,omitempty"`
+}
+
+// EKSPodIdentityInfo describes EKS Pod Identity agent presence.
+type EKSPodIdentityInfo struct {
+	Enabled        bool   `json:"enabled"`
+	AgentDaemonSet string `json:"agent_daemonset,omitempty"`
+	WebhookName    string `json:"webhook_name,omitempty"`
+}
+
+// AADPodIdentityInfo describes AAD Pod Identity presence (legacy AKS).
+type AADPodIdentityInfo struct {
+	Enabled       bool   `json:"enabled"`
+	NMIDaemonSet  string `json:"nmi_daemonset,omitempty"`
+	MICDeployment string `json:"mic_deployment,omitempty"`
+	CRDsPresent   bool   `json:"crds_present,omitempty"`
+}
+
+// GKEClusterInfo describes GKE-specific cluster features.
+type GKEClusterInfo struct {
+	IsAutopilot            bool     `json:"is_autopilot,omitempty"`
+	ConfigConnectorEnabled bool     `json:"config_connector_enabled,omitempty"`
+	ConfigConnectorCRDs    []string `json:"config_connector_crds,omitempty"`
+	MetadataConcealment    bool     `json:"metadata_concealment,omitempty"`
+	OSDistribution         string   `json:"os_distribution,omitempty"`
 }
 
 // CRDInfo describes a CustomResourceDefinition present in the cluster.
@@ -135,9 +185,12 @@ type SAInfo struct {
 	// ImagePullSecrets names only (no data).
 	ImagePullSecrets []string `json:"image_pull_secrets,omitempty"`
 	// Cloud workload identity annotations (populated when present).
-	IRSARole          string `json:"irsa_role,omitempty"`          // eks.amazonaws.com/role-arn
-	AzureIdentity     string `json:"azure_identity,omitempty"`     // azure.workload.identity/client-id
+	IRSARole          string `json:"irsa_role,omitempty"`            // eks.amazonaws.com/role-arn
+	IRSAAudience      string `json:"irsa_audience,omitempty"`        // STS audience from projected token
+	AzureIdentity     string `json:"azure_identity,omitempty"`      // azure.workload.identity/client-id
+	AzureTenantID     string `json:"azure_tenant_id,omitempty"`     // azure.workload.identity/tenant-id
 	GCPServiceAccount string `json:"gcp_service_account,omitempty"` // iam.gke.io/gcp-service-account
+	GCPProject        string `json:"gcp_project,omitempty"`         // from annotation or node label
 }
 
 // RoleInfo — Role or ClusterRole metadata + rules.
@@ -292,21 +345,105 @@ type CMeta struct {
 
 // NodeInfo — Node metadata only.
 type NodeInfo struct {
+	Name             string            `json:"name"`
+	Labels           map[string]string `json:"labels,omitempty"`
+	Taints           []string          `json:"taints,omitempty"`
+	Capacity         map[string]string `json:"capacity,omitempty"` // cpu, memory strings
+	Roles            []string          `json:"roles,omitempty"`
+	InternalIPs      []string          `json:"internal_ips,omitempty"`
+	CloudProvider    string            `json:"cloud_provider,omitempty"`    // aws, azure, gcp
+	InstanceType     string            `json:"instance_type,omitempty"`
+	NodePool         string            `json:"node_pool,omitempty"`
+	AvailabilityZone string            `json:"availability_zone,omitempty"`
+}
+
+// NetworkPolicyInfo describes a Kubernetes NetworkPolicy.
+type NetworkPolicyInfo struct {
 	Name        string            `json:"name"`
+	Namespace   string            `json:"namespace"`
 	Labels      map[string]string `json:"labels,omitempty"`
-	Taints      []string          `json:"taints,omitempty"`
-	Capacity    map[string]string `json:"capacity,omitempty"` // cpu, memory strings
-	Roles       []string          `json:"roles,omitempty"`
-	InternalIPs []string          `json:"internal_ips,omitempty"` // node internal IP addresses
+	PodSelector map[string]string `json:"pod_selector"`
+	IngressRules []NetPolRule     `json:"ingress_rules,omitempty"`
+	EgressRules  []NetPolRule     `json:"egress_rules,omitempty"`
+	PolicyTypes  []string         `json:"policy_types"` // Ingress, Egress
+}
+
+// NetPolRule describes one ingress or egress rule in a NetworkPolicy.
+type NetPolRule struct {
+	Ports  []NetPolPort `json:"ports,omitempty"`
+	FromTo []NetPolPeer `json:"from_to,omitempty"`
+}
+
+// NetPolPort describes a port in a NetworkPolicy rule.
+type NetPolPort struct {
+	Protocol string `json:"protocol,omitempty"`
+	Port     string `json:"port,omitempty"`
+}
+
+// NetPolPeer describes a peer selector in a NetworkPolicy rule.
+type NetPolPeer struct {
+	PodSelector       map[string]string `json:"pod_selector,omitempty"`
+	NamespaceSelector map[string]string `json:"namespace_selector,omitempty"`
+	IPBlock           string            `json:"ip_block,omitempty"`
+}
+
+// ServiceInfo describes a Kubernetes Service.
+type ServiceInfo struct {
+	Name      string            `json:"name"`
+	Namespace string            `json:"namespace"`
+	Type      string            `json:"type"` // ClusterIP, NodePort, LoadBalancer, ExternalName
+	ClusterIP string            `json:"cluster_ip,omitempty"`
+	Selector  map[string]string `json:"selector,omitempty"`
+	Ports     []ServicePort     `json:"ports,omitempty"`
+	Labels    map[string]string `json:"labels,omitempty"`
+}
+
+// ServicePort describes a port exposed by a Service.
+type ServicePort struct {
+	Name       string `json:"name,omitempty"`
+	Port       int32  `json:"port"`
+	TargetPort string `json:"target_port,omitempty"`
+	Protocol   string `json:"protocol,omitempty"`
+	NodePort   int32  `json:"node_port,omitempty"`
+}
+
+// MetadataProbeResult records the outcome of probing cloud metadata endpoints.
+type MetadataProbeResult struct {
+	NodeName    string `json:"node_name,omitempty"`
+	MetadataV1  bool   `json:"metadata_v1"`  // AWS IMDSv1 reachable
+	MetadataV2  bool   `json:"metadata_v2"`  // AWS IMDSv2 reachable
+	GKEMetadata bool   `json:"gke_metadata"` // GKE metadata server reachable
+	AzureIMDS   bool   `json:"azure_imds"`   // Azure IMDS reachable
+	Provider    string `json:"provider,omitempty"`
+}
+
+// PVInfo describes a PersistentVolume.
+type PVInfo struct {
+	Name         string   `json:"name"`
+	StorageClass string   `json:"storage_class,omitempty"`
+	AccessModes  []string `json:"access_modes,omitempty"`
+	Capacity     string   `json:"capacity,omitempty"`
+	ClaimRef     string   `json:"claim_ref,omitempty"` // namespace/name of bound PVC
+	VolumeSource string   `json:"volume_source,omitempty"`
+}
+
+// PVCInfo describes a PersistentVolumeClaim.
+type PVCInfo struct {
+	Name         string   `json:"name"`
+	Namespace    string   `json:"namespace"`
+	VolumeName   string   `json:"volume_name,omitempty"`
+	StorageClass string   `json:"storage_class,omitempty"`
+	AccessModes  []string `json:"access_modes,omitempty"`
 }
 
 // EnumerateOptions configures a full enumeration run.
 type EnumerateOptions struct {
-	Namespaces   []string
-	SkipSSAR     bool
-	Stealth      bool // skip SSRR/SSAR to reduce audit log footprint
-	ProbeKubelet bool // probe each node's kubelet read-only port (10255) — offensive mode only
-	Log          *zap.Logger
+	Namespaces    []string
+	SkipSSAR      bool
+	Stealth       bool // skip SSRR/SSAR to reduce audit log footprint
+	ProbeKubelet  bool // probe each node's kubelet read-only port (10255) — offensive mode only
+	ProbeMetadata bool // probe cloud metadata endpoints (169.254.169.254 etc.) — offensive mode only
+	Log           *zap.Logger
 }
 
 // IdentityPermissions represents computed effective RBAC permissions for a subject.

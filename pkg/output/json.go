@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/hac01/k8scout/pkg/graph"
 	"go.uber.org/zap"
 )
 
@@ -38,14 +39,35 @@ func (w *Writer) WriteFile(report Report, path string) error {
 
 // Print writes the report to stdout (JSON or text based on format flag).
 func (w *Writer) Print(report Report) error {
-	if w.format == "json" {
+	switch w.format {
+	case "json":
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		enc.SetEscapeHTML(false)
 		return enc.Encode(report)
+	case "sarif":
+		sarif := ConvertToSARIF(report.RiskFindings, report.Meta)
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.SetEscapeHTML(false)
+		return enc.Encode(sarif)
+	default:
+		return printText(report)
 	}
-	// Default to text summary.
-	return printText(report)
+}
+
+// WriteSARIFFile serializes findings to a SARIF v2.1.0 JSON file.
+func (w *Writer) WriteSARIFFile(findings []graph.RiskFinding, meta MetaBlock, path string) error {
+	sarif := ConvertToSARIF(findings, meta)
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("creating SARIF file: %w", err)
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+	return enc.Encode(sarif)
 }
 
 // WriteReviewerFile serializes the reviewer report to a JSON file.

@@ -20,7 +20,12 @@ const (
 	KindWebhook             NodeKind = "Webhook"
 	KindCRD                 NodeKind = "CRD"
 	// KindCloudIdentity represents a cloud IAM identity (AWS IRSA role, GCP WI, Azure WI).
-	KindCloudIdentity NodeKind = "CloudIdentity"
+	KindCloudIdentity       NodeKind = "CloudIdentity"
+	KindService             NodeKind = "Service"
+	KindNetworkPolicy       NodeKind = "NetworkPolicy"
+	KindMetadataEndpoint    NodeKind = "MetadataEndpoint"
+	KindPersistentVolume    NodeKind = "PersistentVolume"
+	KindPersistentVolumeClaim NodeKind = "PersistentVolumeClaim"
 )
 
 // EdgeKind enumerates directed edge relationship types.
@@ -58,6 +63,14 @@ const (
 	// EdgeAssumesCloudRole — SA → cloud IAM identity (IRSA, Azure WI, GKE WI).
 	// Enables paths: pod → [runs_as] → SA → [assumes_cloud_role] → cloud:aws:arn:...
 	EdgeAssumesCloudRole EdgeKind = "assumes_cloud_role"
+	// EdgeSelectsPod — Service → Pod it selects via label selector.
+	EdgeSelectsPod EdgeKind = "selects_pod"
+	// EdgeAllowsTo — NetworkPolicy permit edge.
+	EdgeAllowsTo EdgeKind = "allows_to"
+	// EdgeReachesMetadata — pod → cloud metadata endpoint reachable from pod network.
+	EdgeReachesMetadata EdgeKind = "reaches_metadata"
+	// EdgeSharesVolume — pod → PVC → pod (cross-pod data access via shared PV).
+	EdgeSharesVolume EdgeKind = "shares_volume"
 )
 
 // Node represents a vertex in the permission graph.

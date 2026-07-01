@@ -311,6 +311,24 @@ func collectNodes(ctx context.Context, c *Client, log *zap.Logger) ([]NodeInfo, 
 				ni.InternalIPs = append(ni.InternalIPs, addr.Address)
 			}
 		}
+		// Cloud provider detection from node labels.
+		labels := n.Labels
+		if _, ok := labels["eks.amazonaws.com/nodegroup"]; ok {
+			ni.CloudProvider = "aws"
+			ni.NodePool = labels["eks.amazonaws.com/nodegroup"]
+		} else if _, ok := labels["kubernetes.azure.com/agentpool"]; ok {
+			ni.CloudProvider = "azure"
+			ni.NodePool = labels["kubernetes.azure.com/agentpool"]
+		} else if _, ok := labels["cloud.google.com/gke-nodepool"]; ok {
+			ni.CloudProvider = "gcp"
+			ni.NodePool = labels["cloud.google.com/gke-nodepool"]
+		}
+		if v, ok := labels["node.kubernetes.io/instance-type"]; ok {
+			ni.InstanceType = v
+		}
+		if v, ok := labels["topology.kubernetes.io/zone"]; ok {
+			ni.AvailabilityZone = v
+		}
 		result = append(result, ni)
 	}
 	return result, nil

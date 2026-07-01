@@ -115,6 +115,35 @@ func Enumerate(ctx context.Context, c *Client, opts EnumerateOptions) (*Enumerat
 		result.ClusterObjects.Pods = append(result.ClusterObjects.Pods, pods...)
 	}
 
+	// ── Services & NetworkPolicies ────────────────────────────────────────────
+	log.Info("collecting Services and NetworkPolicies")
+	for _, ns := range opts.Namespaces {
+		svcs, err := collectServices(ctx, c, ns, log)
+		if err != nil {
+			log.Warn("service collection failed", zap.String("namespace", ns), zap.Error(err))
+		} else {
+			result.ClusterObjects.Services = append(result.ClusterObjects.Services, svcs...)
+		}
+
+		nps, err := collectNetworkPolicies(ctx, c, ns, log)
+		if err != nil {
+			log.Warn("network policy collection failed", zap.String("namespace", ns), zap.Error(err))
+		} else {
+			result.ClusterObjects.NetworkPolicies = append(result.ClusterObjects.NetworkPolicies, nps...)
+		}
+	}
+
+	// ── PersistentVolumeClaims (per namespace) ────────────────────────────────
+	log.Info("collecting PersistentVolumeClaims")
+	for _, ns := range opts.Namespaces {
+		pvcs, err := collectPVCs(ctx, c, ns, log)
+		if err != nil {
+			log.Warn("PVC collection failed", zap.String("namespace", ns), zap.Error(err))
+		} else {
+			result.ClusterObjects.PersistentVolumeClaims = append(result.ClusterObjects.PersistentVolumeClaims, pvcs...)
+		}
+	}
+
 	// ── Secrets metadata (+ values when GET permission confirmed) ─────────────
 	log.Info("collecting secrets (values captured when GET permission confirmed)")
 	for _, ns := range opts.Namespaces {
@@ -149,6 +178,14 @@ func Enumerate(ctx context.Context, c *Client, opts EnumerateOptions) (*Enumerat
 	}
 	result.ClusterObjects.Nodes = nodes
 
+	// ── PersistentVolumes (cluster-scoped) ────────────────────────────────────
+	log.Info("collecting PersistentVolumes")
+	pvs, err := collectPVs(ctx, c, log)
+	if err != nil {
+		log.Warn("PV collection failed (permission likely missing)", zap.Error(err))
+	}
+	result.ClusterObjects.PersistentVolumes = pvs
+
 	// ── Kubelet port probe (offensive mode only) ──────────────────────────────
 	if opts.ProbeKubelet {
 		log.Info("probing kubelet read-only port on known nodes (port 10255)")
@@ -158,6 +195,18 @@ func Enumerate(ctx context.Context, c *Client, opts EnumerateOptions) (*Enumerat
 			Count:      len(result.ClusterObjects.KubeletProbes),
 			Skipped:    false,
 			NoiseLevel: "low",
+		})
+	}
+
+	// ── Cloud metadata endpoint probe (offensive mode only) ──────────────────
+	if opts.ProbeMetadata {
+		log.Info("probing cloud metadata endpoints (169.254.169.254, metadata.google.internal)")
+		result.ClusterObjects.MetadataProbes = probeMetadataEndpoints(ctx, log)
+		result.AuditFootprint = append(result.AuditFootprint, AuditEntry{
+			Action:     "Cloud metadata endpoint probe (IMDSv1/v2, GKE, Azure IMDS)",
+			Count:      len(result.ClusterObjects.MetadataProbes),
+			Skipped:    false,
+			NoiseLevel: "medium",
 		})
 	}
 
@@ -188,6 +237,27 @@ func Enumerate(ctx context.Context, c *Client, opts EnumerateOptions) (*Enumerat
 		Skipped:    false,
 		NoiseLevel: "low",
 	})
+
+	// ── Cloud-specific collection ─────────────────────────────────────────────
+	log.Info("detecting cloud-specific features")
+
+	// EKS: aws-auth ConfigMap.
+	result.ClusterObjects.AWSAuth = collectAWSAuth(ctx, c, log)
+
+	// EKS: Pod Identity agent/webhook.
+	result.ClusterObjects.EKSPodIdentity = detectEKSPodIdentity(ctx, c, log)
+
+	// AKS: AAD Pod Identity (legacy).
+	result.ClusterObjects.AADPodIdentity = detectAADPodIdentity(ctx, c, log)
+
+	// AKS: Azure Key Vault CSI driver.
+	result.ClusterObjects.AzureKeyVaultCSI = detectAzureKeyVaultCSI(ctx, c, log)
+
+	// GKE: Autopilot, Config Connector, metadata concealment.
+	result.ClusterObjects.GKEInfo = detectGKEFeatures(ctx, c, result.ClusterObjects.Nodes, log)
+
+	// GCP: SA JSON keys in secrets.
+	result.ClusterObjects.GCPSAKeysInSecrets = detectGCPSAKeysInSecrets(result.ClusterObjects.SecretsMeta)
 
 	return result, nil
 }

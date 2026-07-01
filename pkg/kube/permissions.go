@@ -180,6 +180,12 @@ var ssarSpotChecks = []struct {
 	{"patch",       "serviceaccounts",     ""},
 	// CertificateSigningRequests allow forging TLS certificates for API server auth.
 	{"create",      "certificatesigningrequests", ""},
+	// NetworkPolicy deletion — can bypass network isolation controls.
+	{"delete",      "networkpolicies",     ""},
+	// ValidatingWebhookConfiguration deletion — can bypass security controls.
+	{"delete",      "validatingwebhookconfigurations", ""},
+	// DaemonSet creation — can deploy on every node.
+	{"create",      "daemonsets",          ""},
 }
 
 // collectSSAR runs all spot-check SSARs across all provided namespaces.
@@ -189,9 +195,10 @@ func collectSSAR(ctx context.Context, c *Client, namespaces []string, log *zap.L
 		"nodes": true, "namespaces": true,
 		"clusterroles": true, "clusterrolebindings": true,
 		"users": true,
-		"mutatingwebhookconfigurations": true,
-		"tokenreviews":                  true,
-		"certificatesigningrequests":    true,
+		"mutatingwebhookconfigurations":   true,
+		"validatingwebhookconfigurations": true,
+		"tokenreviews":                    true,
+		"certificatesigningrequests":      true,
 	}
 
 	// Build the list of checks to run, deduplicating cluster-scoped entries.

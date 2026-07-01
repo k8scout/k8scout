@@ -90,6 +90,60 @@ func printText(r Report) error {
 		}
 	}
 
+	// ── Choke Points ─────────────────────────────────────────────────────────
+	if len(r.ChokePoints) > 0 {
+		fmt.Printf("\n%s▶ Choke Points (nodes appearing in 50%%+ of attack paths)%s\n", colorBold, colorReset)
+		fmt.Printf("  %-50s %8s %8s\n", "Node", "Paths", "Impact")
+		fmt.Printf("  %s\n", strings.Repeat("-", 68))
+		for _, cp := range r.ChokePoints {
+			fmt.Printf("  %-50s %8d %7.0f%%\n", cp.NodeID, cp.PathCount, cp.Percentage)
+		}
+		fmt.Println()
+	}
+
+	// ── What-If ──────────────────────────────────────────────────────────────
+	if r.WhatIf != nil {
+		wi := r.WhatIf
+		fmt.Printf("\n%s▶ What-If Simulation: %s%s\n", colorBold, wi.Scenario.Name, colorReset)
+		if wi.Scenario.Description != "" {
+			fmt.Printf("  %s\n", wi.Scenario.Description)
+		}
+		fmt.Printf("  Attack paths before : %d\n", wi.PathsBefore)
+		fmt.Printf("  Attack paths after  : %d\n", wi.PathsAfter)
+		if wi.PathsRemoved > 0 {
+			fmt.Printf("  %sPaths eliminated     : %d%s\n", colorGreen, wi.PathsRemoved, colorReset)
+		}
+		if wi.PathsAdded > 0 {
+			fmt.Printf("  %sPaths added          : %d%s\n", colorRed, wi.PathsAdded, colorReset)
+		}
+		fmt.Printf("  Max score before    : %.1f\n", wi.ScoreBefore)
+		fmt.Printf("  Max score after     : %.1f\n", wi.ScoreAfter)
+		if len(wi.ChokePoints) > 0 {
+			fmt.Printf("\n  Choke points in current graph:\n")
+			for _, cp := range wi.ChokePoints {
+				fmt.Printf("    %-45s (%d paths, %.0f%%)\n", cp.NodeID, cp.PathCount, cp.Percentage)
+			}
+		}
+		fmt.Println()
+	}
+
+	// ── Active Exploitation Results ──────────────────────────────────────────
+	if r.ActiveResult != nil && (len(r.ActiveResult.Credentials) > 0 || len(r.ActiveResult.Results) > 0) {
+		ar := r.ActiveResult
+		fmt.Printf("\n%s%s▶ Active Exploitation Results%s\n", colorBold, colorRed, colorReset)
+		fmt.Printf("  Credentials captured : %d\n", len(ar.Credentials))
+		fmt.Printf("  Exploit steps run    : %d\n\n", len(ar.Results))
+		for i, cred := range ar.Credentials {
+			truncValue := cred.Value
+			if len(truncValue) > 80 {
+				truncValue = truncValue[:80] + "..."
+			}
+			fmt.Printf("  [%d] %s/%s — %s (%s)\n", i+1, cred.Namespace, cred.PodName, cred.CredType, cred.Source)
+			fmt.Printf("      Name  : %s\n", cred.CredName)
+			fmt.Printf("      Value : %s\n\n", truncValue)
+		}
+	}
+
 	fmt.Printf("\n%s%s%s\n", colorCyan, sep, colorReset)
 	fmt.Printf("Full JSON report: %s\n\n", r.Meta.ClusterServer)
 

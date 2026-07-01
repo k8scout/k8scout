@@ -662,7 +662,24 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 	// Node nodes.
 	for _, n := range result.ClusterObjects.Nodes {
 		nid := "node:" + n.Name
-		nm[nid] = &Node{ID: nid, Kind: KindNode, Name: n.Name}
+		meta := map[string]string{}
+		if n.CloudProvider != "" {
+			meta["cloud_provider"] = n.CloudProvider
+		}
+		if n.InstanceType != "" {
+			meta["instance_type"] = n.InstanceType
+		}
+		if n.NodePool != "" {
+			meta["node_pool"] = n.NodePool
+		}
+		if n.AvailabilityZone != "" {
+			meta["availability_zone"] = n.AvailabilityZone
+		}
+		node := &Node{ID: nid, Kind: KindNode, Name: n.Name}
+		if len(meta) > 0 {
+			node.Metadata = meta
+		}
+		nm[nid] = node
 	}
 
 	// Pass 5 (new): Role→target capability edges.
@@ -708,14 +725,38 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 		}
 		cloudID := "cloud:" + provider + ":" + cloudRole
 		if _, ok := nm[cloudID]; !ok {
+			meta := map[string]string{
+				"cloud_provider": provider,
+				"cloud_role":     cloudRole,
+			}
+			// Enrich with parsed details.
+			if provider == "aws" {
+				acctID, roleName, _, _ := kube.ParseIRSARoleARN(cloudRole)
+				if acctID != "" {
+					meta["aws_account"] = acctID
+				}
+				if roleName != "" {
+					meta["aws_role_name"] = roleName
+				}
+			} else if provider == "gcp" {
+				// Parse GCP SA email: name@project.iam.gserviceaccount.com
+				if parts := strings.Split(cloudRole, "@"); len(parts) == 2 {
+					meta["gcp_sa_name"] = parts[0]
+					if projParts := strings.Split(parts[1], "."); len(projParts) > 0 {
+						meta["gcp_project"] = projParts[0]
+					}
+				}
+			} else if provider == "azure" {
+				meta["azure_client_id"] = cloudRole
+				if sa.AzureTenantID != "" {
+					meta["azure_tenant_id"] = sa.AzureTenantID
+				}
+			}
 			nm[cloudID] = &Node{
-				ID:   cloudID,
-				Kind: KindCloudIdentity,
-				Name: cloudRole,
-				Metadata: map[string]string{
-					"cloud_provider": provider,
-					"cloud_role":     cloudRole,
-				},
+				ID:        cloudID,
+				Kind:      KindCloudIdentity,
+				Name:      cloudRole,
+				Metadata:  meta,
 				RiskScore: 9.0,
 			}
 		}
@@ -755,9 +796,338 @@ func buildObjectGraph(nm nodeMap, result *kube.EnumerationResult) []Edge {
 				})
 			}
 		}
+
+		// Webhook → backing Service edge.
+		if wh.ServiceName != "" && wh.ServiceNS != "" {
+			svcID := "service:" + wh.ServiceNS + ":" + wh.ServiceName
+			if nm[svcID] != nil {
+				edges = append(edges, Edge{
+					From:   whID,
+					To:     svcID,
+					Kind:   EdgeInferred,
+					Reason: fmt.Sprintf("webhook %q backed by service %s/%s", wh.Name, wh.ServiceNS, wh.ServiceName),
+				})
+			}
+		}
+	}
+
+	// Service nodes + selects_pod edges.
+	for _, svc := range result.ClusterObjects.Services {
+		svcID := "service:" + svc.Namespace + ":" + svc.Name
+		meta := map[string]string{
+			"type":      svc.Type,
+			"cluster_ip": svc.ClusterIP,
+		}
+		nm[svcID] = &Node{
+			ID:        svcID,
+			Kind:      KindService,
+			Name:      svc.Name,
+			Namespace: svc.Namespace,
+			Metadata:  meta,
+		}
+		if len(svc.Selector) > 0 {
+			for _, pod := range result.ClusterObjects.Pods {
+				if pod.Namespace != svc.Namespace {
+					continue
+				}
+				if labelsMatch(svc.Selector, pod.Labels) {
+					podID := "pod:" + pod.Namespace + ":" + pod.Name
+					if nm[podID] != nil {
+						edges = append(edges, Edge{
+							From:   svcID,
+							To:     podID,
+							Kind:   EdgeSelectsPod,
+							Reason: fmt.Sprintf("Service %s selects pod via labels", svc.Name),
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// NetworkPolicy nodes + mark protected pods.
+	denyAllNS := make(map[string]bool) // namespaces with deny-all-ingress
+	for _, np := range result.ClusterObjects.NetworkPolicies {
+		npID := "netpol:" + np.Namespace + ":" + np.Name
+		meta := map[string]string{}
+		if len(np.PolicyTypes) > 0 {
+			meta["policy_types"] = strings.Join(np.PolicyTypes, ",")
+		}
+		hasDenyAllIngress := false
+		for _, pt := range np.PolicyTypes {
+			if pt == "Ingress" && len(np.IngressRules) == 0 && len(np.PodSelector) == 0 {
+				hasDenyAllIngress = true
+			}
+		}
+		if hasDenyAllIngress {
+			meta["deny_all_ingress"] = "true"
+			denyAllNS[np.Namespace] = true
+		}
+		nm[npID] = &Node{
+			ID:        npID,
+			Kind:      KindNetworkPolicy,
+			Name:      np.Name,
+			Namespace: np.Namespace,
+			Metadata:  meta,
+		}
+	}
+	// Mark pods in deny-all-ingress namespaces so edge weights can be adjusted.
+	for _, pod := range result.ClusterObjects.Pods {
+		if !denyAllNS[pod.Namespace] {
+			continue
+		}
+		podID := "pod:" + pod.Namespace + ":" + pod.Name
+		pn := nm[podID]
+		if pn == nil {
+			continue
+		}
+		if pn.Metadata == nil {
+			pn.Metadata = map[string]string{}
+		}
+		pn.Metadata["netpol_deny_ingress"] = "true"
+	}
+
+	// PersistentVolume + PVC nodes + cross-pod shared volume edges.
+	pvcToPV := make(map[string]string) // "ns/pvcName" → pvName
+	for _, pv := range result.ClusterObjects.PersistentVolumes {
+		pvID := "pv:" + pv.Name
+		meta := map[string]string{"volume_source": pv.VolumeSource}
+		if pv.StorageClass != "" {
+			meta["storage_class"] = pv.StorageClass
+		}
+		if len(pv.AccessModes) > 0 {
+			meta["access_modes"] = strings.Join(pv.AccessModes, ",")
+		}
+		nm[pvID] = &Node{
+			ID:       pvID,
+			Kind:     KindPersistentVolume,
+			Name:     pv.Name,
+			Metadata: meta,
+		}
+		if pv.ClaimRef != "" {
+			pvcToPV[pv.ClaimRef] = pv.Name
+		}
+	}
+	for _, pvc := range result.ClusterObjects.PersistentVolumeClaims {
+		pvcID := "pvc:" + pvc.Namespace + ":" + pvc.Name
+		meta := map[string]string{}
+		if pvc.StorageClass != "" {
+			meta["storage_class"] = pvc.StorageClass
+		}
+		if len(pvc.AccessModes) > 0 {
+			meta["access_modes"] = strings.Join(pvc.AccessModes, ",")
+		}
+		nm[pvcID] = &Node{
+			ID:        pvcID,
+			Kind:      KindPersistentVolumeClaim,
+			Name:      pvc.Name,
+			Namespace: pvc.Namespace,
+			Metadata:  meta,
+		}
+		if pvName, ok := pvcToPV[pvc.Namespace+"/"+pvc.Name]; ok {
+			pvID := "pv:" + pvName
+			if nm[pvID] != nil {
+				edges = append(edges, Edge{
+					From:   pvcID,
+					To:     pvID,
+					Kind:   EdgeMounts,
+					Reason: "PVC bound to PV",
+				})
+			}
+		}
+	}
+
+	// Cross-pod shared volume edges: pods sharing a ReadWriteMany PVC.
+	pvcPods := make(map[string][]string) // pvcID → list of pod IDs
+	for _, pod := range result.ClusterObjects.Pods {
+		for _, vol := range pod.Volumes {
+			if vol.SourceKind == "PersistentVolumeClaim" && vol.SourceName != "" {
+				pvcID := "pvc:" + pod.Namespace + ":" + vol.SourceName
+				podID := "pod:" + pod.Namespace + ":" + pod.Name
+				pvcPods[pvcID] = append(pvcPods[pvcID], podID)
+				if nm[pvcID] != nil && nm[podID] != nil {
+					edges = append(edges, Edge{
+						From:   podID,
+						To:     pvcID,
+						Kind:   EdgeMounts,
+						Reason: fmt.Sprintf("pod mounts PVC %s", vol.SourceName),
+					})
+				}
+			}
+		}
+	}
+	for pvcID, pods := range pvcPods {
+		if len(pods) < 2 {
+			continue
+		}
+		pvcNode := nm[pvcID]
+		if pvcNode == nil {
+			continue
+		}
+		isRWX := false
+		if modes, ok := pvcNode.Metadata["access_modes"]; ok {
+			isRWX = strings.Contains(modes, "ReadWriteMany")
+		}
+		if !isRWX {
+			continue
+		}
+		for i := 0; i < len(pods); i++ {
+			for j := i + 1; j < len(pods); j++ {
+				if nm[pods[i]] != nil && nm[pods[j]] != nil {
+					edges = append(edges, Edge{
+						From:   pods[i],
+						To:     pods[j],
+						Kind:   EdgeSharesVolume,
+						Reason: fmt.Sprintf("shared ReadWriteMany PVC %s", pvcID),
+					})
+					edges = append(edges, Edge{
+						From:   pods[j],
+						To:     pods[i],
+						Kind:   EdgeSharesVolume,
+						Reason: fmt.Sprintf("shared ReadWriteMany PVC %s", pvcID),
+					})
+				}
+			}
+		}
+	}
+
+	// Cloud metadata endpoint nodes (when probes detected reachability).
+	for _, mp := range result.ClusterObjects.MetadataProbes {
+		if !mp.MetadataV1 && !mp.MetadataV2 && !mp.GKEMetadata && !mp.AzureIMDS {
+			continue
+		}
+		metaID := "metadata:" + mp.Provider
+		meta := map[string]string{"provider": mp.Provider}
+		if mp.MetadataV1 {
+			meta["imds_v1"] = "true"
+		}
+		if mp.MetadataV2 {
+			meta["imds_v2"] = "true"
+		}
+		if mp.GKEMetadata {
+			meta["gke_metadata"] = "true"
+		}
+		if mp.AzureIMDS {
+			meta["azure_imds"] = "true"
+		}
+		if nm[metaID] == nil {
+			nm[metaID] = &Node{
+				ID:        metaID,
+				Kind:      KindMetadataEndpoint,
+				Name:      mp.Provider + " metadata endpoint",
+				Metadata:  meta,
+				RiskScore: 9.0,
+			}
+		}
+		// All pods can potentially reach the metadata endpoint (network-level).
+		for _, pod := range result.ClusterObjects.Pods {
+			podID := "pod:" + pod.Namespace + ":" + pod.Name
+			if nm[podID] != nil {
+				edges = append(edges, Edge{
+					From:   podID,
+					To:     metaID,
+					Kind:   EdgeReachesMetadata,
+					Reason: fmt.Sprintf("pod can reach %s metadata endpoint", mp.Provider),
+				})
+			}
+		}
+	}
+
+	// ImagePullSecret pivots: SA → imagePullSecret edges.
+	for _, sa := range result.ClusterObjects.ServiceAccounts {
+		saID := saNodeID(sa.Namespace, sa.Name)
+		for _, ips := range sa.ImagePullSecrets {
+			secID := "secret:" + sa.Namespace + ":" + ips
+			if nm[secID] != nil && nm[saID] != nil {
+				edges = append(edges, Edge{
+					From:   saID,
+					To:     secID,
+					Kind:   EdgeMounts,
+					Reason: fmt.Sprintf("SA %s uses imagePullSecret %s", sa.Name, ips),
+				})
+			}
+		}
+	}
+
+	// Container escape technique enrichment on pod nodes.
+	for _, pod := range result.ClusterObjects.Pods {
+		podID := "pod:" + pod.Namespace + ":" + pod.Name
+		pn := nm[podID]
+		if pn == nil {
+			continue
+		}
+		techniques := escapeeTechniques(
+			pod.PrivilegedContainers, pod.HostPID, pod.HostNetwork, pod.HostIPC,
+			pod.DangerousCapabilities, pod.HostPathMounts, pod.CapabilityDetails,
+		)
+		if len(techniques) > 0 {
+			if pn.Metadata == nil {
+				pn.Metadata = map[string]string{}
+			}
+			pn.Metadata["escape_techniques"] = strings.Join(techniques, "; ")
+		}
 	}
 
 	return edges
+}
+
+// labelsMatch returns true if all selector labels are present in the target labels.
+func labelsMatch(selector, target map[string]string) bool {
+	if len(selector) == 0 {
+		return true
+	}
+	for k, v := range selector {
+		if target[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// escapeeTechniques returns the specific container escape techniques available given a pod's security config.
+func escapeeTechniques(privileged []string, hostPID, hostNetwork, hostIPC bool,
+	dangerousCaps []string, hostPaths []string, capDetails []kube.CapabilityDetail) []string {
+	var techniques []string
+	if len(privileged) > 0 {
+		techniques = append(techniques, "privileged: mount host fs, load kernel modules, nsenter")
+	}
+	if hostPID {
+		techniques = append(techniques, "hostPID: nsenter to host PID namespace, ptrace host processes")
+	}
+	if hostNetwork {
+		techniques = append(techniques, "hostNetwork: access host network stack, ARP spoofing, metadata endpoint")
+	}
+	if hostIPC {
+		techniques = append(techniques, "hostIPC: shared memory access, signal host processes")
+	}
+	capSet := make(map[string]bool)
+	for _, c := range dangerousCaps {
+		capSet[c] = true
+	}
+	for _, cd := range capDetails {
+		capSet[cd.Cap] = true
+	}
+	if capSet["SYS_ADMIN"] {
+		techniques = append(techniques, "SYS_ADMIN: mount cgroupfs, nsenter, eBPF")
+	}
+	if capSet["SYS_PTRACE"] {
+		techniques = append(techniques, "SYS_PTRACE: ptrace host processes via /proc")
+	}
+	if capSet["SYS_MODULE"] {
+		techniques = append(techniques, "SYS_MODULE: load kernel modules")
+	}
+	if capSet["DAC_READ_SEARCH"] {
+		techniques = append(techniques, "DAC_READ_SEARCH: read any file on host")
+	}
+	for _, p := range hostPaths {
+		switch {
+		case p == "/var/run/docker.sock" || strings.HasPrefix(p, "/run/containerd"):
+			techniques = append(techniques, "container runtime socket: "+p)
+		case p == "/" || p == "/etc" || p == "/root":
+			techniques = append(techniques, "writable host filesystem: "+p)
+		}
+	}
+	return techniques
 }
 
 // buildRoleCapabilityEdges adds edges from Role/ClusterRole nodes to the actual

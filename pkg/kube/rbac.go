@@ -147,6 +147,9 @@ func collectRBAC(ctx context.Context, c *Client, namespaces []string, log *zap.L
 				if v := ann["azure.workload.identity/client-id"]; v != "" {
 					info.AzureIdentity = v
 				}
+				if v := ann["azure.workload.identity/tenant-id"]; v != "" {
+					info.AzureTenantID = v
+				}
 				if v := ann["iam.gke.io/gcp-service-account"]; v != "" {
 					info.GCPServiceAccount = v
 				}

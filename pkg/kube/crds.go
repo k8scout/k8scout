@@ -36,6 +36,30 @@ var dangerousGroups = map[string][]struct{ Kind, Resource string }{
 		{"Provider", "providers"},
 		{"ProviderConfig", "providerconfigs"},
 	},
+	// Azure AAD Pod Identity (legacy).
+	"aadpodidentity.k8s.io": {
+		{"AzureIdentity", "azureidentities"},
+		{"AzureIdentityBinding", "azureidentitybindings"},
+		{"AzureAssignedIdentity", "azureassignedidentities"},
+	},
+	// GKE Config Connector.
+	"iam.cnrm.cloud.google.com": {
+		{"IAMPolicy", "iampolicies"},
+		{"IAMPolicyMember", "iampolicymembers"},
+		{"IAMServiceAccount", "iamserviceaccounts"},
+		{"IAMServiceAccountKey", "iamserviceaccountkeys"},
+	},
+	"compute.cnrm.cloud.google.com": {
+		{"ComputeInstance", "computeinstances"},
+		{"ComputeNetwork", "computenetworks"},
+	},
+	"storage.cnrm.cloud.google.com": {
+		{"StorageBucket", "storagebuckets"},
+	},
+	// Azure Secrets Store CSI.
+	"secrets-store.csi.x-k8s.io": {
+		{"SecretProviderClass", "secretproviderclasses"},
+	},
 }
 
 // collectCRDs discovers CRDs from dangerous operator groups using the Discovery API.

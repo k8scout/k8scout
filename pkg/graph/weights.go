@@ -63,6 +63,16 @@ func EdgeWeightOf(e *Edge) float64 {
 	case EdgeInferred:
 		return 2.0
 
+	// Service/network structural edges.
+	case EdgeSelectsPod:
+		return 0.1
+	case EdgeAllowsTo:
+		return 0.2
+	case EdgeReachesMetadata:
+		return 0.5
+	case EdgeSharesVolume:
+		return 1.5
+
 	// Dead ends: should never be traversed.
 	case EdgeMemberOf:
 		return 100.0
@@ -70,6 +80,24 @@ func EdgeWeightOf(e *Edge) float64 {
 	default:
 		return 5.0
 	}
+}
+
+// ContextualEdgeWeight returns the edge weight adjusted for network isolation.
+// If the target pod has deny-all ingress NetworkPolicy protection, exec and
+// portforward edges get a 10x penalty (network path is blocked).
+func ContextualEdgeWeight(e *Edge, g *Graph) float64 {
+	base := EdgeWeightOf(e)
+	if e.Kind != EdgeCanExec && e.Kind != EdgeCanPortForward {
+		return base
+	}
+	targetNode := g.nodeByID(e.To)
+	if targetNode == nil || targetNode.Kind != KindPod {
+		return base
+	}
+	if targetNode.Metadata != nil && targetNode.Metadata["netpol_deny_ingress"] == "true" {
+		return base * 10.0
+	}
+	return base
 }
 
 // ScoredPath pairs an AttackPath with its cumulative attacker-effort weight.
@@ -179,7 +207,7 @@ func (g *Graph) FindWeightedPaths(from, to string, maxDepth, maxPaths int) []Sco
 				continue
 			}
 
-			edgeW := EdgeWeightOf(e)
+			edgeW := ContextualEdgeWeight(e, g)
 			newWeight := current.weight + edgeW
 
 			// Prune if this partial path already exceeds the worst collected.

@@ -171,6 +171,21 @@ func HighValueTargets(g *Graph, r *kube.EnumerationResult) []GoalNode {
 				BaseScore: 9.5,
 			})
 
+		// ── MetadataEndpoint ────────────────────────────────────────────────
+		// Cloud metadata endpoints are high-value targets for credential theft.
+		case n.Kind == KindMetadataEndpoint:
+			provider := n.Metadata["provider"]
+			score := 9.0
+			if n.Metadata["imds_v1"] == "true" {
+				score = 9.5
+			}
+			goals = append(goals, GoalNode{
+				NodeID:      n.ID,
+				GoalKind:    CloudEscalation,
+				Description: fmt.Sprintf("Cloud metadata endpoint (%s) — credential theft path", provider),
+				BaseScore:   score,
+			})
+
 		// ── WorkloadTakeover + CloudEscalation ───────────────────────────────
 		// Workload nodes are checked for both conditions in one map lookup.
 		case n.Kind == KindWorkload:

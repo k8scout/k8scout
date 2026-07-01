@@ -162,6 +162,36 @@ func allRules() []inferenceRule {
 		ruleDanglingRoleBindings(),
 		ruleKubeletExposed(),
 		rulePriorityClassAbuse(),
+		// Phase 1: NetworkPolicy + Service.
+		ruleNoNetworkPolicyDefaultDeny(),
+		ruleNetworkPolicyBypass(),
+		ruleServiceExposure(),
+		// Phase 2: Cloud metadata endpoints.
+		ruleAWSIMDSv1Accessible(),
+		ruleAWSIMDSv2Only(),
+		ruleGKEMetadataReachable(),
+		ruleAzureIMDSReachable(),
+		ruleCloudRoleOverlyPermissive(),
+		// Phase 3: PV + ImagePullSecret.
+		ruleSharedPVCrossAccess(),
+		ruleImagePullSecretExposure(),
+		// Phase 5: Admission controller abuse.
+		ruleWebhookBackendCompromise(),
+		ruleWebhookPersistence(),
+		ruleValidatingWebhookBypass(),
+		// Cloud coverage improvements.
+		ruleAWSAuthSystemMasters(),
+		ruleAWSAuthWildcard(),
+		ruleIRSACrossAccount(),
+		ruleEKSPodIdentityDetected(),
+		ruleAADPodIdentityLegacy(),
+		ruleAzureKeyVaultCSI(),
+		ruleAzureTenantMismatch(),
+		ruleGKEAutopilotHardening(),
+		ruleGKEConfigConnector(),
+		ruleGKEMetadataConcealment(),
+		ruleGCPSAKeysInSecrets(),
+		ruleIRSATokenExpiration(),
 	}
 }
 
@@ -3417,6 +3447,894 @@ func rulePriorityClassAbuse() inferenceRule {
 			return "The current identity can create pods. If PriorityClasses above system-cluster-critical exist and " +
 				"are not RBAC-restricted, an attacker can use them to schedule pods that evict critical system components, " +
 				"causing cluster-wide disruption.", evidence, nil
+		},
+	}
+}
+
+// ── Phase 1: NetworkPolicy + Service rules ───────────────────────────────────
+
+func ruleNoNetworkPolicyDefaultDeny() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CONFIG-NO-NETPOL-DEFAULT-DENY",
+		Severity: SeverityMedium,
+		Score:    5.5,
+		Title:    "Namespaces without default-deny NetworkPolicy",
+		Mitigation: `• Apply a default-deny ingress NetworkPolicy to every namespace.
+• Allow only required pod-to-pod and pod-to-service traffic explicitly.
+• Use namespace labels to enforce deny-all as a baseline.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			npsByNS := make(map[string][]kube.NetworkPolicyInfo)
+			for _, np := range r.ClusterObjects.NetworkPolicies {
+				npsByNS[np.Namespace] = append(npsByNS[np.Namespace], np)
+			}
+			var evidence []string
+			var nodes []string
+			for _, ns := range r.ClusterObjects.Namespaces {
+				if ns.Name == "kube-system" || ns.Name == "kube-public" || ns.Name == "kube-node-lease" {
+					continue
+				}
+				nps := npsByNS[ns.Name]
+				hasDenyAll := false
+				for _, np := range nps {
+					hasIngress := false
+					for _, pt := range np.PolicyTypes {
+						if pt == "Ingress" {
+							hasIngress = true
+						}
+					}
+					if hasIngress && len(np.IngressRules) == 0 && len(np.PodSelector) == 0 {
+						hasDenyAll = true
+						break
+					}
+				}
+				if !hasDenyAll {
+					evidence = append(evidence, fmt.Sprintf("Namespace %q has no default-deny ingress NetworkPolicy", ns.Name))
+					nodes = append(nodes, "ns:"+ns.Name)
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("%d namespace(s) lack a default-deny ingress NetworkPolicy. "+
+				"Any pod can receive traffic from any other pod in the cluster, enabling unrestricted lateral movement.",
+				len(evidence)), evidence, nodes
+		},
+	}
+}
+
+func ruleNetworkPolicyBypass() inferenceRule {
+	return inferenceRule{
+		RuleID:   "PRIVESC-DELETE-NETPOL",
+		Severity: SeverityHigh,
+		Score:    7.5,
+		Title:    "Identity can delete NetworkPolicies — network isolation bypass",
+		MITREIDs: []string{"T1562.001"},
+		Mitigation: `• Restrict delete permissions on networkpolicies to infrastructure admin accounts only.
+• Use OPA/Gatekeeper to prevent deletion of critical NetworkPolicy objects.
+• Monitor audit logs for NetworkPolicy deletion events.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			var evidence []string
+			for _, c := range r.Permissions.SSARChecks {
+				if c.Resource == "networkpolicies" && (c.Verb == "delete" || c.Verb == "deletecollection") && c.Allowed {
+					evidence = append(evidence, fmt.Sprintf("SSAR: %s networkpolicies in %q = allowed", c.Verb, c.Namespace))
+				}
+			}
+			if len(evidence) == 0 {
+				for _, rules := range r.Permissions.SSRRByNamespace {
+					for _, rule := range rules {
+						if containsAny(rule.Resources, "networkpolicies", "*") &&
+							containsAny(rule.Verbs, "delete", "deletecollection", "*") {
+							evidence = append(evidence, "SSRR: delete networkpolicies = allowed")
+						}
+					}
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return "The current identity can delete NetworkPolicies. An attacker can remove network isolation " +
+				"controls, exposing internal services and enabling unrestricted lateral movement between pods.", evidence, nil
+		},
+	}
+}
+
+func ruleServiceExposure() inferenceRule {
+	return inferenceRule{
+		RuleID:   "EXPOSURE-EXTERNAL-SERVICE",
+		Severity: SeverityInfo,
+		Score:    3.0,
+		Title:    "Externally-exposed Services (NodePort/LoadBalancer)",
+		Mitigation: `• Review whether NodePort and LoadBalancer services need external exposure.
+• Use Ingress controllers with TLS termination instead of direct NodePort exposure.
+• Apply NetworkPolicies to restrict inbound traffic to exposed services.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			var evidence []string
+			var nodes []string
+			for _, svc := range r.ClusterObjects.Services {
+				if svc.Type == "NodePort" || svc.Type == "LoadBalancer" {
+					evidence = append(evidence, fmt.Sprintf("Service %s/%s: type=%s",
+						svc.Namespace, svc.Name, svc.Type))
+					nodes = append(nodes, "service:"+svc.Namespace+":"+svc.Name)
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("%d externally-exposed service(s) found. "+
+				"NodePort and LoadBalancer services are reachable from outside the cluster.",
+				len(evidence)), evidence, nodes
+		},
+	}
+}
+
+// ── Phase 2: Cloud metadata endpoint rules ───────────────────────────────────
+
+func ruleAWSIMDSv1Accessible() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-IMDS-V1-ACCESSIBLE",
+		Severity: SeverityCritical,
+		Score:    9.5,
+		Title:    "AWS IMDSv1 reachable — credential theft without token hop",
+		MITREIDs: []string{"T1552.005", "T1078.004"},
+		Mitigation: `• Enforce IMDSv2-only on all EC2 instances: aws ec2 modify-instance-metadata-options --http-tokens required.
+• Use EKS Pod Identity or IRSA with projected tokens instead of instance metadata credentials.
+• Apply egress NetworkPolicy blocking 169.254.169.254 from non-system pods.
+• Consider EKS Node Restriction admission controller to block metadata access from pods.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			for _, mp := range r.ClusterObjects.MetadataProbes {
+				if mp.MetadataV1 {
+					return "AWS IMDSv1 is reachable from within the cluster. Any pod can retrieve temporary IAM credentials " +
+						"for the node's instance role by sending a simple GET request to 169.254.169.254. " +
+						"This is the most dangerous metadata endpoint configuration — no token hop is required.",
+						[]string{"IMDSv1 GET http://169.254.169.254/latest/meta-data/ returned HTTP 2xx"},
+						[]string{"metadata:aws"}
+				}
+			}
+			return "", nil, nil
+		},
+	}
+}
+
+func ruleAWSIMDSv2Only() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-IMDS-V2-ONLY",
+		Severity: SeverityMedium,
+		Score:    5.5,
+		Title:    "AWS IMDSv2 reachable — credential theft requires PUT token",
+		MITREIDs: []string{"T1552.005"},
+		Mitigation: `• IMDSv2 requires a PUT request to obtain a session token before metadata access.
+• This mitigates SSRF-based attacks but not direct pod access.
+• Consider EKS Pod Identity or IRSA to avoid relying on instance metadata entirely.
+• Apply egress NetworkPolicy blocking 169.254.169.254.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			for _, mp := range r.ClusterObjects.MetadataProbes {
+				if mp.MetadataV2 && !mp.MetadataV1 {
+					return "AWS IMDSv2 is reachable. While IMDSv2 requires a PUT request to obtain a session token " +
+						"(mitigating SSRF-based credential theft), a compromised pod with direct network access " +
+						"can still retrieve IAM credentials via the token-based flow.",
+						[]string{"IMDSv2 PUT http://169.254.169.254/latest/api/token returned HTTP 2xx"},
+						[]string{"metadata:aws"}
+				}
+			}
+			return "", nil, nil
+		},
+	}
+}
+
+func ruleGKEMetadataReachable() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-GKE-METADATA-REACHABLE",
+		Severity: SeverityHigh,
+		Score:    8.0,
+		Title:    "GKE metadata server reachable — SA token theft possible",
+		MITREIDs: []string{"T1552.005", "T1078.004"},
+		Mitigation: `• Enable GKE Workload Identity on all node pools to replace metadata-based credential access.
+• Use GKE Metadata Server with Workload Identity Federation for fine-grained cloud IAM.
+• Block metadata access from pods not using Workload Identity.
+• Apply egress NetworkPolicy blocking metadata.google.internal.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			for _, mp := range r.ClusterObjects.MetadataProbes {
+				if mp.GKEMetadata {
+					return "GKE metadata server (metadata.google.internal) is reachable from within the cluster. " +
+						"Pods without Workload Identity can access the node's default service account credentials, " +
+						"enabling cloud IAM privilege escalation.",
+						[]string{"GET http://metadata.google.internal/computeMetadata/v1/ returned HTTP 2xx"},
+						[]string{"metadata:gcp"}
+				}
+			}
+			return "", nil, nil
+		},
+	}
+}
+
+func ruleAzureIMDSReachable() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-AZURE-IMDS-REACHABLE",
+		Severity: SeverityHigh,
+		Score:    8.0,
+		Title:    "Azure IMDS reachable — managed identity token theft possible",
+		MITREIDs: []string{"T1552.005", "T1078.004"},
+		Mitigation: `• Use AKS Workload Identity (federated credentials) instead of pod-managed identities.
+• Apply egress NetworkPolicy blocking 169.254.169.254 from application pods.
+• Avoid assigning managed identities to node pools when using Workload Identity.
+• Monitor Azure Activity Log for unexpected token acquisitions.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			for _, mp := range r.ClusterObjects.MetadataProbes {
+				if mp.AzureIMDS {
+					return "Azure Instance Metadata Service (IMDS) is reachable from within the cluster. " +
+						"Any pod can request managed identity tokens from 169.254.169.254, enabling Azure " +
+						"resource access with the node's managed identity permissions.",
+						[]string{"GET http://169.254.169.254/metadata/instance returned HTTP 2xx"},
+						[]string{"metadata:azure"}
+				}
+			}
+			return "", nil, nil
+		},
+	}
+}
+
+func ruleCloudRoleOverlyPermissive() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-ROLE-OVERLY-PERMISSIVE",
+		Severity: SeverityHigh,
+		Score:    8.0,
+		Title:    "Cloud IAM role with overly permissive name pattern",
+		MITREIDs: []string{"T1078.004"},
+		Mitigation: `• Apply least-privilege to cloud IAM roles bound to Kubernetes ServiceAccounts.
+• Use IAM conditions (AWS: aws:RequestedRegion, GCP: resource.name) to scope permissions.
+• Regularly audit cloud IAM roles for overly broad permissions.
+• Use cloud security posture management (CSPM) tools to detect overly permissive roles.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			dangerousPatterns := []string{"admin", "full-access", "power-user", "AdministratorAccess", "Owner", "Contributor"}
+			var evidence []string
+			var nodes []string
+			for _, sa := range r.ClusterObjects.ServiceAccounts {
+				role := sa.IRSARole
+				provider := "aws"
+				if role == "" {
+					role = sa.GCPServiceAccount
+					provider = "gcp"
+				}
+				if role == "" {
+					role = sa.AzureIdentity
+					provider = "azure"
+				}
+				if role == "" {
+					continue
+				}
+				for _, pat := range dangerousPatterns {
+					if strings.Contains(strings.ToLower(role), strings.ToLower(pat)) {
+						evidence = append(evidence, fmt.Sprintf("SA %s/%s → %s role %q matches pattern %q",
+							sa.Namespace, sa.Name, provider, role, pat))
+						nodes = append(nodes, saNodeID(sa.Namespace, sa.Name))
+						break
+					}
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("%d ServiceAccount(s) bound to cloud IAM roles with overly permissive name patterns. "+
+				"These roles likely grant broad cloud-plane access.", len(evidence)), evidence, nodes
+		},
+	}
+}
+
+// ── Phase 3: PV + ImagePullSecret rules ──────────────────────────────────────
+
+func ruleSharedPVCrossAccess() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CONFIG-SHARED-PV-CROSS-ACCESS",
+		Severity: SeverityMedium,
+		Score:    5.5,
+		Title:    "ReadWriteMany PVC shared across multiple pods — cross-pod data access",
+		Mitigation: `• Avoid ReadWriteMany PVCs unless required for multi-writer workloads.
+• Use ReadWriteOnce or ReadOnlyMany access modes when shared writes are not needed.
+• Ensure pods sharing a PVC are in the same trust domain.
+• Monitor PV data integrity with file integrity monitoring (FIM).`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			pvcPods := make(map[string][]string)
+			for _, pod := range r.ClusterObjects.Pods {
+				for _, vol := range pod.Volumes {
+					if vol.SourceKind == "PersistentVolumeClaim" && vol.SourceName != "" {
+						key := pod.Namespace + "/" + vol.SourceName
+						pvcPods[key] = append(pvcPods[key], pod.Namespace+"/"+pod.Name)
+					}
+				}
+			}
+			// Find PVCs with RWX that are shared.
+			rwxPVCs := make(map[string]bool)
+			for _, pvc := range r.ClusterObjects.PersistentVolumeClaims {
+				for _, am := range pvc.AccessModes {
+					if am == "ReadWriteMany" {
+						rwxPVCs[pvc.Namespace+"/"+pvc.Name] = true
+					}
+				}
+			}
+			var evidence []string
+			var nodes []string
+			for pvcKey, pods := range pvcPods {
+				if len(pods) < 2 || !rwxPVCs[pvcKey] {
+					continue
+				}
+				evidence = append(evidence, fmt.Sprintf("PVC %s shared by %d pods: %v", pvcKey, len(pods), pods))
+				nodes = append(nodes, "pvc:"+strings.Replace(pvcKey, "/", ":", 1))
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("%d ReadWriteMany PVC(s) are shared across multiple pods. "+
+				"A compromised pod can read and modify data accessible to all pods sharing the volume.",
+				len(evidence)), evidence, nodes
+		},
+	}
+}
+
+func ruleImagePullSecretExposure() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CRED-IMAGEPULLSECRET-EXPOSURE",
+		Severity: SeverityHigh,
+		Score:    7.5,
+		Title:    "ImagePullSecret credentials accessible — container registry credential theft",
+		MITREIDs: []string{"T1552.007"},
+		Mitigation: `• Use short-lived credentials for container registry access (IAM-based pull, OIDC tokens).
+• Restrict RBAC: remove get/list secrets from ServiceAccounts that don't need registry access.
+• Rotate registry credentials regularly and monitor for unauthorized image pulls.
+• Consider using node-level registry authentication instead of imagePullSecrets.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			canGetSecrets := make(map[string]bool)
+			for _, c := range r.Permissions.SSARChecks {
+				if c.Resource == "secrets" && (c.Verb == "get" || c.Verb == "list") && c.Allowed {
+					canGetSecrets[c.Namespace] = true
+				}
+			}
+			var evidence []string
+			var nodes []string
+			for _, sa := range r.ClusterObjects.ServiceAccounts {
+				if len(sa.ImagePullSecrets) == 0 {
+					continue
+				}
+				if !canGetSecrets[sa.Namespace] {
+					continue
+				}
+				for _, ips := range sa.ImagePullSecrets {
+					evidence = append(evidence, fmt.Sprintf("SA %s/%s uses imagePullSecret %q — readable via SSAR",
+						sa.Namespace, sa.Name, ips))
+					nodes = append(nodes, "secret:"+sa.Namespace+":"+ips)
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("%d imagePullSecret(s) are accessible to the current identity. "+
+				"These contain container registry credentials that can be used to pull private images or push "+
+				"malicious images if the registry allows push access.", len(evidence)), evidence, nodes
+		},
+	}
+}
+
+// ── Phase 5: Admission controller abuse rules ────────────────────────────────
+
+func ruleWebhookBackendCompromise() inferenceRule {
+	return inferenceRule{
+		RuleID:   "PRIVESC-WEBHOOK-BACKEND-COMPROMISE",
+		Severity: SeverityCritical,
+		Score:    9.5,
+		Title:    "Identity can patch Deployment backing a mutating webhook — controls all pod admissions",
+		MITREIDs: []string{"T1078.001", "T1525"},
+		Mitigation: `• Restrict patch/update on webhook backend Deployments to CI/CD accounts only.
+• Run webhook backends in dedicated namespaces with strict RBAC.
+• Use Pod Security Admission to prevent webhook backends from being modified.
+• Monitor webhook backend Deployment changes via audit logging.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			patchableNS := make(map[string]bool)
+			for _, c := range r.Permissions.SSARChecks {
+				if c.Resource == "deployments" && (c.Verb == "patch" || c.Verb == "update") && c.Allowed {
+					patchableNS[c.Namespace] = true
+				}
+			}
+			if len(patchableNS) == 0 {
+				return "", nil, nil
+			}
+			var evidence []string
+			var nodes []string
+			for _, wh := range r.ClusterObjects.Webhooks {
+				if wh.Kind != "Mutating" || wh.ServiceNS == "" {
+					continue
+				}
+				if patchableNS[wh.ServiceNS] {
+					evidence = append(evidence, fmt.Sprintf(
+						"Mutating webhook %q backed by service %s/%s — identity can patch deployments in %q",
+						wh.Name, wh.ServiceNS, wh.ServiceName, wh.ServiceNS))
+					nodes = append(nodes, "webhook:"+wh.Name)
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return "The current identity can patch the Deployment backing a mutating admission webhook. " +
+				"By modifying the webhook backend, an attacker can inject sidecars, modify images, or steal " +
+				"tokens for all future pods created in the webhook's scope.", evidence, nodes
+		},
+	}
+}
+
+func ruleWebhookPersistence() inferenceRule {
+	return inferenceRule{
+		RuleID:   "PERSIST-WEBHOOK-INJECTION",
+		Severity: SeverityHigh,
+		Score:    8.5,
+		Title:    "Identity can create mutating webhooks — persistent backdoor injection path",
+		MITREIDs: []string{"T1525", "T1546"},
+		Mitigation: `• Restrict create/patch on mutatingwebhookconfigurations to infrastructure admin accounts.
+• Use ValidatingAdmissionPolicy to prevent creation of overly broad webhooks.
+• Monitor audit logs for webhook configuration changes.
+• Use webhook allow-listing in the API server configuration.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			var evidence []string
+			for _, c := range r.Permissions.SSARChecks {
+				if c.Resource == "mutatingwebhookconfigurations" &&
+					(c.Verb == "create" || c.Verb == "patch") && c.Allowed {
+					evidence = append(evidence, fmt.Sprintf("SSAR: %s mutatingwebhookconfigurations = allowed", c.Verb))
+				}
+			}
+			if len(evidence) == 0 {
+				for _, rules := range r.Permissions.SSRRByNamespace {
+					for _, rule := range rules {
+						if containsAny(rule.Resources, "mutatingwebhookconfigurations", "*") &&
+							containsAny(rule.Verbs, "create", "patch", "*") {
+							evidence = append(evidence, "SSRR: create/patch mutatingwebhookconfigurations = allowed")
+						}
+					}
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return "The current identity can create or patch MutatingWebhookConfigurations. " +
+				"An attacker can register a webhook that injects malicious containers, modifies environment " +
+				"variables, or steals service account tokens from all future pods — creating a persistent backdoor " +
+				"that survives pod restarts and workload redeployments.", evidence, nil
+		},
+	}
+}
+
+func ruleValidatingWebhookBypass() inferenceRule {
+	return inferenceRule{
+		RuleID:   "PRIVESC-DELETE-VALIDATING-WEBHOOK",
+		Severity: SeverityMedium,
+		Score:    6.5,
+		Title:    "Identity can delete validating webhooks — security control bypass",
+		MITREIDs: []string{"T1562.001"},
+		Mitigation: `• Restrict delete permissions on validatingwebhookconfigurations to infrastructure admins.
+• Use OPA/Gatekeeper self-protection policies to prevent webhook deletion.
+• Monitor audit logs for webhook deletion events and alert immediately.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			var evidence []string
+			for _, c := range r.Permissions.SSARChecks {
+				if c.Resource == "validatingwebhookconfigurations" && c.Verb == "delete" && c.Allowed {
+					evidence = append(evidence, "SSAR: delete validatingwebhookconfigurations = allowed")
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			var nodes []string
+			for _, wh := range r.ClusterObjects.Webhooks {
+				if wh.Kind == "Validating" {
+					nodes = append(nodes, "webhook:"+wh.Name)
+				}
+			}
+			return "The current identity can delete ValidatingWebhookConfigurations. " +
+				"An attacker can remove security controls enforced by admission webhooks (OPA, Kyverno, " +
+				"Pod Security), then deploy workloads that would normally be blocked.", evidence, nodes
+		},
+	}
+}
+
+// ── Cloud coverage improvement rules ─────────────────────────────────────────
+
+func ruleAWSAuthSystemMasters() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-AWS-AUTH-SYSTEM-MASTERS",
+		Severity: SeverityCritical,
+		Score:    10.0,
+		Title:    "aws-auth ConfigMap grants system:masters — cluster-admin via IAM",
+		MITREIDs: []string{"T1078.004"},
+		Mitigation: `• Remove system:masters group mapping from aws-auth ConfigMap immediately.
+• Use EKS Access Entries with scoped access policies instead of aws-auth.
+• Map IAM roles to the minimum required Kubernetes groups.
+• Enable CloudTrail logging for aws-auth ConfigMap changes.
+• Consider using EKS Pod Identity instead of IRSA for workload identity.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			if r.ClusterObjects.AWSAuth == nil {
+				return "", nil, nil
+			}
+			var evidence []string
+			allEntries := append(r.ClusterObjects.AWSAuth.MapRoles, r.ClusterObjects.AWSAuth.MapUsers...)
+			for _, entry := range allEntries {
+				for _, group := range entry.Groups {
+					if group == "system:masters" {
+						evidence = append(evidence, fmt.Sprintf(
+							"%s %q → username=%q, groups=[system:masters] — FULL CLUSTER ADMIN",
+							entry.Type, entry.ARN, entry.Username))
+					}
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("%d IAM principal(s) mapped to system:masters in aws-auth ConfigMap. "+
+				"Any entity that can assume these IAM roles has unrestricted cluster-admin access. "+
+				"Compromising the IAM role grants immediate full Kubernetes control.",
+				len(evidence)), evidence, nil
+		},
+	}
+}
+
+func ruleAWSAuthWildcard() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-AWS-AUTH-WILDCARD",
+		Severity: SeverityHigh,
+		Score:    8.0,
+		Title:    "aws-auth ConfigMap contains wildcard or overly broad IAM mapping",
+		MITREIDs: []string{"T1078.004"},
+		Mitigation: `• Avoid mapping entire AWS account or wildcard principals in aws-auth.
+• Use specific IAM role ARNs, not account-level wildcards.
+• Regularly audit aws-auth mappings against actual access requirements.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			if r.ClusterObjects.AWSAuth == nil {
+				return "", nil, nil
+			}
+			var evidence []string
+			allEntries := append(r.ClusterObjects.AWSAuth.MapRoles, r.ClusterObjects.AWSAuth.MapUsers...)
+			for _, entry := range allEntries {
+				if strings.Contains(entry.ARN, "*") || strings.Contains(entry.Username, "{{") {
+					evidence = append(evidence, fmt.Sprintf(
+						"%s %q → username=%q (contains wildcard/template)",
+						entry.Type, entry.ARN, entry.Username))
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("%d overly broad IAM mapping(s) in aws-auth ConfigMap. "+
+				"Wildcard or template-based mappings may grant access to unintended IAM principals.",
+				len(evidence)), evidence, nil
+		},
+	}
+}
+
+func ruleIRSACrossAccount() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-IRSA-CROSS-ACCOUNT",
+		Severity: SeverityHigh,
+		Score:    8.5,
+		Title:    "IRSA role assumption crosses AWS account boundary",
+		MITREIDs: []string{"T1078.004", "T1550"},
+		Mitigation: `• Verify cross-account IRSA roles have strict condition keys limiting access.
+• Use aws:SourceAccount and sts:ExternalId conditions in trust policies.
+• Audit cross-account IAM roles for least-privilege permissions.
+• Consider using separate IRSA roles per workload instead of shared cross-account roles.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			accountIDs := make(map[string]bool)
+			var evidence []string
+			var nodes []string
+			for _, sa := range r.ClusterObjects.ServiceAccounts {
+				if sa.IRSARole == "" {
+					continue
+				}
+				acctID, roleName, _, _ := kube.ParseIRSARoleARN(sa.IRSARole)
+				if acctID != "" {
+					accountIDs[acctID] = true
+					_ = roleName
+				}
+			}
+			if len(accountIDs) <= 1 {
+				return "", nil, nil
+			}
+			// Multiple AWS accounts referenced — flag cross-account.
+			for _, sa := range r.ClusterObjects.ServiceAccounts {
+				if sa.IRSARole == "" {
+					continue
+				}
+				acctID, _, _, _ := kube.ParseIRSARoleARN(sa.IRSARole)
+				evidence = append(evidence, fmt.Sprintf(
+					"SA %s/%s → IRSA role %q (account: %s)",
+					sa.Namespace, sa.Name, sa.IRSARole, acctID))
+				nodes = append(nodes, saNodeID(sa.Namespace, sa.Name))
+			}
+			accts := make([]string, 0, len(accountIDs))
+			for id := range accountIDs {
+				accts = append(accts, id)
+			}
+			return fmt.Sprintf("IRSA roles span %d AWS accounts (%s). Cross-account role assumptions "+
+				"expand the blast radius — compromising one workload's SA may grant access to resources "+
+				"in a different AWS account.", len(accountIDs), strings.Join(accts, ", ")), evidence, nodes
+		},
+	}
+}
+
+func ruleEKSPodIdentityDetected() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-EKS-POD-IDENTITY",
+		Severity: SeverityInfo,
+		Score:    3.0,
+		Title:    "EKS Pod Identity agent detected — credential injection via webhook",
+		MITREIDs: []string{"T1078.004"},
+		Mitigation: `• EKS Pod Identity automatically injects AWS credentials into pods via a webhook.
+• Verify that Pod Identity associations follow least-privilege for each workload.
+• Audit Pod Identity associations via: aws eks list-pod-identity-associations.
+• Consider network-level restrictions to the Pod Identity agent endpoint.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			pi := r.ClusterObjects.EKSPodIdentity
+			if pi == nil || !pi.Enabled {
+				return "", nil, nil
+			}
+			var evidence []string
+			if pi.AgentDaemonSet != "" {
+				evidence = append(evidence, "EKS Pod Identity agent DaemonSet: "+pi.AgentDaemonSet)
+			}
+			if pi.WebhookName != "" {
+				evidence = append(evidence, "EKS Pod Identity webhook: "+pi.WebhookName)
+			}
+			return "EKS Pod Identity is enabled. AWS credentials are automatically injected into pods " +
+				"via a mutating webhook. Pods receive temporary credentials without needing IRSA annotations " +
+				"or projected SA tokens. Verify that pod identity associations are properly scoped.", evidence, nil
+		},
+	}
+}
+
+func ruleAADPodIdentityLegacy() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-AAD-POD-IDENTITY-LEGACY",
+		Severity: SeverityHigh,
+		Score:    7.5,
+		Title:    "AAD Pod Identity (legacy) detected — migrate to Workload Identity",
+		MITREIDs: []string{"T1078.004", "T1550"},
+		Mitigation: `• AAD Pod Identity is deprecated. Migrate to Azure Workload Identity Federation.
+• AAD Pod Identity uses NMI (Node Managed Identity) which intercepts IMDS requests.
+• The NMI DaemonSet runs as privileged and can access all pod network traffic.
+• Known vulnerability: pod can impersonate another pod's managed identity via race condition.
+• Migration guide: https://learn.microsoft.com/en-us/azure/aks/workload-identity-migrate-from-pod-identity`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			aadpi := r.ClusterObjects.AADPodIdentity
+			if aadpi == nil || !aadpi.Enabled {
+				return "", nil, nil
+			}
+			var evidence []string
+			if aadpi.NMIDaemonSet != "" {
+				evidence = append(evidence, "NMI DaemonSet: "+aadpi.NMIDaemonSet+" (intercepts IMDS requests)")
+			}
+			if aadpi.MICDeployment != "" {
+				evidence = append(evidence, "MIC Deployment: "+aadpi.MICDeployment+" (manages Azure identity assignments)")
+			}
+			if aadpi.CRDsPresent {
+				evidence = append(evidence, "AzureIdentity CRDs present (aadpodidentity.k8s.io)")
+			}
+			return "AAD Pod Identity (legacy) is active in this cluster. This deprecated system has known " +
+				"security issues including identity spoofing via NMI race conditions. The NMI DaemonSet runs " +
+				"privileged and intercepts all pod IMDS traffic. Migrate to Azure Workload Identity Federation.", evidence, nil
+		},
+	}
+}
+
+func ruleAzureKeyVaultCSI() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-AZURE-KEYVAULT-CSI",
+		Severity: SeverityInfo,
+		Score:    3.0,
+		Title:    "Azure Key Vault CSI driver detected — secrets injected from Key Vault",
+		Mitigation: `• Azure Key Vault CSI driver mounts secrets from Key Vault into pods as volumes.
+• Verify that SecretProviderClass resources follow least-privilege Key Vault access.
+• Monitor Key Vault audit logs for unexpected secret access patterns.
+• Ensure pods using Key Vault secrets have appropriate RBAC to prevent lateral movement.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			if !r.ClusterObjects.AzureKeyVaultCSI {
+				return "", nil, nil
+			}
+			return "Azure Key Vault CSI driver is installed. Secrets from Azure Key Vault are mounted " +
+				"into pods as files via SecretProviderClass resources. This is a secure pattern but " +
+				"ensure Key Vault access policies follow least-privilege.",
+				[]string{"secrets-store-csi-driver detected in kube-system"}, nil
+		},
+	}
+}
+
+func ruleAzureTenantMismatch() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-AZURE-TENANT-CROSS",
+		Severity: SeverityHigh,
+		Score:    8.0,
+		Title:    "Azure Workload Identity spans multiple tenants — cross-tenant escalation risk",
+		MITREIDs: []string{"T1078.004"},
+		Mitigation: `• Verify that cross-tenant workload identity is intentional.
+• Use federated credential subject validation to restrict cross-tenant access.
+• Monitor Azure AD sign-in logs for cross-tenant token acquisitions.
+• Consider separate managed identities per tenant.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			tenants := make(map[string]bool)
+			var evidence []string
+			for _, sa := range r.ClusterObjects.ServiceAccounts {
+				if sa.AzureTenantID != "" {
+					tenants[sa.AzureTenantID] = true
+				}
+			}
+			if len(tenants) <= 1 {
+				return "", nil, nil
+			}
+			for _, sa := range r.ClusterObjects.ServiceAccounts {
+				if sa.AzureTenantID != "" {
+					evidence = append(evidence, fmt.Sprintf(
+						"SA %s/%s → Azure client-id=%s, tenant=%s",
+						sa.Namespace, sa.Name, sa.AzureIdentity, sa.AzureTenantID))
+				}
+			}
+			tIDs := make([]string, 0, len(tenants))
+			for t := range tenants {
+				tIDs = append(tIDs, t)
+			}
+			return fmt.Sprintf("Workload Identity annotations reference %d Azure AD tenants (%s). "+
+				"Cross-tenant workload identity creates a lateral movement path between Azure tenants.",
+				len(tenants), strings.Join(tIDs, ", ")), evidence, nil
+		},
+	}
+}
+
+func ruleGKEAutopilotHardening() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-GKE-AUTOPILOT-HARDENING",
+		Severity: SeverityInfo,
+		Score:    1.0,
+		Title:    "GKE Autopilot cluster detected — enhanced security defaults enforced",
+		Mitigation: `• GKE Autopilot enforces Workload Identity, disables metadata access, and applies Pod Security Standards.
+• Autopilot clusters have a reduced attack surface compared to standard GKE.
+• Ensure applications are compatible with Autopilot restrictions (no privileged containers, no hostPath).`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			if r.ClusterObjects.GKEInfo == nil || !r.ClusterObjects.GKEInfo.IsAutopilot {
+				return "", nil, nil
+			}
+			return "This is a GKE Autopilot cluster with enhanced security defaults. Autopilot enforces " +
+				"Workload Identity (disabling metadata server access), applies Pod Security Standards " +
+				"(no privileged containers), and restricts hostPath mounts. Many container escape techniques " +
+				"are mitigated by default.",
+				[]string{"GKE Autopilot detected via node labels"}, nil
+		},
+	}
+}
+
+func ruleGKEConfigConnector() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-GKE-CONFIG-CONNECTOR",
+		Severity: SeverityHigh,
+		Score:    8.0,
+		Title:    "GKE Config Connector detected — Kubernetes-to-GCP IAM bridge",
+		MITREIDs: []string{"T1078.004"},
+		Mitigation: `• Config Connector creates GCP resources directly from Kubernetes manifests.
+• A compromised SA with Config Connector CRD permissions can create/modify cloud IAM resources.
+• Restrict RBAC for cnrm.cloud.google.com CRDs to dedicated admin accounts.
+• Monitor GCP Audit Logs for Config Connector-initiated resource changes.
+• Consider namespace-level Config Connector mode instead of cluster-level.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			if r.ClusterObjects.GKEInfo == nil || !r.ClusterObjects.GKEInfo.ConfigConnectorEnabled {
+				return "", nil, nil
+			}
+			var evidence []string
+			evidence = append(evidence, fmt.Sprintf("Config Connector CRDs detected: %s",
+				strings.Join(r.ClusterObjects.GKEInfo.ConfigConnectorCRDs, ", ")))
+			// Check if current identity can create Config Connector resources.
+			for ns, rules := range r.Permissions.SSRRByNamespace {
+				for _, rule := range rules {
+					for _, apiGroup := range rule.APIGroups {
+						if strings.Contains(apiGroup, "cnrm.cloud.google.com") {
+							evidence = append(evidence, fmt.Sprintf(
+								"SSRR: identity has %v on cnrm resources in %q",
+								rule.Verbs, ns))
+						}
+					}
+				}
+			}
+			return "GKE Config Connector is installed, creating a direct bridge from Kubernetes to GCP IAM. " +
+				"Any identity with create/update permissions on cnrm.cloud.google.com CRDs can provision or modify " +
+				"GCP resources including IAM bindings, service accounts, and compute instances.", evidence, nil
+		},
+	}
+}
+
+func ruleGKEMetadataConcealment() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-GKE-METADATA-CONCEALMENT",
+		Severity: SeverityInfo,
+		Score:    1.0,
+		Title:    "GKE metadata concealment is active — reduced cloud credential exposure",
+		Mitigation: `• Metadata concealment blocks pods from accessing the GCE metadata server directly.
+• This is a strong control that prevents node credential theft via metadata.
+• Verify that Workload Identity is enabled for all workloads that need GCP access.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			if r.ClusterObjects.GKEInfo == nil || !r.ClusterObjects.GKEInfo.MetadataConcealment {
+				return "", nil, nil
+			}
+			return "GKE metadata concealment is active on this cluster's nodes. The GCE metadata server " +
+				"is blocked or proxied, preventing pods from accessing node-level credentials. This " +
+				"significantly reduces the cloud credential theft attack surface.",
+				[]string{"Metadata proxy detected via node label cloud.google.com/metadata-proxy-ready=true"}, nil
+		},
+	}
+}
+
+func ruleGCPSAKeysInSecrets() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-GCP-SA-KEY-IN-SECRET",
+		Severity: SeverityCritical,
+		Score:    9.0,
+		Title:    "GCP service account JSON key detected in Kubernetes Secret",
+		MITREIDs: []string{"T1552.001", "T1078.004"},
+		Mitigation: `• Remove GCP service account JSON keys from Kubernetes Secrets immediately.
+• Use GKE Workload Identity instead of long-lived service account keys.
+• If keys are required, use External Secrets Operator to rotate them automatically.
+• Delete the GCP service account key from the GCP console and regenerate if compromised.
+• Enable GCP Organization Policy constraints to prevent key creation.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			if len(r.ClusterObjects.GCPSAKeysInSecrets) == 0 {
+				return "", nil, nil
+			}
+			evidence := make([]string, len(r.ClusterObjects.GCPSAKeysInSecrets))
+			copy(evidence, r.ClusterObjects.GCPSAKeysInSecrets)
+			return fmt.Sprintf("%d Kubernetes Secret(s) contain GCP service account JSON key files. "+
+				"These are long-lived credentials that grant persistent access to GCP resources. "+
+				"Unlike Workload Identity tokens, SA keys do not expire and cannot be scoped per-workload.",
+				len(evidence)), evidence, nil
+		},
+	}
+}
+
+func ruleIRSATokenExpiration() inferenceRule {
+	return inferenceRule{
+		RuleID:   "CLOUD-IRSA-TOKEN-NO-EXPIRY",
+		Severity: SeverityMedium,
+		Score:    5.5,
+		Title:    "IRSA projected token with default or long expiration",
+		MITREIDs: []string{"T1078.004"},
+		Mitigation: `• Set expirationSeconds on projected service account tokens to 3600 (1 hour) or less.
+• IRSA tokens with default expiration (24h or more) extend the window for credential theft.
+• Configure the minimum audience for STS (sts.amazonaws.com) in projected volumes.
+• Monitor CloudTrail for AssumeRoleWithWebIdentity calls with unexpected tokens.`,
+		check: func(g *Graph, r *kube.EnumerationResult) (string, []string, []string) {
+			var evidence []string
+			var nodes []string
+			for _, wl := range r.ClusterObjects.Workloads {
+				if wl.ServiceAccount == "" {
+					continue
+				}
+				// Check if this SA has IRSA annotation.
+				hasIRSA := false
+				for _, sa := range r.ClusterObjects.ServiceAccounts {
+					if sa.Name == wl.ServiceAccount && sa.Namespace == wl.Namespace && sa.IRSARole != "" {
+						hasIRSA = true
+						break
+					}
+				}
+				if !hasIRSA {
+					continue
+				}
+				// Check projected token volumes for audience + expiration.
+				for _, vol := range wl.Volumes {
+					if vol.SourceKind == "Projected" && vol.Audience != "" {
+						if strings.Contains(strings.ToLower(vol.Audience), "sts") {
+							evidence = append(evidence, fmt.Sprintf(
+								"Workload %s/%s has IRSA projected token with audience=%q (check expirationSeconds)",
+								wl.Namespace, wl.Name, vol.Audience))
+							nodes = append(nodes, "workload:"+wl.Namespace+":"+wl.Name)
+						}
+					}
+				}
+			}
+			if len(evidence) == 0 {
+				return "", nil, nil
+			}
+			return fmt.Sprintf("%d workload(s) use IRSA with projected tokens. Verify that expirationSeconds "+
+				"is set to 3600 or less. Default token expiration (86400s/24h) extends the credential theft window.",
+				len(evidence)), evidence, nodes
 		},
 	}
 }

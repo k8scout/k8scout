@@ -4,6 +4,7 @@ package output
 import (
 	"time"
 
+	"github.com/hac01/k8scout/pkg/exploit"
 	"github.com/hac01/k8scout/pkg/graph"
 	"github.com/hac01/k8scout/pkg/kube"
 )
@@ -18,6 +19,9 @@ type Report struct {
 	RiskFindings   []graph.RiskFinding    `json:"risk_findings"`
 	AINarrative    *AINarrative           `json:"ai_narrative,omitempty"`
 	AuditFootprint []kube.AuditEntry      `json:"audit_footprint,omitempty"`
+	WhatIf         *graph.WhatIfResult    `json:"what_if,omitempty"`
+	ActiveResult   *exploit.ActiveResult  `json:"active_result,omitempty"`
+	ChokePoints    []graph.ChokePointInfo `json:"choke_points,omitempty"`
 }
 
 // MetaBlock contains tool and run metadata.

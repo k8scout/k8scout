@@ -211,3 +211,6 @@ func (c *Client) WhoAmI(ctx context.Context) (username, uid string, groups []str
 
 // Clientset exposes the underlying kubernetes.Interface for collectors.
 func (c *Client) Clientset() kubernetes.Interface { return c.cs }
+
+// RestConfig exposes the underlying rest.Config for exec operations.
+func (c *Client) RestConfig() *rest.Config { return c.restCfg }

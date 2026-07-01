@@ -30,7 +30,7 @@ func nodeRoleOf(n Node) PathNodeRole {
 	switch n.Kind {
 	case KindPod, KindWorkload:
 		return RoleFoothold
-	case KindServiceAccount, KindClusterRoleBinding, KindRoleBinding, KindClusterRole, KindRole, KindSecret, KindWebhook, KindCloudIdentity:
+	case KindServiceAccount, KindClusterRoleBinding, KindRoleBinding, KindClusterRole, KindRole, KindSecret, KindWebhook, KindCloudIdentity, KindService:
 		return RoleBridge
 	default:
 		return RoleOther
@@ -67,6 +67,10 @@ func capabilityLabelForEdge(e Edge) string {
 		return "token theft"
 	case EdgeAssumesCloudRole:
 		return "cloud role assumption"
+	case EdgeReachesMetadata:
+		return "metadata endpoint access"
+	case EdgeSharesVolume:
+		return "shared volume access"
 	case EdgeInferred:
 		if e.Reason != "" {
 			return "escalation"
@@ -240,4 +244,117 @@ func BuildPathTitle(path AttackPath, goal GoalNode, shape PathShape) string {
 	default:
 		return fmt.Sprintf("Escalation path to %s (%d-hop)", goal.GoalKind, numHops)
 	}
+}
+
+// CompressedAttackTree represents a compressed tree of attack paths that share common prefixes.
+type CompressedAttackTree struct {
+	Root       string                  `json:"root"`
+	Children   []*CompressedAttackTree `json:"children,omitempty"`
+	EdgeKind   EdgeKind                `json:"edge_kind,omitempty"`
+	PathCount  int                     `json:"path_count"`
+	MaxScore   float64                 `json:"max_score"`
+}
+
+// CompressPaths merges scored paths sharing common prefixes into a compressed attack tree.
+func CompressPaths(paths []ScoredPath) *CompressedAttackTree {
+	if len(paths) == 0 {
+		return nil
+	}
+
+	root := &CompressedAttackTree{
+		Root:      "root",
+		PathCount: len(paths),
+	}
+
+	for _, sp := range paths {
+		score := ScoreByWeight(ClassifyPath(sp.Path), 10.0, sp.Weight)
+		if score > root.MaxScore {
+			root.MaxScore = score
+		}
+		current := root
+		for _, step := range sp.Path {
+			nodeID := step.Node.ID
+			var edgeKind EdgeKind
+			if step.Edge != nil {
+				edgeKind = step.Edge.Kind
+			}
+			found := false
+			for _, child := range current.Children {
+				if child.Root == nodeID && child.EdgeKind == edgeKind {
+					child.PathCount++
+					if score > child.MaxScore {
+						child.MaxScore = score
+					}
+					current = child
+					found = true
+					break
+				}
+			}
+			if !found {
+				newChild := &CompressedAttackTree{
+					Root:      nodeID,
+					EdgeKind:  edgeKind,
+					PathCount: 1,
+					MaxScore:  score,
+				}
+				current.Children = append(current.Children, newChild)
+				current = newChild
+			}
+		}
+	}
+
+	return root
+}
+
+// FindChokePointsFromPaths identifies nodes that appear in a high percentage of attack paths.
+// Removing these nodes would break the most attack paths.
+func FindChokePointsFromPaths(paths []ScoredPath, threshold float64) []ChokePointInfo {
+	if len(paths) == 0 {
+		return nil
+	}
+
+	nodeCounts := make(map[string]int)
+	for _, sp := range paths {
+		seen := make(map[string]bool)
+		for _, step := range sp.Path {
+			if !seen[step.Node.ID] {
+				seen[step.Node.ID] = true
+				nodeCounts[step.Node.ID]++
+			}
+		}
+	}
+
+	total := len(paths)
+	minCount := int(float64(total) * threshold)
+
+	var results []ChokePointInfo
+	for nodeID, count := range nodeCounts {
+		if count >= minCount {
+			results = append(results, ChokePointInfo{
+				NodeID:           nodeID,
+				PathCount:        count,
+				TotalPaths:       total,
+				Percentage:       float64(count) / float64(total) * 100,
+				MitigationImpact: fmt.Sprintf("Removing this node breaks %d of %d attack paths (%.0f%%)", count, total, float64(count)/float64(total)*100),
+			})
+		}
+	}
+
+	// Sort by path count descending.
+	for i := 1; i < len(results); i++ {
+		for j := i; j > 0 && results[j].PathCount > results[j-1].PathCount; j-- {
+			results[j], results[j-1] = results[j-1], results[j]
+		}
+	}
+
+	return results
+}
+
+// ChokePointInfo describes a critical node in the attack path graph.
+type ChokePointInfo struct {
+	NodeID           string  `json:"node_id"`
+	PathCount        int     `json:"path_count"`
+	TotalPaths       int     `json:"total_paths"`
+	Percentage       float64 `json:"percentage"`
+	MitigationImpact string  `json:"mitigation_impact"`
 }
