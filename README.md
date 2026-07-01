@@ -21,10 +21,11 @@ You have RCE in a Kubernetes pod. Now what?
 
 k8scout answers that question. It automatically discovers what the compromised pod's service account can do, maps out the RBAC graph, and traces multi-step attack paths from your exact foothold to high-value targets.
 
-It works in two modes:
+It works in three modes:
 
 - **Offensive mode** (default) — run from inside a compromised pod. Discovers your identity, permissions, and all reachable escalation paths from your current position.
 - **Reviewer mode** (`--reviewer-mode`) — run with a read-only SA to audit the full cluster attack surface for all identities.
+- **Recon mode** (`--recon`) — a fast, low-footprint look at just your identity, effective permissions, and which resources you can touch. No graph or pathfinding. Add `--bruteforce-ns` to discover namespaces you can't list cluster-wide.
 
 ---
 
@@ -86,6 +87,27 @@ k8scout --all-namespaces --out result.json
 # Target a single namespace
 k8scout --namespace production --out result.json
 ```
+
+### Recon mode (quick permission & resource check)
+
+```bash
+# Who am I, what can I do, and what resources can I access?
+k8scout --recon
+
+# Discover namespaces you can't list cluster-wide (built-in wordlist)
+k8scout --recon --bruteforce-ns
+
+# Bruteforce with your own namespace wordlist (one name per line)
+k8scout --recon --bruteforce-ns --ns-wordlist ./namespaces.txt
+```
+
+Recon skips graph building, inference, and AI — it's the fastest way to answer
+"what does this token actually have?". It reports the current identity, its
+effective permissions (SelfSubjectRulesReview), and a per-resource capability
+matrix (SelfSubjectAccessReview). `--bruteforce-ns` confirms a namespace exists
+by reading well-known objects every namespace has (the namespace object, its
+`default` ServiceAccount, or the `kube-root-ca.crt` ConfigMap) — useful when the
+identity can't list namespaces but may still access specific ones.
 
 ### Reviewer mode (full cluster audit)
 
@@ -198,6 +220,9 @@ Flags:
   --log-level string      debug | info | warn | error (default "info")
   --kubeconfig string     Path to kubeconfig (auto-detected if not set)
   --reviewer-mode         Full cluster RBAC audit for all identities
+  --recon                 Quick recon: identity, permissions (SSRR), accessible resources (SSAR)
+  --bruteforce-ns         Bruteforce namespace names to find ones you can't list (use with --recon)
+  --ns-wordlist string    Custom namespace wordlist for --bruteforce-ns (defaults to a built-in list)
   --stealth               Skip SSRR/SSAR to reduce audit log footprint
   --skip-ssar             Skip SSAR spot-checks only
   --openai-key string     OpenAI API key (or OPENAI_API_KEY env var)
